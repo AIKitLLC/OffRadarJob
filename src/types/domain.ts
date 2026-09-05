@@ -149,6 +149,8 @@ export const JobSchema = z.object({
   applyTarget: z.string().min(1),
   status: JobStatusEnum,
   contentHash: z.string().min(1),
+  companyName: z.string().nullable().optional(),
+  companyWebsite: z.string().nullable().optional(),
   firstSeenAt: z.number().int().positive(),
   lastSeenAt: z.number().int().positive(),
 });

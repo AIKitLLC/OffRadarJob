@@ -286,22 +286,22 @@ export class JobRepository {
     const techCategory = options.techCategory && options.techCategory !== "all" ? options.techCategory : null;
     const techOnly = options.techOnly !== false ? 1 : 0;
 
-    let query = "SELECT * FROM jobs WHERE 1=1";
+    let query = "SELECT j.*, c.name AS company_name, c.website_url AS company_website FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE 1=1";
     const bindings: unknown[] = [];
 
     if (techOnly === 1) {
-      query += " AND is_tech_role = 1";
+      query += " AND j.is_tech_role = 1";
     }
     if (grade) {
-      query += " AND seniority_level = ?";
+      query += " AND j.seniority_level = ?";
       bindings.push(grade);
     }
     if (techCategory) {
-      query += " AND tech_category = ?";
+      query += " AND j.tech_category = ?";
       bindings.push(techCategory);
     }
 
-    query += " ORDER BY first_seen_at DESC LIMIT ?";
+    query += " ORDER BY j.first_seen_at DESC LIMIT ?";
     bindings.push(limit);
 
     const stmt = this.db.prepare(query);
@@ -343,6 +343,8 @@ export class JobRepository {
       applyTarget: row["apply_target"],
       status: row["status"],
       contentHash: row["content_hash"],
+      companyName: row["company_name"] != null ? String(row["company_name"]) : undefined,
+      companyWebsite: row["company_website"] != null ? String(row["company_website"]) : undefined,
       firstSeenAt: Number(row["first_seen_at"]),
       lastSeenAt: Number(row["last_seen_at"]),
     });

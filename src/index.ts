@@ -84,8 +84,8 @@ export default {
 
     // 3. API: List Gathered Jobs
     if (path === "/api/jobs" && request.method === "GET") {
-      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10), 100);
-      const grade = url.searchParams.get("grade") ?? undefined;
+      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "100", 10), 500);
+      const grade = url.searchParams.get("grade") ?? url.searchParams.get("seniority") ?? undefined;
       const techCategory = url.searchParams.get("tech_category") ?? undefined;
       const techOnlyParam = url.searchParams.get("tech_only");
       const techOnly = techOnlyParam === "false" ? false : true;
@@ -96,7 +96,7 @@ export default {
 
     // 4. API: List Micro-Companies
     if (path === "/api/companies" && request.method === "GET") {
-      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10), 100);
+      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "100", 10), 500);
       const companies = await companyRepo.list(limit);
       return Response.json(companies);
     }

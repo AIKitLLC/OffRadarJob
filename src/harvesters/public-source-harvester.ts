@@ -121,7 +121,7 @@ function detectTechStackFromText(text: string): string[] {
   return Array.from(found);
 }
 
-function inferSeniority(title: string): SeniorityLevel {
+export function inferSeniority(title: string): SeniorityLevel {
   const t = title.toLowerCase();
   if (t.includes("intern") || t.includes("co-op")) return "intern";
   if (t.includes("new grad") || t.includes("graduate") || t.includes("entry level") || t.includes("junior") || t.includes("jr.")) {
@@ -134,7 +134,7 @@ function inferSeniority(title: string): SeniorityLevel {
   return "mid";
 }
 
-function inferTechCategory(title: string, skills: string[]): TechCategory {
+export function inferTechCategory(title: string, skills: string[]): TechCategory {
   const t = title.toLowerCase();
   const allText = `${t} ${skills.join(" ").toLowerCase()}`;
 

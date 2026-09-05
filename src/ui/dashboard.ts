@@ -398,9 +398,9 @@ export function renderDashboardHtml(): string {
           <option value="product_design">📐 Product Design & Systems</option>
         </select>
         <select id="region-filter" class="region-select" onchange="applyFilters()">
-          <option value="midwest" selected>📍 US-Midwest Focus</option>
-          <option value="all">🌐 All Regions</option>
-          <option value="remote">🏠 Remote Worldwide</option>
+          <option value="all" selected>🌐 All US & Remote (240+ Companies)</option>
+          <option value="midwest">📍 US-Midwest Focus</option>
+          <option value="remote">🏠 100% Remote</option>
         </select>
       </div>
     </div>
@@ -431,8 +431,8 @@ export function renderDashboardHtml(): string {
     async function loadData() {
       try {
         const [jobsRes, compsRes, statsRes] = await Promise.all([
-          fetch('/api/jobs').then(r => r.json()),
-          fetch('/api/companies').then(r => r.json()),
+          fetch('/api/jobs?limit=500').then(r => r.json()),
+          fetch('/api/companies?limit=500').then(r => r.json()),
           fetch('/api/stats').then(r => r.json())
         ]);
 
@@ -548,7 +548,7 @@ export function renderDashboardHtml(): string {
                 \${getGradeBadge(j.seniorityLevel)}
                 \${getTechBadge(j.techCategory)}
               </div>
-              <a class="job-company" href="/api/companies" target="_blank">🏢 Company: \${j.companyId.replace('comp_', '').replace(/_/g, '.')}</a>
+              <a class="job-company" href="\${j.companyWebsite || ('https://' + j.companyId.replace('comp_', '').replace(/_/g, '.'))}" target="_blank">🏢 \${j.companyName || j.companyId.replace('comp_', '').replace(/_/g, '.')} ↗</a>
               <p class="job-desc">\${j.descriptionSummary || 'Direct tech opening from micro-company career portal.'}</p>
               <div class="job-tags">
                 \${isMidwest ? '<span class="tag tag-midwest">📍 US-Midwest</span>' : ''}
