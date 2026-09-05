@@ -11,6 +11,8 @@ import {
   CrawlTask,
   CrawlTaskSchema,
   CrawlTaskStatus,
+  User,
+  CvVersion,
 } from "../types/domain.js";
 
 export class CompanyRepository {
@@ -748,4 +750,219 @@ export class CrawlTaskRepository {
     };
   }
 }
+
+export class UserRepository {
+  constructor(private readonly db: ID1Database) {}
+
+  public async upsert(user: User): Promise<void> {
+    const query = `
+      INSERT INTO users (
+        id, telegram_id, username, first_name, photo_url, api_token, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(telegram_id) DO UPDATE SET
+        username = excluded.username,
+        first_name = excluded.first_name,
+        photo_url = excluded.photo_url,
+        updated_at = excluded.updated_at
+    `;
+    await this.db
+      .prepare(query)
+      .bind(
+        user.id,
+        user.telegramId,
+        user.username ?? null,
+        user.firstName,
+        user.photoUrl ?? null,
+        user.apiToken,
+        user.createdAt,
+        user.updatedAt
+      )
+      .run();
+  }
+
+  public async findById(id: string): Promise<User | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM users WHERE id = ? LIMIT 1")
+      .bind(id)
+      .first<Record<string, unknown>>();
+    return row ? this.mapRowToUser(row) : null;
+  }
+
+  public async findByTelegramId(telegramId: string): Promise<User | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM users WHERE telegram_id = ? LIMIT 1")
+      .bind(telegramId)
+      .first<Record<string, unknown>>();
+    return row ? this.mapRowToUser(row) : null;
+  }
+
+  public async findByApiToken(token: string): Promise<User | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM users WHERE api_token = ? LIMIT 1")
+      .bind(token)
+      .first<Record<string, unknown>>();
+    return row ? this.mapRowToUser(row) : null;
+  }
+
+  private mapRowToUser(row: Record<string, unknown>): User {
+    return {
+      id: String(row["id"]),
+      telegramId: String(row["telegram_id"]),
+      username: row["username"] != null ? String(row["username"]) : undefined,
+      firstName: String(row["first_name"]),
+      photoUrl: row["photo_url"] != null ? String(row["photo_url"]) : undefined,
+      apiToken: String(row["api_token"]),
+      createdAt: Number(row["created_at"]),
+      updatedAt: Number(row["updated_at"]),
+    };
+  }
+}
+
+export class CvRepository {
+  constructor(private readonly db: ID1Database) {}
+
+  public async create(cv: CvVersion): Promise<void> {
+    const query = `
+      INSERT INTO cv_versions (
+        id, user_id, job_id, title, target_role, content,
+        skills, match_score, tailored_notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    await this.db
+      .prepare(query)
+      .bind(
+        cv.id,
+        cv.userId,
+        cv.jobId ?? null,
+        cv.title,
+        cv.targetRole ?? null,
+        cv.content,
+        JSON.stringify(cv.skills ?? []),
+        cv.matchScore ?? null,
+        cv.tailoredNotes ?? null,
+        cv.createdAt,
+        cv.updatedAt
+      )
+      .run();
+  }
+
+  public async update(
+    id: string,
+    userId: string,
+    updates: {
+      title?: string | undefined;
+      targetRole?: string | null | undefined;
+      content?: string | undefined;
+      skills?: string[] | undefined;
+      matchScore?: number | null | undefined;
+      tailoredNotes?: string | null | undefined;
+      jobId?: string | null | undefined;
+    }
+  ): Promise<void> {
+    const fields: string[] = [];
+    const bindings: unknown[] = [];
+
+    if (updates.title !== undefined) {
+      fields.push("title = ?");
+      bindings.push(updates.title);
+    }
+    if (updates.targetRole !== undefined) {
+      fields.push("target_role = ?");
+      bindings.push(updates.targetRole);
+    }
+    if (updates.content !== undefined) {
+      fields.push("content = ?");
+      bindings.push(updates.content);
+    }
+    if (updates.skills !== undefined) {
+      fields.push("skills = ?");
+      bindings.push(JSON.stringify(updates.skills));
+    }
+    if (updates.matchScore !== undefined) {
+      fields.push("match_score = ?");
+      bindings.push(updates.matchScore);
+    }
+    if (updates.tailoredNotes !== undefined) {
+      fields.push("tailored_notes = ?");
+      bindings.push(updates.tailoredNotes);
+    }
+    if (updates.jobId !== undefined) {
+      fields.push("job_id = ?");
+      bindings.push(updates.jobId);
+    }
+
+    fields.push("updated_at = ?");
+    bindings.push(Date.now());
+
+    bindings.push(id, userId);
+
+    const query = `UPDATE cv_versions SET ${fields.join(", ")} WHERE id = ? AND user_id = ?`;
+    await this.db.prepare(query).bind(...bindings).run();
+  }
+
+  public async getById(id: string, userId?: string | undefined): Promise<CvVersion | null> {
+    let query = `
+      SELECT cv.*, j.title as job_title, c.name as company_name
+      FROM cv_versions cv
+      LEFT JOIN jobs j ON cv.job_id = j.id
+      LEFT JOIN companies c ON j.company_id = c.id
+      WHERE cv.id = ?
+    `;
+    const bindings: unknown[] = [id];
+    if (userId) {
+      query += " AND cv.user_id = ?";
+      bindings.push(userId);
+    }
+    query += " LIMIT 1";
+
+    const row = await this.db.prepare(query).bind(...bindings).first<Record<string, unknown>>();
+    return row ? this.mapRowToCv(row) : null;
+  }
+
+  public async listByUser(userId: string): Promise<CvVersion[]> {
+    const query = `
+      SELECT cv.*, j.title as job_title, c.name as company_name
+      FROM cv_versions cv
+      LEFT JOIN jobs j ON cv.job_id = j.id
+      LEFT JOIN companies c ON j.company_id = c.id
+      WHERE cv.user_id = ?
+      ORDER BY cv.updated_at DESC
+    `;
+    const res = await this.db.prepare(query).bind(userId).all<Record<string, unknown>>();
+    return (res.results ?? []).map((r) => this.mapRowToCv(r));
+  }
+
+  public async delete(id: string, userId: string): Promise<boolean> {
+    const res = await this.db
+      .prepare("DELETE FROM cv_versions WHERE id = ? AND user_id = ?")
+      .bind(id, userId)
+      .run();
+    const changes = (res.meta as { changes?: number } | undefined)?.changes;
+    return changes != null ? changes > 0 : true;
+  }
+
+  private mapRowToCv(row: Record<string, unknown>): CvVersion {
+    let skills: string[] = [];
+    try {
+      skills = typeof row["skills"] === "string" ? JSON.parse(row["skills"] as string) : [];
+    } catch {}
+
+    return {
+      id: String(row["id"]),
+      userId: String(row["user_id"]),
+      jobId: row["job_id"] != null ? String(row["job_id"]) : undefined,
+      title: String(row["title"]),
+      targetRole: row["target_role"] != null ? String(row["target_role"]) : undefined,
+      content: String(row["content"]),
+      skills,
+      matchScore: row["match_score"] != null ? Number(row["match_score"]) : undefined,
+      tailoredNotes: row["tailored_notes"] != null ? String(row["tailored_notes"]) : undefined,
+      createdAt: Number(row["created_at"]),
+      updatedAt: Number(row["updated_at"]),
+      jobTitle: row["job_title"] != null ? String(row["job_title"]) : undefined,
+      companyName: row["company_name"] != null ? String(row["company_name"]) : undefined,
+    };
+  }
+}
+
 

@@ -361,6 +361,204 @@ export function renderDashboardHtml(): string {
       opacity: 0.35;
       cursor: not-allowed;
     }
+
+    /* Auth & MCP & CV Styles */
+    .header-btn {
+      background: #1e293b;
+      color: #38bdf8;
+      border: 1px solid var(--card-border);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .header-btn:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--primary);
+    }
+    .header-btn-primary {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+    .header-btn-primary:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+    .header-btn-secondary {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .header-btn-secondary:hover {
+      color: #fff;
+      border-color: #475569;
+    }
+    .user-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 13px;
+      color: #e2e8f0;
+    }
+    .user-pill strong { color: var(--primary); }
+
+    /* Modals */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 13, 22, 0.85);
+      backdrop-filter: blur(5px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-backdrop.active {
+      display: flex;
+    }
+    .modal-content {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 680px;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 12px;
+    }
+    .modal-header h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .modal-close-btn:hover {
+      color: #fff;
+      background: #1e293b;
+    }
+    .code-snippet {
+      background: #0b1120;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #93c5fd;
+      position: relative;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .copy-chip-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: #1e293b;
+      color: #cbd5e1;
+      border: 1px solid #334155;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .copy-chip-btn:hover {
+      background: var(--primary);
+      color: #0b0f19;
+    }
+    .tailor-btn {
+      background: linear-gradient(135deg, #a855f7, #6366f1);
+      color: #fff;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .tailor-btn:hover {
+      opacity: 0.92;
+      transform: translateY(-1px);
+    }
+    .score-meter {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #0b1120;
+      border: 1px solid var(--card-border);
+      padding: 12px 16px;
+      border-radius: 10px;
+    }
+    .score-meter-bar {
+      flex: 1;
+      height: 10px;
+      background: #1e293b;
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+    .score-meter-fill {
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .cv-card-item {
+      background: #0b1120;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
   </style>
 </head>
 <body>
@@ -370,11 +568,14 @@ export function renderDashboardHtml(): string {
         <h1><span>🎯</span> OffRadarJob Gatherer</h1>
         <p>Decoupled Cloudflare Agent Pipeline for Micro-Companies & Unlisted Tech Jobs</p>
       </div>
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <a href="/admin" style="text-decoration: none; color: #38bdf8; font-size: 13px; font-weight: 600; padding: 6px 14px; border: 1px solid #1f2a44; border-radius: 8px; background: #131b2e;">⚙️ Admin Control Center</a>
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div id="auth-section" style="display: flex; align-items: center; gap: 8px;">
+          <!-- Populated by JS -->
+        </div>
+        <a href="/admin" style="text-decoration: none; color: #38bdf8; font-size: 13px; font-weight: 600; padding: 6px 14px; border: 1px solid #1f2a44; border-radius: 8px; background: #131b2e;">⚙️ Admin</a>
         <div class="status-badge">
           <span class="status-dot"></span>
-          Cloudflare Edge Active
+          Edge Active
         </div>
       </div>
     </header>
@@ -472,6 +673,186 @@ export function renderDashboardHtml(): string {
     <div id="tab-telemetry" class="tab-content">
       <div class="log-terminal" id="logs-container">
         <p style="color: var(--text-muted)">Loading telemetry stream...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 1: Telegram Login -->
+  <div id="modal-login" class="modal-backdrop">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><span>✈️</span> Sign in with Telegram</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-login')">✕</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted);">
+        Authenticate with your Telegram account to unlock your personal MCP server configuration for Cursor/Claude and activate multi-version CV storage tailored to specific Job descriptions.
+      </p>
+      <div style="background: rgba(42, 171, 238, 0.08); border: 1px solid rgba(42, 171, 238, 0.25); border-radius: 8px; padding: 12px; font-size: 12px; color: #7dd3fc;">
+        💡 <strong>Free Access</strong>: No credit card required. Instantly receives an <code>orp_...</code> API token with 100% free search, filters, and JD-tailored CV storage.
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Telegram Username</label>
+          <input type="text" id="login-username" placeholder="e.g. johndoe (without @)" style="width: 100%;" />
+        </div>
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Your Name</label>
+          <input type="text" id="login-name" placeholder="e.g. John Doe" style="width: 100%;" />
+        </div>
+        <button onclick="submitTelegramLogin()" id="btn-submit-login" class="header-btn-primary" style="justify-content: center; padding: 12px; font-size: 14px; margin-top: 6px;">
+          🚀 Continue with Telegram
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: MCP Server Configuration -->
+  <div id="modal-mcp" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 720px;">
+      <div class="modal-header">
+        <h3><span>🔌</span> Your Personal MCP Server Config</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-mcp')">✕</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted);">
+        Connect OffRadarJob as a Model Context Protocol (MCP) server directly into <strong>Cursor</strong>, <strong>Claude Desktop</strong>, <strong>Antigravity</strong>, or <strong>Windsurf</strong>. Query live unlisted jobs and tailor your CVs in conversation!
+      </p>
+      
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <label style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Your MCP Endpoint (HTTP POST / SSE):</label>
+        <div class="code-snippet" id="mcp-endpoint-box">
+          <button class="copy-chip-btn" onclick="copySnippet('mcp-endpoint-val')">Copy</button>
+          <span id="mcp-endpoint-val">https://off-radar-jobs.tuannx87.workers.dev/mcp</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <label style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Your Secret API Bearer Token:</label>
+        <div class="code-snippet" id="mcp-token-box">
+          <button class="copy-chip-btn" onclick="copySnippet('mcp-token-val')">Copy</button>
+          <span id="mcp-token-val">orp_...</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <label style="font-size: 12px; font-weight: 600; color: #cbd5e1;">1-Click Cursor Configuration (<code>.cursor/mcp.json</code>):</label>
+        <div class="code-snippet" id="mcp-cursor-snippet">
+          <button class="copy-chip-btn" onclick="copySnippet('cursor-json-val')">Copy JSON</button>
+          <span id="cursor-json-val"></span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <label style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Claude Desktop Config (<code>claude_desktop_config.json</code> via mcp-proxy):</label>
+        <div class="code-snippet" id="mcp-claude-snippet">
+          <button class="copy-chip-btn" onclick="copySnippet('claude-json-val')">Copy JSON</button>
+          <span id="claude-json-val"></span>
+        </div>
+      </div>
+
+      <div style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; padding: 12px; font-size: 12px; color: #d8b4fe;">
+        <strong>6 Enabled AI Tools</strong>: <code>search_jobs</code>, <code>get_job_details</code>, <code>list_companies</code>, <code>list_user_cvs</code>, <code>tailor_cv_for_job</code>, <code>save_cv_version</code>.
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: My Stored CV Versions -->
+  <div id="modal-my-cvs" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 740px;">
+      <div class="modal-header">
+        <h3><span>📄</span> My CV Versions</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-my-cvs')">✕</button>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <p style="font-size: 13px; color: var(--text-muted);">
+          Manage your master CV and tailored variations for different job descriptions.
+        </p>
+        <button onclick="toggleNewCvForm()" class="header-btn">+ Add New CV</button>
+      </div>
+
+      <!-- New CV Form (hidden by default) -->
+      <div id="new-cv-form" style="display: none; background: #0b1120; border: 1px solid var(--card-border); border-radius: 10px; padding: 16px; flex-direction: column; gap: 10px;">
+        <h4 style="font-size: 14px; font-weight: 600; color: #fff;">Add New CV Version</h4>
+        <input type="text" id="new-cv-title" placeholder="CV Title (e.g. Master Backend CV, AI Engineer CV)" />
+        <input type="text" id="new-cv-role" placeholder="Target Role (e.g. Senior Backend Engineer)" />
+        <input type="text" id="new-cv-skills" placeholder="Skills (comma separated, e.g. Go, Rust, PostgreSQL, Cloudflare)" />
+        <textarea id="new-cv-content" rows="6" placeholder="# John Doe - Resume&#10;&#10;## Experience&#10;- Built distributed systems..." style="background: #060911; border: 1px solid var(--card-border); color: #fff; padding: 10px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px;"></textarea>
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button onclick="toggleNewCvForm()" class="header-btn-secondary">Cancel</button>
+          <button onclick="saveNewCv()" class="header-btn-primary">Save CV</button>
+        </div>
+      </div>
+
+      <div id="my-cvs-list" style="display: flex; flex-direction: column; gap: 12px;">
+        <p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading your CVs...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Tailor CV for Job -->
+  <div id="modal-tailor" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 760px;">
+      <div class="modal-header">
+        <h3><span>✨</span> AI-Tailored CV for Job</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-tailor')">✕</button>
+      </div>
+
+      <div style="background: #0b1120; border: 1px solid var(--card-border); border-radius: 10px; padding: 14px;">
+        <div style="font-size: 16px; font-weight: 700; color: #fff;" id="tailor-target-title">Software Engineer</div>
+        <div style="font-size: 13px; color: var(--primary); margin-top: 2px;" id="tailor-target-company">Acme Corp</div>
+        <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;" id="tailor-target-skills"></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <label style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Select Base CV:</label>
+        <select id="tailor-base-cv-select" class="region-select" onchange="onTailorBaseCvChange()" style="width: 100%;">
+          <option value="">-- Use Default Tech CV Template --</option>
+        </select>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <label style="font-size: 12px; font-weight: 600; color: #cbd5e1;">CV Content to Match & Tailor (Markdown):</label>
+        <textarea id="tailor-cv-content" rows="6" style="background: #0b1120; border: 1px solid var(--card-border); color: #fff; padding: 10px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px;"></textarea>
+      </div>
+
+      <button id="btn-execute-tailor" onclick="executeTailorCv()" class="tailor-btn" style="justify-content: center; padding: 12px; font-size: 14px;">
+        ⚡ Analyze JD Match & Generate Tailored CV
+      </button>
+
+      <!-- Tailor Result Area (hidden initially) -->
+      <div id="tailor-result-area" style="display: none; flex-direction: column; gap: 14px; border-top: 1px solid var(--card-border); padding-top: 16px;">
+        <div class="score-meter">
+          <span style="font-size: 13px; font-weight: 700; color: #cbd5e1;">JD Keyword Match Score:</span>
+          <div class="score-meter-bar">
+            <div id="tailor-score-fill" class="score-meter-fill" style="width: 0%; background: #10b981;"></div>
+          </div>
+          <span id="tailor-score-text" style="font-size: 16px; font-weight: 800; color: #10b981;">0%</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 10px;">
+            <div style="font-size: 12px; font-weight: 600; color: #34d399; margin-bottom: 6px;">✅ Matched Skills</div>
+            <div id="tailor-matched-skills" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+          </div>
+          <div style="background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; padding: 10px;">
+            <div style="font-size: 12px; font-weight: 600; color: #fbbf24; margin-bottom: 6px;">⚠️ Missing Skills in CV</div>
+            <div id="tailor-missing-skills" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Tailored Executive Summary:</label>
+          <div id="tailor-suggested-summary" style="background: #0b1120; border: 1px solid var(--card-border); border-radius: 8px; padding: 10px; font-size: 13px; color: #e2e8f0; line-height: 1.5;"></div>
+        </div>
+
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Tailored Markdown CV Ready for Application:</label>
+          <textarea id="tailor-final-markdown" rows="8" style="width: 100%; background: #060911; border: 1px solid var(--card-border); color: #93c5fd; padding: 10px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px;"></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button onclick="copySnippet('tailor-final-markdown')" class="header-btn">📋 Copy Markdown</button>
+          <button id="btn-save-tailored-cv" onclick="saveTailoredCv()" class="header-btn-primary">💾 Save as Tailored CV Version</button>
+        </div>
       </div>
     </div>
   </div>
@@ -589,10 +970,13 @@ export function renderDashboardHtml(): string {
                 \${(j.skills || []).map(s => \`<span class="tag">\${s}</span>\`).join('')}
               </div>
             </div>
-            <div>
+            <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
               <a class="apply-btn" href="\${j.applyType === 'email' ? 'mailto:' + j.applyTarget : j.applyTarget}" target="_blank">
                 Apply via \${j.applyType.toUpperCase()} ↗
               </a>
+              <button class="tailor-btn" onclick="openCvTailorModal('\${j.id}', '\${encodeURIComponent(j.title || '')}', '\${encodeURIComponent(j.companyName || j.companyId || '')}', '\${encodeURIComponent((j.skills || []).join(','))}')">
+                ✨ Tailor CV
+              </button>
             </div>
           </div>
         \`;
@@ -772,8 +1156,508 @@ export function renderDashboardHtml(): string {
       }
     }
 
+    // User & MCP State
+    let currentUser = null;
+    let userCvsList = [];
+    let currentTailorJob = null;
+    let currentTailoredAnalysis = null;
+
+    function getAuthToken() {
+      return localStorage.getItem('orp_user_token') || '';
+    }
+
+    function setAuthToken(token) {
+      if (token) {
+        localStorage.setItem('orp_user_token', token);
+      } else {
+        localStorage.removeItem('orp_user_token');
+      }
+    }
+
+    function getAuthHeaders() {
+      const token = getAuthToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+      }
+      return headers;
+    }
+
+    async function checkAuth() {
+      const token = getAuthToken();
+      try {
+        const res = await fetch('/api/user/me', {
+          headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+        if (res.ok) {
+          const data = await res.json();
+          currentUser = data.user;
+          renderAuthHeader();
+          fetchUserCvs();
+          return;
+        }
+      } catch (err) {
+        console.warn('Auth check error:', err);
+      }
+      currentUser = null;
+      renderAuthHeader();
+    }
+
+    function renderAuthHeader() {
+      const authSection = document.getElementById('auth-section');
+      if (!authSection) return;
+
+      if (currentUser) {
+        const handle = currentUser.username ? '@' + currentUser.username : currentUser.firstName;
+        authSection.innerHTML = \`
+          <div class="user-pill" title="Signed in via Telegram">✈️ <strong>\${handle}</strong></div>
+          <button class="header-btn" onclick="openMcpModal()">🔌 MCP Config</button>
+          <button class="header-btn" onclick="openMyCvsModal()">📄 My CVs (<span id="cv-header-count">\${userCvsList.length}</span>)</button>
+          <button class="header-btn-secondary" onclick="logout()">Logout</button>
+        \`;
+      } else {
+        authSection.innerHTML = \`
+          <button class="header-btn-primary" onclick="openLoginModal()">✈️ Login with Telegram</button>
+        \`;
+      }
+    }
+
+    function openModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('active');
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('active');
+    }
+
+    function openLoginModal() {
+      openModal('modal-login');
+      document.getElementById('login-username')?.focus();
+    }
+
+    async function submitTelegramLogin() {
+      const usernameInput = document.getElementById('login-username');
+      const nameInput = document.getElementById('login-name');
+      const username = usernameInput?.value.trim().replace(/^@/, '');
+      const firstName = nameInput?.value.trim() || username || 'Telegram User';
+
+      if (!username) {
+        alert('Please enter your Telegram username.');
+        return;
+      }
+
+      const btn = document.getElementById('btn-submit-login');
+      btn.innerText = 'Signing in...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/auth/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: username,
+            first_name: firstName,
+            id: Math.floor(Math.random() * 100000000) + 10000000
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to authenticate');
+        }
+
+        currentUser = data.user;
+        setAuthToken(data.user.apiToken);
+        closeModal('modal-login');
+        renderAuthHeader();
+        await fetchUserCvs();
+        openMcpModal();
+      } catch (err) {
+        alert('Telegram Login failed: ' + err.message);
+      } finally {
+        btn.innerText = '🚀 Continue with Telegram';
+        btn.disabled = false;
+      }
+    }
+
+    async function logout() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch {}
+      setAuthToken(null);
+      currentUser = null;
+      userCvsList = [];
+      renderAuthHeader();
+    }
+
+    function openMcpModal() {
+      if (!currentUser) {
+        openLoginModal();
+        return;
+      }
+
+      const origin = window.location.origin;
+      const mcpUrl = origin + '/mcp';
+      const token = currentUser.apiToken;
+
+      document.getElementById('mcp-endpoint-val').innerText = mcpUrl;
+      document.getElementById('mcp-token-val').innerText = token;
+
+      const cursorConfig = {
+        "mcpServers": {
+          "offradar-jobs": {
+            "url": mcpUrl,
+            "headers": {
+              "Authorization": "Bearer " + token
+            }
+          }
+        }
+      };
+      document.getElementById('cursor-json-val').innerText = JSON.stringify(cursorConfig, null, 2);
+
+      const claudeConfig = {
+        "mcpServers": {
+          "offradar-jobs": {
+            "command": "npx",
+            "args": ["-y", "mcp-proxy", mcpUrl, "--header", "Authorization: Bearer " + token]
+          }
+        }
+      };
+      document.getElementById('claude-json-val').innerText = JSON.stringify(claudeConfig, null, 2);
+
+      openModal('modal-mcp');
+    }
+
+    function copySnippet(elementId) {
+      const text = document.getElementById(elementId)?.value || document.getElementById(elementId)?.innerText || '';
+      navigator.clipboard.writeText(text).then(() => {
+        alert('Copied to clipboard!');
+      }).catch(() => {
+        alert('Could not copy to clipboard. Please copy manually.');
+      });
+    }
+
+    // --- CV Management ---
+    async function fetchUserCvs() {
+      if (!currentUser) return;
+      try {
+        const res = await fetch('/api/user/cvs', { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          userCvsList = data.items || [];
+          const headerBadge = document.getElementById('cv-header-count');
+          if (headerBadge) headerBadge.innerText = String(userCvsList.length);
+          renderCvsList();
+        }
+      } catch (err) {
+        console.warn('Error fetching user CVs:', err);
+      }
+    }
+
+    function openMyCvsModal() {
+      if (!currentUser) {
+        openLoginModal();
+        return;
+      }
+      fetchUserCvs();
+      openModal('modal-my-cvs');
+    }
+
+    function toggleNewCvForm() {
+      const form = document.getElementById('new-cv-form');
+      if (!form) return;
+      const isVisible = form.style.display === 'flex';
+      form.style.display = isVisible ? 'none' : 'flex';
+      if (!isVisible) {
+        document.getElementById('new-cv-title')?.focus();
+      }
+    }
+
+    async function saveNewCv() {
+      const title = document.getElementById('new-cv-title')?.value.trim();
+      const role = document.getElementById('new-cv-role')?.value.trim();
+      const skillsRaw = document.getElementById('new-cv-skills')?.value.trim();
+      const content = document.getElementById('new-cv-content')?.value.trim();
+
+      if (!title || !content) {
+        alert('Please provide at least a title and CV content.');
+        return;
+      }
+
+      const skills = skillsRaw ? skillsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+      try {
+        const res = await fetch('/api/user/cvs', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            title,
+            targetRole: role || undefined,
+            skills,
+            content
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to save CV');
+        }
+
+        document.getElementById('new-cv-title').value = '';
+        document.getElementById('new-cv-role').value = '';
+        document.getElementById('new-cv-skills').value = '';
+        document.getElementById('new-cv-content').value = '';
+        toggleNewCvForm();
+
+        await fetchUserCvs();
+        alert('CV saved successfully!');
+      } catch (err) {
+        alert('Error saving CV: ' + err.message);
+      }
+    }
+
+    async function deleteCv(id) {
+      if (!confirm('Are you sure you want to delete this CV version?')) return;
+      try {
+        const res = await fetch('/api/user/cvs/' + id, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        if (res.ok) {
+          await fetchUserCvs();
+        } else {
+          const d = await res.json();
+          alert('Delete failed: ' + (d.error || 'Unknown'));
+        }
+      } catch (err) {
+        alert('Delete error: ' + err.message);
+      }
+    }
+
+    function renderCvsList() {
+      const container = document.getElementById('my-cvs-list');
+      if (!container) return;
+
+      if (userCvsList.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">No CV versions saved yet. Click "+ Add New CV" or use "✨ Tailor CV" on any job card to create one.</p>';
+        return;
+      }
+
+      container.innerHTML = userCvsList.map(cv => {
+        const date = new Date(cv.updatedAt || cv.createdAt).toLocaleDateString();
+        const scoreBadge = cv.matchScore != null ? ('<span class="tag" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 700;">🎯 ' + cv.matchScore + '% Match</span>') : '';
+        const roleBadge = cv.targetRole ? ('<span class="tag">' + cv.targetRole + '</span>') : '';
+        const skillsChips = (cv.skills || []).map(s => '<span class="tag tag-cat">' + s + '</span>').join(' ');
+
+        return \`
+          <div class="cv-card-item">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+              <div>
+                <h4 style="font-size: 15px; font-weight: 700; color: #fff;">\${cv.title}</h4>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Saved on \${date} \${cv.jobId ? '• Linked to Job ' + cv.jobId : ''}</div>
+              </div>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                \${scoreBadge}
+                <button class="header-btn-secondary" onclick="deleteCv('\${cv.id}')" style="color: #f87171;">🗑️ Delete</button>
+              </div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
+              \${roleBadge}
+              \${skillsChips}
+            </div>
+            <div style="margin-top: 6px;">
+              <details style="font-size: 12px; color: var(--text-muted);">
+                <summary style="cursor: pointer; color: var(--primary);">View Markdown Content</summary>
+                <div class="code-snippet" style="margin-top: 8px; max-height: 200px; overflow-y: auto;">\${cv.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+              </details>
+            </div>
+          </div>
+        \`;
+      }).join('');
+    }
+
+    // --- Tailor CV Workflow ---
+    function openCvTailorModal(jobId, jobTitleEncoded, companyEncoded, skillsCsvEncoded) {
+      if (!currentUser) {
+        openLoginModal();
+        alert('Please sign in with Telegram first to access AI CV Tailoring.');
+        return;
+      }
+
+      const jobTitle = decodeURIComponent(jobTitleEncoded);
+      const companyName = decodeURIComponent(companyEncoded);
+      const skills = decodeURIComponent(skillsCsvEncoded).split(',').map(s => s.trim()).filter(Boolean);
+
+      currentTailorJob = { id: jobId, title: jobTitle, company: companyName, skills: skills };
+      currentTailoredAnalysis = null;
+
+      document.getElementById('tailor-target-title').innerText = jobTitle;
+      document.getElementById('tailor-target-company').innerText = '🏢 ' + companyName;
+      
+      const skillsDiv = document.getElementById('tailor-target-skills');
+      if (skillsDiv) {
+        skillsDiv.innerHTML = skills.length > 0
+          ? skills.map(s => '<span class="tag">' + s + '</span>').join('')
+          : '<span style="font-size: 11px; color: var(--text-muted);">General Engineering</span>';
+      }
+
+      const select = document.getElementById('tailor-base-cv-select');
+      if (select) {
+        let options = '<option value="">-- Choose Base CV or Use Default Template --</option>';
+        for (const cv of userCvsList) {
+          options += '<option value="' + cv.id + '">' + cv.title + (cv.targetRole ? ' (' + cv.targetRole + ')' : '') + '</option>';
+        }
+        select.innerHTML = options;
+      }
+
+      const defaultContent = userCvsList.length > 0
+        ? userCvsList[0].content
+        : "# " + (currentUser.firstName || "Engineer") + " - Software Engineer\\n\\n## Experience\\n- Senior Software Engineer with 5+ years building distributed backend APIs and scalable systems.\\n- Experienced in TypeScript, Node.js, Go, PostgreSQL, Cloudflare Workers, and React.\\n\\n## Skills\\nTypeScript, Python, Go, Node.js, SQL, AWS, Cloudflare, React, Docker";
+
+      document.getElementById('tailor-cv-content').value = defaultContent;
+      document.getElementById('tailor-result-area').style.display = 'none';
+
+      openModal('modal-tailor');
+    }
+
+    function onTailorBaseCvChange() {
+      const select = document.getElementById('tailor-base-cv-select');
+      const cvId = select?.value;
+      if (!cvId) return;
+
+      const cv = userCvsList.find(c => c.id === cvId);
+      if (cv) {
+        document.getElementById('tailor-cv-content').value = cv.content;
+      }
+    }
+
+    async function executeTailorCv() {
+      if (!currentTailorJob) return;
+
+      const cvContent = document.getElementById('tailor-cv-content')?.value.trim();
+      const baseCvId = document.getElementById('tailor-base-cv-select')?.value || undefined;
+
+      const btn = document.getElementById('btn-execute-tailor');
+      btn.innerText = '⚡ Analyzing & Tailoring...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/user/cvs/tailor', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            jobId: currentTailorJob.id,
+            baseCvId: baseCvId,
+            customCvContent: cvContent
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to tailor CV');
+        }
+
+        currentTailoredAnalysis = data.analysis;
+
+        const resultArea = document.getElementById('tailor-result-area');
+        resultArea.style.display = 'flex';
+
+        const score = currentTailoredAnalysis.matchScore || 0;
+        document.getElementById('tailor-score-fill').style.width = score + '%';
+        document.getElementById('tailor-score-text').innerText = score + '%';
+        const color = score >= 70 ? '#10b981' : score >= 40 ? '#f59e0b' : '#ef4444';
+        document.getElementById('tailor-score-fill').style.backgroundColor = color;
+        document.getElementById('tailor-score-text').style.color = color;
+
+        document.getElementById('tailor-matched-skills').innerHTML = (currentTailoredAnalysis.matchedSkills || []).length > 0
+          ? (currentTailoredAnalysis.matchedSkills || []).map(s => '<span class="tag" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">✓ ' + s + '</span>').join('')
+          : '<span style="font-size: 11px; color: var(--text-muted);">None detected</span>';
+
+        document.getElementById('tailor-missing-skills').innerHTML = (currentTailoredAnalysis.missingSkills || []).length > 0
+          ? (currentTailoredAnalysis.missingSkills || []).map(s => '<span class="tag" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24;">+ ' + s + '</span>').join('')
+          : '<span style="font-size: 11px; color: #34d399;">Full match on required skills!</span>';
+
+        document.getElementById('tailor-suggested-summary').innerText = currentTailoredAnalysis.suggestedSummary || '';
+        document.getElementById('tailor-final-markdown').value = currentTailoredAnalysis.tailoredCvMarkdown || '';
+
+        resultArea.scrollIntoView({ behavior: 'smooth' });
+      } catch (err) {
+        alert('Tailor error: ' + err.message);
+      } finally {
+        btn.innerText = '⚡ Analyze JD Match & Generate Tailored CV';
+        btn.disabled = false;
+      }
+    }
+
+    async function saveTailoredCv() {
+      if (!currentTailoredAnalysis || !currentTailorJob) return;
+
+      const markdown = document.getElementById('tailor-final-markdown')?.value.trim();
+      const title = 'Tailored: ' + currentTailorJob.title + ' @ ' + currentTailorJob.company;
+      const allSkills = [...(currentTailoredAnalysis.matchedSkills || []), ...(currentTailoredAnalysis.missingSkills || [])];
+
+      const btn = document.getElementById('btn-save-tailored-cv');
+      btn.innerText = 'Saving...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/user/cvs', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            title,
+            targetRole: currentTailorJob.title,
+            jobId: currentTailorJob.id,
+            content: markdown,
+            skills: allSkills
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to save tailored CV');
+        }
+
+        await fetchUserCvs();
+        alert('Tailored CV version saved to "My CVs" successfully!');
+        closeModal('modal-tailor');
+        openMyCvsModal();
+      } catch (err) {
+        alert('Failed to save CV: ' + err.message);
+      } finally {
+        btn.innerText = '💾 Save as Tailored CV Version';
+        btn.disabled = false;
+      }
+    }
+
     window.changeJobsPage = changeJobsPage;
     window.changeCompsPage = changeCompsPage;
+    window.openLoginModal = openLoginModal;
+    window.closeModal = closeModal;
+    window.submitTelegramLogin = submitTelegramLogin;
+    window.logout = logout;
+    window.openMcpModal = openMcpModal;
+    window.copySnippet = copySnippet;
+    window.openMyCvsModal = openMyCvsModal;
+    window.toggleNewCvForm = toggleNewCvForm;
+    window.saveNewCv = saveNewCv;
+    window.deleteCv = deleteCv;
+    window.openCvTailorModal = openCvTailorModal;
+    window.onTailorBaseCvChange = onTailorBaseCvChange;
+    window.executeTailorCv = executeTailorCv;
+    window.saveTailoredCv = saveTailoredCv;
+
+    async function loadData() {
+      try {
+        checkAuth();
+        fetchStats();
+        await fetchJobs(1);
+      } catch (err) {
+        console.error('Error in loadData:', err);
+      }
+    }
 
     loadData();
     // Poll stats every 30s instead of slamming D1 with 2500 jobs every 5s

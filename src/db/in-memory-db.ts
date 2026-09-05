@@ -13,6 +13,8 @@ export class InMemoryD1Database implements ID1Database {
     this.tables.set("jobs", new Map());
     this.tables.set("crawl_logs", new Map());
     this.tables.set("crawl_tasks", new Map());
+    this.tables.set("users", new Map());
+    this.tables.set("cv_versions", new Map());
   }
 
   public prepare(query: string): ID1PreparedStatement {
@@ -123,28 +125,57 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       const id = String(this.boundValues[0]);
       const table = this.db.tables.get("jobs")!;
       const row = table.get(id);
-      return { results: row ? [row as T] : [], success: true };
-    }
-
-    if (q.includes("FROM jobs") && q.includes("COUNT(*)")) {
-      const count = this.db.tables.get("jobs")!.size;
-      return { results: [{ count } as T], success: true };
+      if (row) {
+        const compTable = this.db.tables.get("companies");
+        const comp = compTable?.get(String(row["company_id"]));
+        const enriched = {
+          ...row,
+          company_name: comp?.["name"] || row["company_name"] || row["company_id"],
+          company_website: comp?.["website_url"] || row["company_website"],
+        };
+        return { results: [enriched as T], success: true };
+      }
+      return { results: [], success: true };
     }
 
     if (q.includes("FROM jobs")) {
       let rows = Array.from(this.db.tables.get("jobs")!.values());
 
+      let bindingIdx = 0;
       if (q.includes("is_tech_role = 1")) {
         rows = rows.filter((r) => Number(r["is_tech_role"] ?? 1) === 1);
       }
       if (q.includes("seniority_level = ?")) {
-        const gradeVal = String(this.boundValues[0]);
+        const gradeVal = String(this.boundValues[bindingIdx++]);
         rows = rows.filter((r) => r["seniority_level"] === gradeVal);
       }
       if (q.includes("tech_category = ?")) {
-        const catVal = String(this.boundValues[this.boundValues.length - 2]);
+        const catVal = String(this.boundValues[bindingIdx++]);
         rows = rows.filter((r) => r["tech_category"] === catVal);
       }
+      if (q.includes("LOWER(j.title) LIKE ?") || q.includes("title LIKE ?")) {
+        const searchPattern = String(this.boundValues[bindingIdx++] || "").replace(/%/g, "").toLowerCase();
+        if (searchPattern) {
+          rows = rows.filter((r) =>
+            String(r["title"] ?? "").toLowerCase().includes(searchPattern) ||
+            String(r["skills"] ?? "").toLowerCase().includes(searchPattern)
+          );
+        }
+      }
+
+      if (q.includes("COUNT(*)")) {
+        return { results: [{ total: rows.length, count: rows.length } as T], success: true };
+      }
+
+      const compTable = this.db.tables.get("companies");
+      rows = rows.map((r) => {
+        const comp = compTable?.get(String(r["company_id"]));
+        return {
+          ...r,
+          company_name: comp?.["name"] || r["company_name"] || r["company_id"],
+          company_website: comp?.["website_url"] || r["company_website"],
+        };
+      });
 
       rows.sort((a, b) => Number(b["first_seen_at"] ?? 0) - Number(a["first_seen_at"] ?? 0));
       return { results: rows as T[], success: true };
@@ -187,6 +218,56 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         rows = rows.filter((r) => r["status"] === statusVal);
       }
       rows.sort((a, b) => Number(b["created_at"] ?? 0) - Number(a["created_at"] ?? 0));
+      return { results: rows as T[], success: true };
+    }
+
+    // Users queries
+    if (q.includes("FROM users") && q.includes("WHERE id = ?")) {
+      const id = String(this.boundValues[0]);
+      const table = this.db.tables.get("users")!;
+      const row = table.get(id);
+      return { results: row ? [row as T] : [], success: true };
+    }
+
+    if (q.includes("FROM users") && q.includes("WHERE telegram_id = ?")) {
+      const tgId = String(this.boundValues[0]);
+      const table = this.db.tables.get("users")!;
+      for (const row of table.values()) {
+        if (row["telegram_id"] === tgId) {
+          return { results: [row as T], success: true };
+        }
+      }
+      return { results: [], success: true };
+    }
+
+    if (q.includes("FROM users") && q.includes("WHERE api_token = ?")) {
+      const token = String(this.boundValues[0]);
+      const table = this.db.tables.get("users")!;
+      for (const row of table.values()) {
+        if (row["api_token"] === token) {
+          return { results: [row as T], success: true };
+        }
+      }
+      return { results: [], success: true };
+    }
+
+    // CV versions queries
+    if (q.includes("FROM cv_versions") && q.includes("WHERE cv.id = ?")) {
+      const id = String(this.boundValues[0]);
+      const table = this.db.tables.get("cv_versions")!;
+      const row = table.get(id);
+      if (!row) return { results: [], success: true };
+      if (this.boundValues.length > 1 && row["user_id"] !== String(this.boundValues[1])) {
+        return { results: [], success: true };
+      }
+      return { results: [row as T], success: true };
+    }
+
+    if (q.includes("FROM cv_versions") && q.includes("WHERE cv.user_id = ?")) {
+      const userId = String(this.boundValues[0]);
+      const table = this.db.tables.get("cv_versions")!;
+      const rows = Array.from(table.values()).filter((r) => r["user_id"] === userId);
+      rows.sort((a, b) => Number(b["updated_at"] ?? 0) - Number(a["updated_at"] ?? 0));
       return { results: rows as T[], success: true };
     }
 
@@ -404,6 +485,87 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         }
       }
       return { success: true };
+    }
+
+    // INSERT/UPDATE users
+    if (q.includes("INTO users")) {
+      const [id, telegramId, username, firstName, photoUrl, apiToken, createdAt, updatedAt] =
+        this.boundValues;
+      const record: Record<string, unknown> = {
+        id: String(id),
+        telegram_id: String(telegramId),
+        username: username ?? null,
+        first_name: String(firstName),
+        photo_url: photoUrl ?? null,
+        api_token: String(apiToken),
+        created_at: Number(createdAt),
+        updated_at: Number(updatedAt),
+      };
+      const table = this.db.tables.get("users")!;
+      let existingId: string | null = null;
+      for (const [rId, r] of table.entries()) {
+        if (r["telegram_id"] === record["telegram_id"]) {
+          existingId = rId;
+          break;
+        }
+      }
+      table.set(existingId ?? String(id), record);
+      return { success: true };
+    }
+
+    // INSERT cv_versions
+    if (q.includes("INTO cv_versions")) {
+      const [
+        id, userId, jobId, title, targetRole, content,
+        skills, matchScore, tailoredNotes, createdAt, updatedAt
+      ] = this.boundValues;
+      const record: Record<string, unknown> = {
+        id: String(id),
+        user_id: String(userId),
+        job_id: jobId ? String(jobId) : null,
+        title: String(title),
+        target_role: targetRole ? String(targetRole) : null,
+        content: String(content),
+        skills: String(skills ?? "[]"),
+        match_score: matchScore !== undefined && matchScore !== null ? Number(matchScore) : null,
+        tailored_notes: tailoredNotes ? String(tailoredNotes) : null,
+        created_at: Number(createdAt),
+        updated_at: Number(updatedAt),
+      };
+      this.db.tables.get("cv_versions")!.set(String(id), record);
+      return { success: true };
+    }
+
+    // UPDATE cv_versions SET ... WHERE id = ? AND user_id = ?
+    if (q.includes("UPDATE cv_versions SET")) {
+      const id = String(this.boundValues[this.boundValues.length - 2]);
+      const userId = String(this.boundValues[this.boundValues.length - 1]);
+      const table = this.db.tables.get("cv_versions")!;
+      const row = table.get(id);
+      if (row && row["user_id"] === userId) {
+        let valIdx = 0;
+        if (q.includes("title = ?")) row["title"] = String(this.boundValues[valIdx++]);
+        if (q.includes("target_role = ?")) row["target_role"] = this.boundValues[valIdx++] ?? null;
+        if (q.includes("content = ?")) row["content"] = String(this.boundValues[valIdx++]);
+        if (q.includes("skills = ?")) row["skills"] = String(this.boundValues[valIdx++]);
+        if (q.includes("match_score = ?")) row["match_score"] = this.boundValues[valIdx++] ?? null;
+        if (q.includes("tailored_notes = ?")) row["tailored_notes"] = this.boundValues[valIdx++] ?? null;
+        if (q.includes("job_id = ?")) row["job_id"] = this.boundValues[valIdx++] ?? null;
+        row["updated_at"] = Date.now();
+      }
+      return { success: true };
+    }
+
+    // DELETE FROM cv_versions WHERE id = ? AND user_id = ?
+    if (q.includes("DELETE FROM cv_versions WHERE id = ? AND user_id = ?")) {
+      const id = String(this.boundValues[0]);
+      const userId = String(this.boundValues[1]);
+      const table = this.db.tables.get("cv_versions")!;
+      const row = table.get(id);
+      if (row && row["user_id"] === userId) {
+        table.delete(id);
+      }
+      return { success: true, meta: { changes: 1 } };
     }
 
     return { success: true };

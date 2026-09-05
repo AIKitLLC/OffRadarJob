@@ -195,3 +195,41 @@ export const CrawlTaskSchema = z.object({
   completedAt: z.number().int().positive().nullable().optional(),
 });
 export type CrawlTask = z.infer<typeof CrawlTaskSchema>;
+
+// -----------------------------------------------------------------------------
+// User Domain Models & Schemas (Telegram Auth & MCP Key)
+// -----------------------------------------------------------------------------
+
+export const UserSchema = z.object({
+  id: z.string().min(1),
+  telegramId: z.string().min(1),
+  username: z.string().nullable().optional(),
+  firstName: z.string().min(1),
+  photoUrl: z.string().nullable().optional(),
+  apiToken: z.string().min(1),
+  createdAt: z.number().int().positive(),
+  updatedAt: z.number().int().positive(),
+});
+export type User = z.infer<typeof UserSchema>;
+
+// -----------------------------------------------------------------------------
+// CV Version Domain Models & Schemas (Linked to Job JDs)
+// -----------------------------------------------------------------------------
+
+export const CvVersionSchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  jobId: z.string().nullable().optional(),
+  title: z.string().min(1),
+  targetRole: z.string().nullable().optional(),
+  content: z.string().min(1),
+  skills: z.array(z.string()).default([]),
+  matchScore: z.number().int().min(0).max(100).nullable().optional(),
+  tailoredNotes: z.string().nullable().optional(),
+  createdAt: z.number().int().positive(),
+  updatedAt: z.number().int().positive(),
+  jobTitle: z.string().nullable().optional(),
+  companyName: z.string().nullable().optional(),
+});
+export type CvVersion = z.infer<typeof CvVersionSchema>;
+

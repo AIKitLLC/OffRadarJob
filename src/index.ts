@@ -7,7 +7,10 @@ import {
   JobRepository,
   LogRepository,
   CrawlTaskRepository,
+  UserRepository,
+  CvRepository,
 } from "./db/repositories.js";
+import { McpServerHandler } from "./mcp/mcp-server.js";
 import { PipelineOrchestrator } from "./orchestrator/dispatcher.js";
 import {
   DiscoveryMessage,
@@ -15,7 +18,7 @@ import {
   HuntMessage,
   ExtractMessage,
 } from "./types/queues.js";
-import { CrawlTaskStatus } from "./types/domain.js";
+import { CrawlTaskStatus, User, CvVersion } from "./types/domain.js";
 import { CURATED_SEEDS } from "./seeds/seed-catalogue.js";
 import { PublicSourceManager } from "./harvesters/public-source-harvester.js";
 
@@ -28,6 +31,7 @@ export interface KvNamespace {
 export interface Env {
   DB: ID1Database;
   CACHE?: KvNamespace;
+  TELEGRAM_BOT_TOKEN?: string;
   DISCOVERY_QUEUE?: {
     send(message: unknown): Promise<void>;
   };
@@ -88,6 +92,55 @@ function isAuthorized(request: Request, url: URL): boolean {
   return provided === DEFAULT_ADMIN_TOKEN;
 }
 
+async function verifyTelegramAuth(data: Record<string, string>, botToken: string): Promise<boolean> {
+  const checkHash = data["hash"];
+  if (!checkHash) return false;
+
+  const dataCheckArr: string[] = [];
+  for (const key of Object.keys(data).sort()) {
+    if (key !== "hash" && data[key] !== undefined && data[key] !== null) {
+      dataCheckArr.push(`${key}=${data[key]}`);
+    }
+  }
+  const dataCheckString = dataCheckArr.join("\n");
+
+  const enc = new TextEncoder();
+  const secretKeyHash = await crypto.subtle.digest("SHA-256", enc.encode(botToken));
+
+  const hmacKey = await crypto.subtle.importKey(
+    "raw",
+    secretKeyHash,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", hmacKey, enc.encode(dataCheckString));
+  const hex = Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  return hex === checkHash;
+}
+
+async function getAuthenticatedUser(request: Request, userRepo: UserRepository): Promise<User | null> {
+  const authHeader = request.headers.get("Authorization") || request.headers.get("x-api-token");
+  let token = authHeader ? authHeader.replace("Bearer ", "").trim() : null;
+
+  if (!token) {
+    const url = new URL(request.url);
+    token = url.searchParams.get("token");
+  }
+
+  if (!token) {
+    const cookie = request.headers.get("Cookie") || "";
+    const match = cookie.match(/user_token=([^;]+)/);
+    if (match && match[1]) token = match[1];
+  }
+
+  if (!token) return null;
+  return await userRepo.findByApiToken(token);
+}
+
 export default {
   /**
    * HTTP Request Handler: Web Dashboard & REST API
@@ -100,6 +153,9 @@ export default {
     const jobRepo = new JobRepository(env.DB);
     const logRepo = new LogRepository(env.DB);
     const taskRepo = new CrawlTaskRepository(env.DB);
+    const userRepo = new UserRepository(env.DB);
+    const cvRepo = new CvRepository(env.DB);
+    const mcpHandler = new McpServerHandler(jobRepo, companyRepo, cvRepo);
 
     // 1. Public Dashboard UI
     if (path === "/" || path === "/index.html") {
@@ -213,7 +269,209 @@ export default {
       });
     }
 
-    // 6. Admin API: Stats & Task Metrics
+    // 6. Telegram Auth: Login via Telegram WebApp / Widget
+    if (path === "/api/auth/telegram" && request.method === "POST") {
+      try {
+        const body = (await request.json()) as Record<string, any>;
+        const tgId = String(body.id || body.telegram_id || (body.username ? `tg_${body.username}` : ""));
+        if (!tgId) {
+          return Response.json({ error: "Missing Telegram ID or username" }, { status: 400 });
+        }
+
+        if (env.TELEGRAM_BOT_TOKEN && body.hash) {
+          const isValid = await verifyTelegramAuth(body, env.TELEGRAM_BOT_TOKEN);
+          if (!isValid) {
+            return Response.json({ error: "Invalid Telegram authentication signature" }, { status: 403 });
+          }
+        }
+
+        const now = Date.now();
+        const existingUser = await userRepo.findByTelegramId(tgId);
+        const apiToken = existingUser?.apiToken || `orp_${crypto.randomUUID().replace(/-/g, "")}`;
+
+        const userRecord: User = {
+          id: existingUser?.id || `usr_${tgId}`,
+          telegramId: tgId,
+          username: body.username ? String(body.username) : undefined,
+          firstName: String(body.first_name || body.username || "Telegram User"),
+          photoUrl: body.photo_url ? String(body.photo_url) : undefined,
+          apiToken,
+          createdAt: existingUser?.createdAt || now,
+          updatedAt: now,
+        };
+
+        await userRepo.upsert(userRecord);
+
+        return Response.json(
+          { success: true, user: userRecord },
+          {
+            headers: {
+              "Set-Cookie": `user_token=${apiToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+            },
+          }
+        );
+      } catch (err: any) {
+        return Response.json({ error: err?.message || "Telegram authentication failed" }, { status: 500 });
+      }
+    }
+
+    // 7. Auth: Get Current Authenticated User & MCP Details
+    if (path === "/api/user/me" && request.method === "GET") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized", user: null }, { status: 401 });
+      return Response.json({ user });
+    }
+
+    // 8. Auth: Logout
+    if (path === "/api/auth/logout" && request.method === "POST") {
+      return Response.json(
+        { success: true },
+        {
+          headers: {
+            "Set-Cookie": `user_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`,
+          },
+        }
+      );
+    }
+
+    // 9. CV Versions Management API
+    if (path === "/api/user/cvs" && request.method === "GET") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const cvs = await cvRepo.listByUser(user.id);
+      return Response.json({ items: cvs });
+    }
+
+    if (path === "/api/user/cvs" && request.method === "POST") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+      const body = (await request.json()) as Record<string, any>;
+      const now = Date.now();
+      const newCv: CvVersion = {
+        id: `cv_${now}_${Math.random().toString(36).slice(2, 7)}`,
+        userId: user.id,
+        jobId: body.job_id || body.jobId || undefined,
+        title: String(body.title || "New CV Version"),
+        targetRole: body.target_role || body.targetRole || undefined,
+        content: String(body.content || ""),
+        skills: Array.isArray(body.skills) ? body.skills : [],
+        matchScore: body.match_score !== undefined ? Number(body.match_score) : (body.matchScore !== undefined ? Number(body.matchScore) : undefined),
+        tailoredNotes: body.tailored_notes || body.tailoredNotes || undefined,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await cvRepo.create(newCv);
+      const saved = await cvRepo.getById(newCv.id, user.id);
+      return Response.json({ success: true, cv: saved }, { status: 201 });
+    }
+
+    if (path.startsWith("/api/user/cvs/") && path !== "/api/user/cvs/tailor") {
+      const cvId = path.replace("/api/user/cvs/", "").trim();
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+      if (request.method === "GET") {
+        const cv = await cvRepo.getById(cvId, user.id);
+        if (!cv) return Response.json({ error: "CV not found" }, { status: 404 });
+        return Response.json({ success: true, cv });
+      }
+
+      if (request.method === "PUT") {
+        const body = (await request.json()) as Record<string, any>;
+        await cvRepo.update(cvId, user.id, {
+          title: body.title !== undefined ? String(body.title) : undefined,
+          targetRole: body.target_role !== undefined ? String(body.target_role) : (body.targetRole !== undefined ? String(body.targetRole) : undefined),
+          content: body.content !== undefined ? String(body.content) : undefined,
+          skills: Array.isArray(body.skills) ? body.skills : undefined,
+          matchScore: body.match_score !== undefined ? Number(body.match_score) : (body.matchScore !== undefined ? Number(body.matchScore) : undefined),
+          tailoredNotes: body.tailored_notes !== undefined ? String(body.tailored_notes) : (body.tailoredNotes !== undefined ? String(body.tailoredNotes) : undefined),
+          jobId: body.job_id !== undefined ? String(body.job_id) : (body.jobId !== undefined ? String(body.jobId) : undefined),
+        });
+        const updated = await cvRepo.getById(cvId, user.id);
+        return Response.json({ success: true, cv: updated });
+      }
+
+      if (request.method === "DELETE") {
+        const deleted = await cvRepo.delete(cvId, user.id);
+        return Response.json({ success: deleted });
+      }
+    }
+
+    if (path === "/api/user/cvs/tailor" && request.method === "POST") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+      const body = (await request.json()) as Record<string, any>;
+      const jobId = String(body.job_id || body.jobId || "");
+      if (!jobId) {
+        return Response.json({ error: "Missing jobId" }, { status: 400 });
+      }
+
+      const result = await mcpHandler.handleJsonRpc(
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: {
+            name: "tailor_cv_for_job",
+            arguments: {
+              job_id: jobId,
+              base_cv_id: body.base_cv_id || body.baseCvId,
+              custom_cv_content: body.custom_cv_content || body.customCvContent,
+            },
+          },
+        },
+        user
+      );
+
+      const parsed = JSON.parse(result.result.content[0].text);
+      if (parsed.error) {
+        return Response.json({ error: parsed.error }, { status: 400 });
+      }
+      return Response.json({ success: true, analysis: parsed });
+    }
+
+    // 10. MCP (Model Context Protocol) Endpoints for AI Agents (Cursor, Claude Desktop, Antigravity)
+    if (path === "/mcp" && request.method === "POST") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) {
+        return Response.json(
+          {
+            jsonrpc: "2.0",
+            id: null,
+            error: {
+              code: -32000,
+              message: "Unauthorized. Please authenticate with Telegram or provide ?token=orp_... in MCP URL.",
+            },
+          },
+          { status: 401 }
+        );
+      }
+
+      const body = (await request.json()) as any;
+      const res = await mcpHandler.handleJsonRpc(body, user);
+      return Response.json(res);
+    }
+
+    if (path === "/mcp/sse" && request.method === "GET") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) {
+        return new Response("Unauthorized. Please provide ?token=orp_... query parameter for MCP SSE.", { status: 401 });
+      }
+
+      const endpointUrl = `/mcp?token=${encodeURIComponent(user.apiToken)}`;
+      return new Response(`event: endpoint\ndata: ${endpointUrl}\n\n`, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+        },
+      });
+    }
+
+    // 11. Admin API: Stats & Task Metrics
     if (path === "/api/admin/stats" && request.method === "GET") {
       if (!isAuthorized(request, url)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
