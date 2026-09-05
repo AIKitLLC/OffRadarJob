@@ -7,6 +7,8 @@ import {
   Job,
   EmploymentType,
   ApplyType,
+  SeniorityLevel,
+  TechCategory,
 } from "../types/domain.js";
 import { ExtractMessage } from "../types/queues.js";
 import { JobRepository, LogRepository } from "../db/repositories.js";
@@ -65,6 +67,9 @@ export class JobExtractorAgent extends BaseAgent {
           careerPageId: msg.careerPageId,
           title: raw.title,
           department: raw.department,
+          seniorityLevel: raw.seniorityLevel,
+          techCategory: raw.techCategory,
+          isTechRole: raw.isTechRole,
           employmentType: raw.employmentType,
           location: raw.location,
           isRemote: raw.isRemote,
@@ -117,6 +122,9 @@ export class JobExtractorAgent extends BaseAgent {
   ): Array<{
     title: string;
     department?: string;
+    seniorityLevel: SeniorityLevel;
+    techCategory: TechCategory;
+    isTechRole: boolean;
     employmentType: EmploymentType;
     location?: string;
     isRemote: boolean;
@@ -133,6 +141,9 @@ export class JobExtractorAgent extends BaseAgent {
     const jobs: Array<{
       title: string;
       department?: string;
+      seniorityLevel: SeniorityLevel;
+      techCategory: TechCategory;
+      isTechRole: boolean;
       employmentType: EmploymentType;
       location?: string;
       isRemote: boolean;
@@ -179,6 +190,9 @@ export class JobExtractorAgent extends BaseAgent {
       const employmentType = this.detectEmploymentType(contextText);
       const salaryInfo = this.extractSalary(contextText);
       const skills = this.extractSkills(contextText);
+      const seniorityLevel = this.detectSeniorityLevel(title, contextText);
+      const techCategory = this.detectTechCategory(title, contextText, skills);
+      const isTechRole = this.isTechnicalJob(title, contextText, skills);
 
       // Find apply method for this specific role or fallback to page default
       let applyType: ApplyType = "url";
@@ -206,6 +220,9 @@ export class JobExtractorAgent extends BaseAgent {
       jobs.push({
         title,
         department: this.inferDepartment(title),
+        seniorityLevel,
+        techCategory,
+        isTechRole,
         employmentType,
         location: isRemote ? "Remote" : "On-site / Hybrid",
         isRemote,
@@ -220,6 +237,138 @@ export class JobExtractorAgent extends BaseAgent {
     }
 
     return jobs;
+  }
+
+  private detectSeniorityLevel(title: string, text: string): SeniorityLevel {
+    const lower = `${title} ${text}`.toLowerCase();
+    if (
+      lower.includes("founding") ||
+      lower.includes("co-founder") ||
+      lower.includes("head of") ||
+      lower.includes("director of") ||
+      lower.includes("cto")
+    ) {
+      return "founding";
+    }
+    if (
+      lower.includes("lead") ||
+      lower.includes("principal") ||
+      lower.includes("staff") ||
+      lower.includes("architect")
+    ) {
+      return "lead";
+    }
+    if (
+      lower.includes("senior") ||
+      lower.includes("sr.") ||
+      lower.includes("sr ") ||
+      lower.includes("experienced")
+    ) {
+      return "senior";
+    }
+    if (
+      lower.includes("intern") ||
+      lower.includes("internship") ||
+      lower.includes("trainee")
+    ) {
+      return "intern";
+    }
+    if (
+      lower.includes("junior") ||
+      lower.includes("jr.") ||
+      lower.includes("jr ") ||
+      lower.includes("entry-level") ||
+      lower.includes("entry level") ||
+      lower.includes("associate")
+    ) {
+      return "junior";
+    }
+    return "mid";
+  }
+
+  private detectTechCategory(title: string, text: string, skills: string[]): TechCategory {
+    const lower = `${title} ${text}`.toLowerCase();
+    const skillsStr = skills.join(" ").toLowerCase();
+
+    if (
+      lower.includes("ai") ||
+      lower.includes("llm") ||
+      lower.includes("machine learning") ||
+      lower.includes("scraping") ||
+      lower.includes("data science") ||
+      skillsStr.includes("ai") ||
+      skillsStr.includes("llm")
+    ) {
+      return "ai_ml";
+    }
+    if (
+      lower.includes("cloud") ||
+      lower.includes("devops") ||
+      lower.includes("sre") ||
+      lower.includes("infrastructure") ||
+      skillsStr.includes("aws") ||
+      skillsStr.includes("docker") ||
+      skillsStr.includes("kubernetes") ||
+      skillsStr.includes("cloudflare")
+    ) {
+      return "devops_cloud";
+    }
+    if (
+      lower.includes("backend") ||
+      lower.includes("systems") ||
+      skillsStr.includes("rust") ||
+      skillsStr.includes("go") ||
+      skillsStr.includes("elixir") ||
+      skillsStr.includes("python") ||
+      skillsStr.includes("ruby")
+    ) {
+      return "backend_systems";
+    }
+    if (
+      lower.includes("frontend") ||
+      lower.includes("ui") ||
+      lower.includes("ux") ||
+      skillsStr.includes("react") ||
+      skillsStr.includes("next.js") ||
+      skillsStr.includes("tailwind") ||
+      skillsStr.includes("vue")
+    ) {
+      return "frontend_ui";
+    }
+    if (
+      lower.includes("designer") ||
+      lower.includes("design") ||
+      skillsStr.includes("figma") ||
+      skillsStr.includes("ui/ux")
+    ) {
+      return "product_design";
+    }
+    return "fullstack";
+  }
+
+  private isTechnicalJob(title: string, text: string, skills: string[]): boolean {
+    const lower = title.toLowerCase();
+    if (
+      lower.includes("account executive") ||
+      lower.includes("sales development") ||
+      lower.includes("office manager") ||
+      lower.includes("receptionist") ||
+      lower.includes("administrative") ||
+      lower.includes("recruiter") ||
+      lower.includes("hr generalist") ||
+      lower.includes("accountant")
+    ) {
+      return false;
+    }
+
+    if (skills.length > 0) return true;
+
+    const techKeywords = [
+      "engineer", "developer", "architect", "programmer", "coder",
+      "designer", "devops", "sre", "data", "ai", "cloud", "systems",
+      "qa", "test", "devrel"
+    ];
+    return techKeywords.some((kw) => lower.includes(kw));
   }
 
   private isLikelyJobTitle(text: string): boolean {

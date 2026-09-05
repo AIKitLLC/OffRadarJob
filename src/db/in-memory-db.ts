@@ -125,7 +125,19 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
 
     if (q.includes("FROM jobs")) {
       let rows = Array.from(this.db.tables.get("jobs")!.values());
-      // Check for search query or filters
+
+      if (q.includes("is_tech_role = 1")) {
+        rows = rows.filter((r) => Number(r["is_tech_role"] ?? 1) === 1);
+      }
+      if (q.includes("seniority_level = ?")) {
+        const gradeVal = String(this.boundValues[0]);
+        rows = rows.filter((r) => r["seniority_level"] === gradeVal);
+      }
+      if (q.includes("tech_category = ?")) {
+        const catVal = String(this.boundValues[this.boundValues.length - 2]);
+        rows = rows.filter((r) => r["tech_category"] === catVal);
+      }
+
       rows.sort((a, b) => Number(b["first_seen_at"] ?? 0) - Number(a["first_seen_at"] ?? 0));
       return { results: rows as T[], success: true };
     }
@@ -172,7 +184,6 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       };
 
       const table = this.db.tables.get("companies")!;
-      // Find existing domain if conflict
       let existingId: string | null = null;
       for (const [rowId, row] of table.entries()) {
         if (row["domain"] === record["domain"]) {
@@ -215,8 +226,9 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
     // INSERT/UPDATE jobs
     if (q.includes("INTO jobs")) {
       const [
-        id, companyId, careerPageId, title, department, employmentType,
-        location, isRemote, remoteScope, salaryMin, salaryMax, salaryCurrency,
+        id, companyId, careerPageId, title, department,
+        seniorityLevel, techCategory, isTechRole,
+        employmentType, location, isRemote, remoteScope, salaryMin, salaryMax, salaryCurrency,
         skills, descriptionSummary, rawContent, applyType, applyTarget,
         status, contentHash, firstSeenAt, lastSeenAt
       ] = this.boundValues;
@@ -227,6 +239,9 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         career_page_id: String(careerPageId),
         title: String(title),
         department: department ?? null,
+        seniority_level: String(seniorityLevel ?? "mid"),
+        tech_category: String(techCategory ?? "fullstack"),
+        is_tech_role: Number(isTechRole ?? 1),
         employment_type: String(employmentType),
         location: location ?? null,
         is_remote: Number(isRemote),

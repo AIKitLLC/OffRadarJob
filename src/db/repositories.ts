@@ -190,13 +190,17 @@ export class JobRepository {
     const query = `
       INSERT INTO jobs (
         id, company_id, career_page_id, title, department,
+        seniority_level, tech_category, is_tech_role,
         employment_type, location, is_remote, remote_scope,
         salary_min, salary_max, salary_currency, skills,
         description_summary, raw_content, apply_type, apply_target,
         status, content_hash, first_seen_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(content_hash) DO UPDATE SET
         title = excluded.title,
+        seniority_level = excluded.seniority_level,
+        tech_category = excluded.tech_category,
+        is_tech_role = excluded.is_tech_role,
         status = excluded.status,
         last_seen_at = excluded.last_seen_at,
         description_summary = COALESCE(excluded.description_summary, jobs.description_summary),
@@ -211,6 +215,9 @@ export class JobRepository {
         job.careerPageId,
         job.title,
         job.department ?? null,
+        job.seniorityLevel,
+        job.techCategory,
+        job.isTechRole ? 1 : 0,
         job.employmentType,
         job.location ?? null,
         job.isRemote ? 1 : 0,
@@ -241,11 +248,37 @@ export class JobRepository {
     return this.mapRowToJob(row);
   }
 
-  public async list(limit = 50): Promise<Job[]> {
-    const res = await this.db
-      .prepare("SELECT * FROM jobs ORDER BY first_seen_at DESC LIMIT ?")
-      .bind(limit)
-      .all<Record<string, unknown>>();
+  public async list(options: {
+    limit?: number | undefined;
+    grade?: string | undefined;
+    techCategory?: string | undefined;
+    techOnly?: boolean | undefined;
+  } = {}): Promise<Job[]> {
+    const limit = options.limit ?? 50;
+    const grade = options.grade && options.grade !== "all" ? options.grade : null;
+    const techCategory = options.techCategory && options.techCategory !== "all" ? options.techCategory : null;
+    const techOnly = options.techOnly !== false ? 1 : 0;
+
+    let query = "SELECT * FROM jobs WHERE 1=1";
+    const bindings: unknown[] = [];
+
+    if (techOnly === 1) {
+      query += " AND is_tech_role = 1";
+    }
+    if (grade) {
+      query += " AND seniority_level = ?";
+      bindings.push(grade);
+    }
+    if (techCategory) {
+      query += " AND tech_category = ?";
+      bindings.push(techCategory);
+    }
+
+    query += " ORDER BY first_seen_at DESC LIMIT ?";
+    bindings.push(limit);
+
+    const stmt = this.db.prepare(query);
+    const res = await stmt.bind(...bindings).all<Record<string, unknown>>();
 
     return (res.results ?? []).map((r) => this.mapRowToJob(r));
   }
@@ -266,6 +299,9 @@ export class JobRepository {
       careerPageId: row["career_page_id"],
       title: row["title"],
       department: row["department"] ?? undefined,
+      seniorityLevel: row["seniority_level"] ?? "mid",
+      techCategory: row["tech_category"] ?? "fullstack",
+      isTechRole: Number(row["is_tech_role"] ?? 1) === 1,
       employmentType: row["employment_type"],
       location: row["location"] ?? undefined,
       isRemote: Number(row["is_remote"]) === 1,

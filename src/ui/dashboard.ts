@@ -298,7 +298,19 @@ export function renderDashboardHtml(): string {
     .log-status-warning { color: var(--warning); }
     .log-status-error { color: var(--danger); }
     .log-time { color: var(--text-muted); min-width: 65px; }
-    .log-msg { color: #cbd5e1; flex: 1; word-break: break-all; }
+    .tag-grade-founding { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); font-weight: 700; }
+    .tag-grade-lead { background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); font-weight: 600; }
+    .tag-grade-senior { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+    .tag-grade-mid { background: rgba(45, 212, 191, 0.15); color: #2dd4bf; }
+    .tag-grade-junior { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+    .tag-cat { background: #1e1b4b; color: #a5b4fc; border: 1px solid #312e81; }
+
+    .filter-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
   </style>
 </head>
 <body>
@@ -306,7 +318,7 @@ export function renderDashboardHtml(): string {
     <header>
       <div class="brand">
         <h1><span>🎯</span> OffRadarJob Gatherer</h1>
-        <p>Decoupled Cloudflare Agent Pipeline for Micro-Companies & Unlisted Jobs</p>
+        <p>Decoupled Cloudflare Agent Pipeline for Micro-Companies & Unlisted Tech Jobs</p>
       </div>
       <div class="status-badge">
         <span class="status-dot"></span>
@@ -316,9 +328,9 @@ export function renderDashboardHtml(): string {
 
     <div class="midwest-banner">
       <div class="midwest-banner-text">
-        <strong>📍 Active Focus: US-Midwest Region</strong> — Targeting boutique software studios, micro-SaaS, and indie tech teams in Chicago (IL), Indianapolis (IN), Minneapolis (MN), Madison (WI), Cincinnati (OH), and Ann Arbor (MI).
+        <strong>📍 Active Focus: US-Midwest Region & Tech Focus</strong> — Săn tìm các công việc công nghệ (AI/LLM, Systems, Cloud, Frontend) từ các công ty siêu nhỏ, indie studios tại Chicago, Indianapolis, Minneapolis, Madison, Cincinnati và Ann Arbor.
       </div>
-      <span class="midwest-tag">Midwest Active</span>
+      <span class="midwest-tag">Tech & Midwest Focus</span>
     </div>
 
     <div class="stats-grid">
@@ -327,53 +339,68 @@ export function renderDashboardHtml(): string {
         <span class="stat-value" id="stat-companies">0</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Off-Radar Jobs</span>
+        <span class="stat-label">Tech Jobs</span>
         <span class="stat-value" id="stat-jobs">0</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Midwest Focus</span>
-        <span class="stat-value" id="stat-midwest" style="color: #fb7185;">100%</span>
+        <span class="stat-label">Senior / Founding</span>
+        <span class="stat-value" id="stat-senior" style="color: #c084fc;">0</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Telemetry Events</span>
-        <span class="stat-value" id="stat-logs">0</span>
+        <span class="stat-label">Midwest Share</span>
+        <span class="stat-value" id="stat-midwest" style="color: #fb7185;">100%</span>
       </div>
     </div>
 
     <div class="crawl-trigger">
       <h2>🚀 Ingest & Dispatch New Seed Domain</h2>
       <div class="input-group">
-        <input type="text" id="seed-input" placeholder="e.g. https://sixfeetup.com, https://bendyworks.com, https://promptloop.com" />
+        <input type="text" id="seed-input" placeholder="e.g. https://promptloop.com, https://sixfeetup.com, https://bendyworks.com" />
         <button id="btn-crawl" onclick="triggerCrawl()">Dispatch to Discovery Queue</button>
       </div>
       <div class="quick-seeds">
-        <span>Quick Midwest Seeds:</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://promptloop.com')">PromptLoop (Chicago, IL)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://sixfeetup.com')">Six Feet Up (Carmel, IN)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://bendyworks.com')">Bendyworks (Madison, WI)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://softwareforgood.com')">Software for Good (Minneapolis, MN)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://gaslight.co')">Gaslight (Cincinnati, OH)</span>
+        <span>Quick Midwest Tech Seeds:</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://promptloop.com')">PromptLoop (Chicago, IL • AI)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://sixfeetup.com')">Six Feet Up (Carmel, IN • Python/AWS)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://bendyworks.com')">Bendyworks (Madison, WI • Elixir/React)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://softwareforgood.com')">Software for Good (Minneapolis, MN • Next.js)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://gaslight.co')">Gaslight (Cincinnati, OH • Ruby/Elixir)</span>
       </div>
     </div>
 
     <div class="filter-bar">
       <div class="nav-tabs">
-        <button class="tab-btn active" onclick="switchTab('jobs')">Gathered Jobs</button>
+        <button class="tab-btn active" onclick="switchTab('jobs')">Gathered Tech Jobs</button>
         <button class="tab-btn" onclick="switchTab('companies')">Micro-Companies Directory</button>
         <button class="tab-btn" onclick="switchTab('telemetry')">Agent Telemetry & Logs</button>
       </div>
-      <div>
-        <select id="region-filter" class="region-select" onchange="filterRegion()">
-          <option value="all">Filter: All Regions</option>
-          <option value="midwest" selected>Filter: 📍 US-Midwest Focus</option>
-          <option value="remote">Filter: 🌐 Worldwide Remote</option>
+      <div class="filter-controls">
+        <select id="grade-filter" class="region-select" onchange="applyFilters()">
+          <option value="all">🎓 All Grades / Seniority</option>
+          <option value="founding">🚀 Founding / Lead / Staff</option>
+          <option value="senior">💎 Senior</option>
+          <option value="mid">⚡ Mid-Level</option>
+          <option value="junior">🌱 Junior / Intern</option>
+        </select>
+        <select id="tech-filter" class="region-select" onchange="applyFilters()">
+          <option value="all">💻 All Tech Disciplines</option>
+          <option value="ai_ml">🤖 AI / LLM & Data Scraping</option>
+          <option value="backend_systems">⚙️ Backend & Systems (Rust/Go/Elixir)</option>
+          <option value="frontend_ui">🎨 Frontend & UI/UX (React/Next.js)</option>
+          <option value="devops_cloud">☁️ Cloud & DevOps (AWS/Cloudflare)</option>
+          <option value="product_design">📐 Product Design & Systems</option>
+        </select>
+        <select id="region-filter" class="region-select" onchange="applyFilters()">
+          <option value="midwest" selected>📍 US-Midwest Focus</option>
+          <option value="all">🌐 All Regions</option>
+          <option value="remote">🏠 Remote Worldwide</option>
         </select>
       </div>
     </div>
 
     <div id="tab-jobs" class="tab-content active">
       <div id="jobs-container" class="job-list">
-        <p style="color: var(--text-muted)">Loading gathered jobs...</p>
+        <p style="color: var(--text-muted)">Loading gathered tech jobs...</p>
       </div>
     </div>
 
@@ -407,7 +434,9 @@ export function renderDashboardHtml(): string {
 
         document.getElementById('stat-companies').innerText = allCompanies.length || 0;
         document.getElementById('stat-jobs').innerText = allJobs.length || 0;
-        document.getElementById('stat-logs').innerText = statsRes.logsCount || 0;
+
+        const seniorCount = allJobs.filter(j => j.seniorityLevel === 'senior' || j.seniorityLevel === 'founding' || j.seniorityLevel === 'lead').length;
+        document.getElementById('stat-senior').innerText = seniorCount;
 
         const midwestCount = allJobs.filter(j => 
           (j.remoteScope && j.remoteScope.includes('midwest')) || 
@@ -417,7 +446,7 @@ export function renderDashboardHtml(): string {
         const pct = allJobs.length > 0 ? Math.round((midwestCount / allJobs.length) * 100) : 100;
         document.getElementById('stat-midwest').innerText = pct + '%';
 
-        renderJobs();
+        applyFilters();
         renderCompanies();
         renderLogs(statsRes.recentLogs || []);
       } catch (err) {
@@ -425,27 +454,72 @@ export function renderDashboardHtml(): string {
       }
     }
 
-    function filterRegion() {
+    function applyFilters() {
       renderJobs();
       renderCompanies();
+    }
+
+    function getGradeBadge(grade) {
+      switch(grade) {
+        case 'founding': return '<span class="tag tag-grade-founding">🚀 Founding</span>';
+        case 'lead': return '<span class="tag tag-grade-lead">👑 Lead / Staff</span>';
+        case 'senior': return '<span class="tag tag-grade-senior">💎 Senior</span>';
+        case 'junior': return '<span class="tag tag-grade-junior">🌱 Junior</span>';
+        case 'intern': return '<span class="tag tag-grade-junior">🌱 Intern</span>';
+        default: return '<span class="tag tag-grade-mid">⚡ Mid-Level</span>';
+      }
+    }
+
+    function getTechBadge(cat) {
+      switch(cat) {
+        case 'ai_ml': return '<span class="tag tag-cat">🤖 AI & LLM</span>';
+        case 'backend_systems': return '<span class="tag tag-cat">⚙️ Backend & Systems</span>';
+        case 'frontend_ui': return '<span class="tag tag-cat">🎨 Frontend & UI</span>';
+        case 'devops_cloud': return '<span class="tag tag-cat">☁️ Cloud & DevOps</span>';
+        case 'product_design': return '<span class="tag tag-cat">📐 Product Design</span>';
+        default: return '<span class="tag tag-cat">💻 Full-Stack</span>';
+      }
     }
 
     function renderJobs() {
       const container = document.getElementById('jobs-container');
       const region = document.getElementById('region-filter').value;
+      const grade = document.getElementById('grade-filter').value;
+      const tech = document.getElementById('tech-filter').value;
       
       let filtered = allJobs;
+
+      // 1. Tech Focus (Filter out non-tech if marked)
+      filtered = filtered.filter(j => j.isTechRole !== false);
+
+      // 2. Region filter
       if (region === 'midwest') {
-        filtered = allJobs.filter(j => 
+        filtered = filtered.filter(j => 
           (j.remoteScope && j.remoteScope.includes('midwest')) || 
           (j.location && (j.location.includes('Midwest') || j.location.includes('IN') || j.location.includes('IL') || j.location.includes('WI') || j.location.includes('MN') || j.location.includes('OH')))
         );
       } else if (region === 'remote') {
-        filtered = allJobs.filter(j => j.isRemote);
+        filtered = filtered.filter(j => j.isRemote);
+      }
+
+      // 3. Grade filter
+      if (grade === 'founding') {
+        filtered = filtered.filter(j => j.seniorityLevel === 'founding' || j.seniorityLevel === 'lead');
+      } else if (grade === 'senior') {
+        filtered = filtered.filter(j => j.seniorityLevel === 'senior');
+      } else if (grade === 'mid') {
+        filtered = filtered.filter(j => j.seniorityLevel === 'mid');
+      } else if (grade === 'junior') {
+        filtered = filtered.filter(j => j.seniorityLevel === 'junior' || j.seniorityLevel === 'intern');
+      }
+
+      // 4. Tech discipline filter
+      if (tech !== 'all') {
+        filtered = filtered.filter(j => j.techCategory === tech);
       }
 
       if (filtered.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-muted); padding: 24px; text-align: center;">No off-radar jobs found for selected filter. Trigger a seed crawl above!</p>';
+        container.innerHTML = '<p style="color: var(--text-muted); padding: 32px; text-align: center;">No off-radar tech jobs matched your filters. Try selecting "All Grades" or "All Tech Disciplines".</p>';
         return;
       }
 
@@ -454,9 +528,13 @@ export function renderDashboardHtml(): string {
         return \`
           <div class="job-card">
             <div class="job-main">
-              <h3>\${j.title}</h3>
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <h3>\${j.title}</h3>
+                \${getGradeBadge(j.seniorityLevel)}
+                \${getTechBadge(j.techCategory)}
+              </div>
               <a class="job-company" href="/api/companies" target="_blank">🏢 Company: \${j.companyId.replace('comp_', '').replace(/_/g, '.')}</a>
-              <p class="job-desc">\${j.descriptionSummary || 'Direct opening from micro-company career portal.'}</p>
+              <p class="job-desc">\${j.descriptionSummary || 'Direct tech opening from micro-company career portal.'}</p>
               <div class="job-tags">
                 \${isMidwest ? '<span class="tag tag-midwest">📍 US-Midwest</span>' : ''}
                 <span class="tag tag-remote">🌐 \${j.isRemote ? 'Remote (' + j.remoteScope + ')' : j.location}</span>

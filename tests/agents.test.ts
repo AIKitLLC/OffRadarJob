@@ -12,6 +12,7 @@ import {
 } from "../src/db/repositories.js";
 import { MOCK_FIXTURES } from "../src/demo/mock-seed.js";
 import { PipelineOrchestrator } from "../src/orchestrator/dispatcher.js";
+import { Job } from "../src/types/domain.js";
 
 describe("Decoupled Agent Pipeline Suite", () => {
   let db: InMemoryD1Database;
@@ -157,7 +158,7 @@ describe("Decoupled Agent Pipeline Suite", () => {
 
       expect(res.value.length).toBe(2);
 
-      const rustJob = res.value.find((j) => j.title.includes("Rust"));
+      const rustJob = res.value.find((j: Job) => j.title.includes("Rust"));
       expect(rustJob).toBeDefined();
       expect(rustJob?.isRemote).toBe(true);
       expect(rustJob?.remoteScope).toBe("worldwide");

@@ -71,7 +71,7 @@ async function runDemo() {
 
   // Query database stores
   const companies = await orchestrator.companyRepo.list(10);
-  const jobs = await orchestrator.jobRepo.list(20);
+  const jobs = await orchestrator.jobRepo.list({ limit: 20 });
   const logs = await orchestrator.logRepo.getRecent(30);
 
   console.log("\n================================================================================");

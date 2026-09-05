@@ -56,7 +56,12 @@ export default {
     // 2. API: List Gathered Jobs
     if (path === "/api/jobs" && request.method === "GET") {
       const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10), 100);
-      const jobs = await jobRepo.list(limit);
+      const grade = url.searchParams.get("grade") ?? undefined;
+      const techCategory = url.searchParams.get("tech_category") ?? undefined;
+      const techOnlyParam = url.searchParams.get("tech_only");
+      const techOnly = techOnlyParam === "false" ? false : true;
+
+      const jobs = await jobRepo.list({ limit, grade, techCategory, techOnly });
       return Response.json(jobs);
     }
 

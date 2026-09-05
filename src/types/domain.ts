@@ -104,12 +104,36 @@ export type ApplyType = z.infer<typeof ApplyTypeEnum>;
 export const JobStatusEnum = z.enum(["open", "closed"]);
 export type JobStatus = z.infer<typeof JobStatusEnum>;
 
+export const SeniorityLevelEnum = z.enum([
+  "intern",
+  "junior",
+  "mid",
+  "senior",
+  "lead",
+  "founding"
+]);
+export type SeniorityLevel = z.infer<typeof SeniorityLevelEnum>;
+
+export const TechCategoryEnum = z.enum([
+  "ai_ml",
+  "backend_systems",
+  "frontend_ui",
+  "fullstack",
+  "devops_cloud",
+  "product_design",
+  "other_tech"
+]);
+export type TechCategory = z.infer<typeof TechCategoryEnum>;
+
 export const JobSchema = z.object({
   id: z.string().min(1),
   companyId: z.string().min(1),
   careerPageId: z.string().min(1),
   title: z.string().min(1),
   department: z.string().nullable().optional(),
+  seniorityLevel: SeniorityLevelEnum.default("mid"),
+  techCategory: TechCategoryEnum.default("fullstack"),
+  isTechRole: z.boolean().default(true),
   employmentType: EmploymentTypeEnum,
   location: z.string().nullable().optional(),
   isRemote: z.boolean(),
