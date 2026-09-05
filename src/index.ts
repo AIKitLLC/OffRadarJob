@@ -19,9 +19,15 @@ import { CrawlTaskStatus } from "./types/domain.js";
 import { CURATED_SEEDS } from "./seeds/seed-catalogue.js";
 import { PublicSourceManager } from "./harvesters/public-source-harvester.js";
 
+export interface KvNamespace {
+  get(key: string, type?: "text" | "json"): Promise<any>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
 export interface Env {
   DB: ID1Database;
-  CACHE?: unknown;
+  CACHE?: KvNamespace;
   DISCOVERY_QUEUE?: {
     send(message: unknown): Promise<void>;
   };
@@ -37,6 +43,36 @@ export interface Env {
   DLQ?: {
     send(message: unknown): Promise<void>;
   };
+}
+
+async function getOrSetKvCache<T>(
+  env: Env,
+  key: string,
+  ttlSeconds: number,
+  fetcher: () => Promise<T>
+): Promise<T> {
+  if (env.CACHE && typeof env.CACHE.get === "function") {
+    try {
+      const cached = await env.CACHE.get(key, "json");
+      if (cached !== null && cached !== undefined) {
+        return cached as T;
+      }
+    } catch (err) {
+      console.warn(`[KV Cache] Failed reading key ${key}:`, err);
+    }
+  }
+
+  const data = await fetcher();
+
+  if (env.CACHE && typeof env.CACHE.put === "function" && data !== null && data !== undefined) {
+    try {
+      await env.CACHE.put(key, JSON.stringify(data), { expirationTtl: ttlSeconds });
+    } catch (err) {
+      console.warn(`[KV Cache] Failed writing key ${key}:`, err);
+    }
+  }
+
+  return data;
 }
 
 const DEFAULT_ADMIN_TOKEN = "offradar-admin-2026";
@@ -82,53 +118,99 @@ export default {
       });
     }
 
-    // 3. API: List Gathered Jobs
+    // 3. API: List Gathered Jobs (Supports Paging & KV Caching)
     if (path === "/api/jobs" && request.method === "GET") {
-      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "100", 10), 2500);
+      const pageParam = url.searchParams.get("page");
+      const paged = pageParam !== null || url.searchParams.get("paged") === "true";
+      const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
+      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? (paged ? "30" : "50"), 10), 100);
       const grade = url.searchParams.get("grade") ?? url.searchParams.get("seniority") ?? undefined;
       const techCategory = url.searchParams.get("tech_category") ?? undefined;
+      const region = url.searchParams.get("region") ?? undefined;
+      const search = url.searchParams.get("search") ?? url.searchParams.get("q") ?? undefined;
       const techOnlyParam = url.searchParams.get("tech_only");
       const techOnly = techOnlyParam === "false" ? false : true;
 
-      const jobs = await jobRepo.list({ limit, grade, techCategory, techOnly });
-      return Response.json(jobs, {
-        headers: {
-          "Cache-Control": "public, max-age=30, s-maxage=120, stale-while-revalidate=300",
-        },
-      });
-    }
+      const cacheKey = `api:jobs:v2:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
 
-    // 4. API: List Micro-Companies
-    if (path === "/api/companies" && request.method === "GET") {
-      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "100", 10), 2500);
-      const companies = await companyRepo.list(limit);
-      return Response.json(companies, {
+      const data = await getOrSetKvCache(env, cacheKey, 120, async () => {
+        if (paged) {
+          return await jobRepo.listPaged({
+            page,
+            limit,
+            grade,
+            techCategory,
+            region,
+            techOnly,
+            search,
+          });
+        }
+        return await jobRepo.list({
+          limit,
+          grade,
+          techCategory,
+          region,
+          techOnly,
+          search,
+        });
+      });
+
+      return Response.json(data, {
         headers: {
           "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
         },
       });
     }
 
+    // 4. API: List Micro-Companies (Supports Paging & KV Caching)
+    if (path === "/api/companies" && request.method === "GET") {
+      const pageParam = url.searchParams.get("page");
+      const paged = pageParam !== null || url.searchParams.get("paged") === "true";
+      const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
+      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? (paged ? "30" : "50"), 10), 100);
+      const search = url.searchParams.get("search") ?? url.searchParams.get("q") ?? undefined;
+
+      const cacheKey = `api:companies:v2:p${page}:l${limit}:s${search || ""}:paged${paged ? 1 : 0}`;
+
+      const data = await getOrSetKvCache(env, cacheKey, 300, async () => {
+        if (paged) {
+          return await companyRepo.listPaged({ page, limit, search });
+        }
+        return await companyRepo.list(limit);
+      });
+
+      return Response.json(data, {
+        headers: {
+          "Cache-Control": "public, max-age=120, s-maxage=600, stale-while-revalidate=1200",
+        },
+      });
+    }
+
     // 5. API: Stats & Telemetry Logs
     if (path === "/api/stats" && request.method === "GET") {
-      const [companiesCount, jobsCount, recentLogs] = await Promise.all([
-        companyRepo.count(),
-        jobRepo.count(),
-        logRepo.getRecent(30),
-      ]);
-      return Response.json(
-        {
+      const data = await getOrSetKvCache(env, "api:stats:v2", 60, async () => {
+        const [companiesCount, jobsCount, jobSummary, recentLogs] = await Promise.all([
+          companyRepo.count(),
+          jobRepo.count(),
+          jobRepo.getStatsSummary(),
+          logRepo.getRecent(30),
+        ]);
+        const midwestPct = jobSummary.total > 0 ? Math.round((jobSummary.midwestCount / jobSummary.total) * 100) : 100;
+        return {
           companiesCount,
           jobsCount,
+          seniorCount: jobSummary.seniorCount,
+          midwestPercent: midwestPct,
           logsCount: recentLogs.length,
           recentLogs,
+        };
+      });
+
+      return Response.json(data, {
+        headers: {
+          "Cache-Control": "public, max-age=30, s-maxage=120, stale-while-revalidate=300",
         },
-        {
-          headers: {
-            "Cache-Control": "public, max-age=15, s-maxage=60, stale-while-revalidate=120",
-          },
-        }
-      );
+      });
     }
 
     // 6. Admin API: Stats & Task Metrics

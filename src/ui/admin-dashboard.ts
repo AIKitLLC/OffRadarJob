@@ -855,8 +855,8 @@ export function renderAdminDashboardHtml(): string {
         if (grade !== 'all') query.set('grade', grade);
 
         const res = await apiFetch('/api/jobs?' + query.toString());
-        if (!res.ok) return;
-        const jobs = await res.json();
+        const data = await res.json();
+        const jobs = Array.isArray(data) ? data : (data?.items || []);
 
         const tbody = document.getElementById('moderation-jobs-body');
         if (!jobs || jobs.length === 0) {

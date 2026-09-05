@@ -312,6 +312,55 @@ export function renderDashboardHtml(): string {
       align-items: center;
       flex-wrap: wrap;
     }
+
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 8px;
+      margin-top: 20px;
+      border-top: 1px solid var(--card-border);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .pagination-info {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .pagination-info strong {
+      color: #fff;
+    }
+    .pagination-buttons {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .page-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .page-btn:hover:not(:disabled) {
+      border-color: var(--primary);
+      color: #fff;
+      background: rgba(56, 189, 248, 0.1);
+    }
+    .page-btn.active {
+      background: var(--primary);
+      color: #0b0f19;
+      border-color: var(--primary);
+      font-weight: 700;
+    }
+    .page-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
@@ -379,7 +428,7 @@ export function renderDashboardHtml(): string {
         <button class="tab-btn" onclick="switchTab('telemetry')">Agent Telemetry & Logs</button>
       </div>
       <div class="filter-controls">
-        <input type="text" id="search-input" placeholder="🔍 Search roles, tech, or companies..." class="region-select" style="min-width: 250px;" oninput="applyFilters()" />
+        <input type="text" id="search-input" placeholder="🔍 Search roles, tech, or companies..." class="region-select" style="min-width: 250px;" oninput="onSearchInput()" />
         <select id="grade-filter" class="region-select" onchange="applyFilters()">
           <option value="all">🎓 All Grades / Seniority</option>
           <option value="founding">🚀 Founding / Principal</option>
@@ -408,14 +457,16 @@ export function renderDashboardHtml(): string {
 
     <div id="tab-jobs" class="tab-content active">
       <div id="jobs-container" class="job-list">
-        <p style="color: var(--text-muted)">Loading gathered tech jobs...</p>
+        <p style="color: var(--text-muted); padding: 32px; text-align: center;">Loading gathered tech jobs...</p>
       </div>
+      <div id="jobs-pagination" class="pagination-bar"></div>
     </div>
 
     <div id="tab-companies" class="tab-content">
       <div id="companies-container" class="companies-grid">
-        <p style="color: var(--text-muted)">Loading companies directory...</p>
+        <p style="color: var(--text-muted); padding: 32px; text-align: center; grid-column: 1/-1;">Click to load companies directory...</p>
       </div>
+      <div id="companies-pagination" class="pagination-bar"></div>
     </div>
 
     <div id="tab-telemetry" class="tab-content">
@@ -426,138 +477,99 @@ export function renderDashboardHtml(): string {
   </div>
 
   <script>
-    let allJobs = [];
-    let allCompanies = [];
-    window._currentDisplayLimit = 60;
+    let currentJobsPage = 1;
+    let currentCompsPage = 1;
+    let jobsPagination = { page: 1, limit: 30, total: 0, totalPages: 1 };
+    let compsPagination = { page: 1, limit: 30, total: 0, totalPages: 1 };
+    let searchDebounceTimer = null;
+    let companiesLoaded = false;
 
     async function loadData() {
       try {
-        const [jobsRes, compsRes, statsRes] = await Promise.all([
-          fetch('/api/jobs?limit=2500').then(r => r.json()),
-          fetch('/api/companies?limit=2500').then(r => r.json()),
-          fetch('/api/stats').then(r => r.json())
-        ]);
-
-        allJobs = Array.isArray(jobsRes) ? jobsRes : [];
-        allCompanies = Array.isArray(compsRes) ? compsRes : [];
-
-        document.getElementById('stat-companies').innerText = allCompanies.length || 0;
-        document.getElementById('stat-jobs').innerText = allJobs.length || 0;
-
-        const seniorCount = allJobs.filter(j => j.seniorityLevel === 'senior' || j.seniorityLevel === 'founding' || j.seniorityLevel === 'lead').length;
-        document.getElementById('stat-senior').innerText = seniorCount;
-
-        const midwestCount = allJobs.filter(j => 
-          (j.remoteScope && j.remoteScope.includes('midwest')) || 
-          (j.location && (j.location.includes('Midwest') || j.location.includes('IN') || j.location.includes('IL') || j.location.includes('WI') || j.location.includes('MN') || j.location.includes('OH')))
-        ).length;
-        
-        const pct = allJobs.length > 0 ? Math.round((midwestCount / allJobs.length) * 100) : 100;
-        document.getElementById('stat-midwest').innerText = pct + '%';
-
-        applyFilters();
-        renderCompanies();
-        renderLogs(statsRes.recentLogs || []);
+        fetchStats();
+        await fetchJobs(1);
       } catch (err) {
-        console.error('Error fetching dashboard data:', err);
+        console.error('Error in loadData:', err);
       }
+    }
+
+    async function fetchStats() {
+      try {
+        const stats = await fetch('/api/stats').then(r => r.json());
+        if (!stats) return;
+        document.getElementById('stat-companies').innerText = stats.companiesCount || 0;
+        document.getElementById('stat-jobs').innerText = stats.jobsCount || 0;
+        document.getElementById('stat-senior').innerText = stats.seniorCount || 0;
+        document.getElementById('stat-midwest').innerText = (stats.midwestPercent !== undefined ? stats.midwestPercent : 100) + '%';
+        renderLogs(stats.recentLogs || []);
+      } catch (err) {
+        console.warn('Stats fetch error:', err);
+      }
+    }
+
+    function onSearchInput() {
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        fetchJobs(1);
+      }, 300);
     }
 
     function applyFilters() {
-      window._currentDisplayLimit = 60;
-      renderJobs();
-      renderCompanies();
+      fetchJobs(1);
     }
 
-    function getGradeBadge(grade) {
-      switch(grade) {
-        case 'founding': return '<span class="tag tag-grade-founding">🚀 Founding</span>';
-        case 'lead': return '<span class="tag tag-grade-lead">👑 Lead / Staff</span>';
-        case 'senior': return '<span class="tag tag-grade-senior">💎 Senior</span>';
-        case 'mid': return '<span class="tag tag-grade-mid">⚡ Mid-Level</span>';
-        case 'junior': return '<span class="tag tag-grade-junior">🌱 Junior</span>';
-        case 'new_grad': return '<span class="tag tag-grade-newgrad">🎓 New Grad</span>';
-        case 'intern': return '<span class="tag tag-grade-junior">🐣 Intern</span>';
-        default: return '<span class="tag tag-grade-mid">⚡ Mid-Level</span>';
-      }
-    }
-
-    function getTechBadge(cat) {
-      switch(cat) {
-        case 'ai_ml': return '<span class="tag tag-cat">🤖 AI & LLM</span>';
-        case 'backend_systems': return '<span class="tag tag-cat">⚙️ Backend & Systems</span>';
-        case 'frontend_ui': return '<span class="tag tag-cat">🎨 Frontend & UI</span>';
-        case 'devops_cloud': return '<span class="tag tag-cat">☁️ Cloud & DevOps</span>';
-        case 'product_design': return '<span class="tag tag-cat">📐 Product Design</span>';
-        default: return '<span class="tag tag-cat">💻 Full-Stack</span>';
-      }
-    }
-
-    function renderJobs() {
+    async function fetchJobs(page = 1) {
+      currentJobsPage = page;
       const container = document.getElementById('jobs-container');
       const region = document.getElementById('region-filter').value;
       const grade = document.getElementById('grade-filter').value;
       const tech = document.getElementById('tech-filter').value;
-      const search = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
-      
-      let filtered = allJobs;
+      const search = (document.getElementById('search-input')?.value || '').trim();
 
-      // 1. Tech Focus (Filter out non-tech if marked)
-      filtered = filtered.filter(j => j.isTechRole !== false);
+      container.innerHTML = '<p style="color: var(--text-muted); padding: 32px; text-align: center;">⚡ Loading jobs (page ' + page + ')...</p>';
 
-      // 2. Keyword Search
-      if (search) {
-        filtered = filtered.filter(j => 
-          (j.title && j.title.toLowerCase().includes(search)) ||
-          (j.companyName && j.companyName.toLowerCase().includes(search)) ||
-          (j.location && j.location.toLowerCase().includes(search)) ||
-          (j.skills && j.skills.some(s => s.toLowerCase().includes(search))) ||
-          (j.department && j.department.toLowerCase().includes(search))
-        );
+      try {
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: '30',
+          paged: 'true',
+        });
+        if (grade !== 'all') params.set('grade', grade);
+        if (tech !== 'all') params.set('tech_category', tech);
+        if (region !== 'all') params.set('region', region);
+        if (search) params.set('search', search);
+
+        const res = await fetch('/api/jobs?' + params.toString());
+        const data = await res.json();
+
+        const jobs = data.items || (Array.isArray(data) ? data : []);
+        jobsPagination = data.pagination || {
+          page,
+          limit: 30,
+          total: jobs.length,
+          totalPages: Math.ceil(jobs.length / 30) || 1
+        };
+
+        renderJobsList(jobs);
+        renderPagination('jobs-pagination', jobsPagination, 'changeJobsPage');
+      } catch (err) {
+        container.innerHTML = '<p style="color: var(--danger); padding: 32px; text-align: center;">Error loading jobs: ' + err.message + '</p>';
       }
+    }
 
-      // 3. Region filter
-      if (region === 'midwest') {
-        filtered = filtered.filter(j => 
-          (j.remoteScope && j.remoteScope.includes('midwest')) || 
-          (j.location && (j.location.includes('Midwest') || j.location.includes('IN') || j.location.includes('IL') || j.location.includes('WI') || j.location.includes('MN') || j.location.includes('OH')))
-        );
-      } else if (region === 'remote') {
-        filtered = filtered.filter(j => j.isRemote);
-      }
+    function changeJobsPage(page) {
+      fetchJobs(page);
+      window.scrollTo({ top: 350, behavior: 'smooth' });
+    }
 
-      // 4. Grade filter
-      if (grade === 'founding') {
-        filtered = filtered.filter(j => j.seniorityLevel === 'founding');
-      } else if (grade === 'lead') {
-        filtered = filtered.filter(j => j.seniorityLevel === 'lead');
-      } else if (grade === 'senior') {
-        filtered = filtered.filter(j => j.seniorityLevel === 'senior');
-      } else if (grade === 'mid') {
-        filtered = filtered.filter(j => j.seniorityLevel === 'mid');
-      } else if (grade === 'junior') {
-        filtered = filtered.filter(j => j.seniorityLevel === 'junior');
-      } else if (grade === 'new_grad') {
-        filtered = filtered.filter(j => j.seniorityLevel === 'new_grad');
-      } else if (grade === 'intern') {
-        filtered = filtered.filter(j => j.seniorityLevel === 'intern');
-      }
-
-      // 5. Tech discipline filter
-      if (tech !== 'all') {
-        filtered = filtered.filter(j => j.techCategory === tech);
-      }
-
-      if (filtered.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-muted); padding: 32px; text-align: center;">No off-radar tech jobs matched your filters. Try selecting "All Grades" or "All Tech Disciplines".</p>';
+    function renderJobsList(jobs) {
+      const container = document.getElementById('jobs-container');
+      if (!jobs || jobs.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); padding: 32px; text-align: center;">No off-radar tech jobs matched your query. Try adjusting your search or filters.</p>';
         return;
       }
 
-      const displayLimit = window._currentDisplayLimit || 60;
-      const toShow = filtered.slice(0, displayLimit);
-      const remaining = filtered.length - toShow.length;
-
-      const itemsHtml = toShow.map(j => {
+      container.innerHTML = jobs.map(j => {
         const isMidwest = (j.remoteScope && j.remoteScope.includes('midwest')) || (j.location && j.location.includes('Midwest'));
         return \`
           <div class="job-card">
@@ -585,33 +597,46 @@ export function renderDashboardHtml(): string {
           </div>
         \`;
       }).join('');
-
-      const loadMoreHtml = remaining > 0 ? \`
-        <div style="text-align: center; padding: 24px;">
-          <button onclick="window._currentDisplayLimit = (window._currentDisplayLimit || 60) + 60; renderJobs();" class="apply-btn" style="cursor: pointer; padding: 12px 32px; font-size: 14px; border: none;">
-            ⚡ Load More Jobs (\${remaining} remaining of \${filtered.length})
-          </button>
-        </div>
-      \` : '';
-
-      container.innerHTML = itemsHtml + loadMoreHtml;
     }
 
-    function renderCompanies() {
+    async function fetchCompanies(page = 1) {
+      currentCompsPage = page;
       const container = document.getElementById('companies-container');
-      const region = document.getElementById('region-filter').value;
-      
-      let filtered = allCompanies;
-      if (region === 'midwest') {
-        filtered = allCompanies.filter(c => c.locationHint && c.locationHint.includes('Midwest'));
-      }
+      container.innerHTML = '<p style="color: var(--text-muted); padding: 32px; text-align: center; grid-column: 1/-1;">⚡ Loading micro-companies (page ' + page + ')...</p>';
 
-      if (filtered.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-muted); grid-column: 1/-1; text-align: center;">No companies found matching filter.</p>';
+      try {
+        const res = await fetch('/api/companies?page=' + page + '&limit=30&paged=true');
+        const data = await res.json();
+
+        const comps = data.items || (Array.isArray(data) ? data : []);
+        compsPagination = data.pagination || {
+          page,
+          limit: 30,
+          total: comps.length,
+          totalPages: Math.ceil(comps.length / 30) || 1
+        };
+        companiesLoaded = true;
+
+        renderCompaniesList(comps);
+        renderPagination('companies-pagination', compsPagination, 'changeCompsPage');
+      } catch (err) {
+        container.innerHTML = '<p style="color: var(--danger); padding: 32px; text-align: center; grid-column: 1/-1;">Error loading companies: ' + err.message + '</p>';
+      }
+    }
+
+    function changeCompsPage(page) {
+      fetchCompanies(page);
+      window.scrollTo({ top: 350, behavior: 'smooth' });
+    }
+
+    function renderCompaniesList(comps) {
+      const container = document.getElementById('companies-container');
+      if (!comps || comps.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); grid-column: 1/-1; text-align: center; padding: 32px;">No companies found.</p>';
         return;
       }
 
-      container.innerHTML = filtered.map(c => \`
+      container.innerHTML = comps.map(c => \`
         <div class="company-card">
           <div class="company-header">
             <a class="company-name" href="\${c.websiteUrl}" target="_blank">\${c.name} ↗</a>
@@ -627,6 +652,59 @@ export function renderDashboardHtml(): string {
           </div>
         </div>
       \`).join('');
+    }
+
+    function renderPagination(containerId, pagination, handlerName) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+
+      const { page, limit, total, totalPages } = pagination;
+      if (total === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      const startItem = (page - 1) * limit + 1;
+      const endItem = Math.min(page * limit, total);
+
+      container.innerHTML = \`
+        <div class="pagination-info">
+          Showing <strong>\${startItem} - \${endItem}</strong> of <strong>\${total.toLocaleString()}</strong> results
+        </div>
+        <div class="pagination-buttons">
+          <button class="page-btn" onclick="\${handlerName}(1)" \${page <= 1 ? 'disabled' : ''}>« First</button>
+          <button class="page-btn" onclick="\${handlerName}(\${page - 1})" \${page <= 1 ? 'disabled' : ''}>‹ Prev</button>
+          <span style="font-size: 13px; color: var(--text-muted); padding: 0 8px;">
+            Page <strong style="color: #fff;">\${page}</strong> of \${totalPages}
+          </span>
+          <button class="page-btn" onclick="\${handlerName}(\${page + 1})" \${page >= totalPages ? 'disabled' : ''}>Next ›</button>
+          <button class="page-btn" onclick="\${handlerName}(\${totalPages})" \${page >= totalPages ? 'disabled' : ''}>Last »</button>
+        </div>
+      \`;
+    }
+
+    function getGradeBadge(grade) {
+      switch(grade) {
+        case 'founding': return '<span class="tag tag-grade-founding">🚀 Founding</span>';
+        case 'lead': return '<span class="tag tag-grade-lead">👑 Lead / Staff</span>';
+        case 'senior': return '<span class="tag tag-grade-senior">💎 Senior</span>';
+        case 'mid': return '<span class="tag tag-grade-mid">⚡ Mid-Level</span>';
+        case 'junior': return '<span class="tag tag-grade-junior">🌱 Junior</span>';
+        case 'new_grad': return '<span class="tag tag-grade-newgrad">🎓 New Grad</span>';
+        case 'intern': return '<span class="tag tag-grade-junior">🐣 Intern</span>';
+        default: return '<span class="tag tag-grade-mid">⚡ Mid-Level</span>';
+      }
+    }
+
+    function getTechBadge(cat) {
+      switch(cat) {
+        case 'ai_ml': return '<span class="tag tag-cat">🤖 AI & LLM</span>';
+        case 'backend_systems': return '<span class="tag tag-cat">⚙️ Backend & Systems</span>';
+        case 'frontend_ui': return '<span class="tag tag-cat">🎨 Frontend & UI</span>';
+        case 'devops_cloud': return '<span class="tag tag-cat">☁️ Cloud & DevOps</span>';
+        case 'product_design': return '<span class="tag tag-cat">📐 Product Design</span>';
+        default: return '<span class="tag tag-cat">💻 Full-Stack</span>';
+      }
     }
 
     function renderLogs(logs) {
@@ -682,12 +760,24 @@ export function renderDashboardHtml(): string {
     function switchTab(tab) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      event.target.classList.add('active');
-      document.getElementById('tab-' + tab).classList.add('active');
+      
+      const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick')?.includes("'" + tab + "'"));
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const target = document.getElementById('tab-' + tab);
+      if (target) target.classList.add('active');
+
+      if (tab === 'companies' && !companiesLoaded) {
+        fetchCompanies(1);
+      }
     }
 
+    window.changeJobsPage = changeJobsPage;
+    window.changeCompsPage = changeCompsPage;
+
     loadData();
-    setInterval(loadData, 5000);
+    // Poll stats every 30s instead of slamming D1 with 2500 jobs every 5s
+    setInterval(fetchStats, 30000);
   </script>
 </body>
 </html>`;

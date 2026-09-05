@@ -91,6 +91,59 @@ export class CompanyRepository {
     return (res.results ?? []).map((r) => this.mapRowToCompany(r));
   }
 
+  public async listPaged(options: {
+    page?: number | undefined;
+    limit?: number | undefined;
+    search?: string | undefined;
+  } = {}): Promise<{
+    items: Company[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+      hasNext: boolean;
+      hasPrev: boolean;
+    };
+  }> {
+    const page = Math.max(1, options.page ?? 1);
+    const limit = Math.min(Math.max(1, options.limit ?? 30), 100);
+    const offset = (page - 1) * limit;
+    const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
+
+    let whereClause = "WHERE 1=1";
+    const bindings: unknown[] = [];
+
+    if (search) {
+      whereClause += " AND (LOWER(name) LIKE ? OR LOWER(domain) LIKE ? OR LOWER(COALESCE(industry, '')) LIKE ? OR LOWER(tech_stack) LIKE ?)";
+      bindings.push(search, search, search, search);
+    }
+
+    const countSql = `SELECT COUNT(*) as total FROM companies ${whereClause}`;
+    const itemsSql = `SELECT * FROM companies ${whereClause} ORDER BY updated_at DESC LIMIT ? OFFSET ?`;
+
+    const [countRes, itemsRes] = await Promise.all([
+      this.db.prepare(countSql).bind(...bindings).first<{ total: number }>(),
+      this.db.prepare(itemsSql).bind(...bindings, limit, offset).all<Record<string, unknown>>(),
+    ]);
+
+    const total = Number(countRes?.total ?? 0);
+    const totalPages = Math.ceil(total / limit) || 1;
+    const items = (itemsRes.results ?? []).map((r) => this.mapRowToCompany(r));
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    };
+  }
+
   public async count(): Promise<number> {
     const res = await this.db
       .prepare("SELECT COUNT(*) as count FROM companies")
@@ -99,27 +152,33 @@ export class CompanyRepository {
   }
 
   private mapRowToCompany(row: Record<string, unknown>): Company {
-    const techStack = typeof row["tech_stack"] === "string" ? JSON.parse(row["tech_stack"] as string) : [];
-    const socialLinks = typeof row["social_links"] === "string" ? JSON.parse(row["social_links"] as string) : {};
+    let techStack: string[] = [];
+    try {
+      techStack = typeof row["tech_stack"] === "string" ? JSON.parse(row["tech_stack"] as string) : [];
+    } catch {}
+    let socialLinks: Record<string, string> = {};
+    try {
+      socialLinks = typeof row["social_links"] === "string" ? JSON.parse(row["social_links"] as string) : {};
+    } catch {}
 
-    return CompanySchema.parse({
-      id: row["id"],
-      domain: row["domain"],
-      name: row["name"],
-      tagline: row["tagline"] ?? undefined,
-      description: row["description"] ?? undefined,
-      websiteUrl: row["website_url"],
-      logoUrl: row["logo_url"] ?? undefined,
-      industry: row["industry"] ?? undefined,
+    return {
+      id: String(row["id"]),
+      domain: String(row["domain"]),
+      name: String(row["name"]),
+      tagline: row["tagline"] != null ? String(row["tagline"]) : undefined,
+      description: row["description"] != null ? String(row["description"]) : undefined,
+      websiteUrl: String(row["website_url"]),
+      logoUrl: row["logo_url"] != null ? String(row["logo_url"]) : undefined,
+      industry: row["industry"] != null ? String(row["industry"]) : undefined,
       techStack,
       socialLinks,
-      contactEmail: row["contact_email"] ?? undefined,
-      headcountEstimate: row["headcount_estimate"] ?? undefined,
-      locationHint: row["location_hint"] ?? undefined,
-      discoverySource: row["discovery_source"] ?? "seed",
+      contactEmail: row["contact_email"] != null ? String(row["contact_email"]) : undefined,
+      headcountEstimate: row["headcount_estimate"] != null ? String(row["headcount_estimate"]) : undefined,
+      locationHint: row["location_hint"] != null ? String(row["location_hint"]) : undefined,
+      discoverySource: String(row["discovery_source"] ?? "seed"),
       createdAt: Number(row["created_at"]),
       updatedAt: Number(row["updated_at"]),
-    });
+    };
   }
 }
 
@@ -173,16 +232,16 @@ export class CareerPageRepository {
   }
 
   private mapRowToCareerPage(row: Record<string, unknown>): CareerPage {
-    return CareerPageSchema.parse({
-      id: row["id"],
-      companyId: row["company_id"],
-      url: row["url"],
-      pageType: row["page_type"],
-      status: row["status"],
-      contentHash: row["content_hash"] ?? undefined,
+    return {
+      id: String(row["id"]),
+      companyId: String(row["company_id"]),
+      url: String(row["url"]),
+      pageType: (row["page_type"] as any) ?? "internal_page",
+      status: (row["status"] as any) ?? "active",
+      contentHash: row["content_hash"] != null ? String(row["content_hash"]) : undefined,
       lastCheckedAt: Number(row["last_checked_at"]),
       createdAt: Number(row["created_at"]),
-    });
+    };
   }
 }
 
@@ -277,14 +336,20 @@ export class JobRepository {
 
   public async list(options: {
     limit?: number | undefined;
+    offset?: number | undefined;
     grade?: string | undefined;
     techCategory?: string | undefined;
+    region?: string | undefined;
     techOnly?: boolean | undefined;
+    search?: string | undefined;
   } = {}): Promise<Job[]> {
     const limit = options.limit ?? 50;
+    const offset = options.offset ?? 0;
     const grade = options.grade && options.grade !== "all" ? options.grade : null;
     const techCategory = options.techCategory && options.techCategory !== "all" ? options.techCategory : null;
+    const region = options.region && options.region !== "all" ? options.region : null;
     const techOnly = options.techOnly !== false ? 1 : 0;
+    const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
 
     let query = "SELECT j.*, c.name AS company_name, c.website_url AS company_website FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE 1=1";
     const bindings: unknown[] = [];
@@ -300,14 +365,134 @@ export class JobRepository {
       query += " AND j.tech_category = ?";
       bindings.push(techCategory);
     }
+    if (region === "midwest") {
+      query += " AND (j.remote_scope LIKE '%midwest%' OR j.location LIKE '%Midwest%' OR j.location LIKE '%IN%' OR j.location LIKE '%IL%' OR j.location LIKE '%WI%' OR j.location LIKE '%MN%' OR j.location LIKE '%OH%')";
+    } else if (region === "remote") {
+      query += " AND j.is_remote = 1";
+    }
+    if (search) {
+      query += " AND (LOWER(j.title) LIKE ? OR LOWER(COALESCE(c.name, '')) LIKE ? OR LOWER(j.skills) LIKE ? OR LOWER(COALESCE(j.location, '')) LIKE ? OR LOWER(COALESCE(j.department, '')) LIKE ?)";
+      bindings.push(search, search, search, search, search);
+    }
 
-    query += " ORDER BY j.first_seen_at DESC LIMIT ?";
-    bindings.push(limit);
+    query += " ORDER BY j.first_seen_at DESC LIMIT ? OFFSET ?";
+    bindings.push(limit, offset);
 
     const stmt = this.db.prepare(query);
     const res = await stmt.bind(...bindings).all<Record<string, unknown>>();
 
     return (res.results ?? []).map((r) => this.mapRowToJob(r));
+  }
+
+  public async listPaged(options: {
+    page?: number | undefined;
+    limit?: number | undefined;
+    grade?: string | undefined;
+    techCategory?: string | undefined;
+    region?: string | undefined;
+    techOnly?: boolean | undefined;
+    search?: string | undefined;
+  } = {}): Promise<{
+    items: Job[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+      hasNext: boolean;
+      hasPrev: boolean;
+    };
+  }> {
+    const page = Math.max(1, options.page ?? 1);
+    const limit = Math.min(Math.max(1, options.limit ?? 30), 100);
+    const offset = (page - 1) * limit;
+
+    const grade = options.grade && options.grade !== "all" ? options.grade : null;
+    const techCategory = options.techCategory && options.techCategory !== "all" ? options.techCategory : null;
+    const region = options.region && options.region !== "all" ? options.region : null;
+    const techOnly = options.techOnly !== false ? 1 : 0;
+    const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
+
+    let whereClause = "WHERE 1=1";
+    const bindings: unknown[] = [];
+
+    if (techOnly === 1) {
+      whereClause += " AND j.is_tech_role = 1";
+    }
+    if (grade) {
+      whereClause += " AND j.seniority_level = ?";
+      bindings.push(grade);
+    }
+    if (techCategory) {
+      whereClause += " AND j.tech_category = ?";
+      bindings.push(techCategory);
+    }
+    if (region === "midwest") {
+      whereClause += " AND (j.remote_scope LIKE '%midwest%' OR j.location LIKE '%Midwest%' OR j.location LIKE '%IN%' OR j.location LIKE '%IL%' OR j.location LIKE '%WI%' OR j.location LIKE '%MN%' OR j.location LIKE '%OH%')";
+    } else if (region === "remote") {
+      whereClause += " AND j.is_remote = 1";
+    }
+    if (search) {
+      whereClause += " AND (LOWER(j.title) LIKE ? OR LOWER(COALESCE(c.name, '')) LIKE ? OR LOWER(j.skills) LIKE ? OR LOWER(COALESCE(j.location, '')) LIKE ? OR LOWER(COALESCE(j.department, '')) LIKE ?)";
+      bindings.push(search, search, search, search, search);
+    }
+
+    const countSql = `SELECT COUNT(*) as total FROM jobs j LEFT JOIN companies c ON j.company_id = c.id ${whereClause}`;
+    const itemsSql = `
+      SELECT j.*, c.name AS company_name, c.website_url AS company_website 
+      FROM jobs j 
+      LEFT JOIN companies c ON j.company_id = c.id 
+      ${whereClause} 
+      ORDER BY j.first_seen_at DESC 
+      LIMIT ? OFFSET ?
+    `;
+
+    const [countRes, itemsRes] = await Promise.all([
+      this.db.prepare(countSql).bind(...bindings).first<{ total: number }>(),
+      this.db.prepare(itemsSql).bind(...bindings, limit, offset).all<Record<string, unknown>>(),
+    ]);
+
+    const total = Number(countRes?.total ?? 0);
+    const totalPages = Math.ceil(total / limit) || 1;
+    const items = (itemsRes.results ?? []).map((r) => this.mapRowToJob(r));
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    };
+  }
+
+  public async getStatsSummary(): Promise<{
+    seniorCount: number;
+    midwestCount: number;
+    total: number;
+  }> {
+    const res = await this.db
+      .prepare(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN seniority_level IN ('senior', 'founding', 'lead') THEN 1 ELSE 0 END) as senior_count,
+          SUM(CASE WHEN (remote_scope LIKE '%midwest%' OR location LIKE '%Midwest%' OR location LIKE '%IN%' OR location LIKE '%IL%' OR location LIKE '%WI%' OR location LIKE '%MN%' OR location LIKE '%OH%') THEN 1 ELSE 0 END) as midwest_count
+        FROM jobs
+      `)
+      .first<{
+        total: number;
+        senior_count: number;
+        midwest_count: number;
+      }>();
+
+    return {
+      total: Number(res?.total ?? 0),
+      seniorCount: Number(res?.senior_count ?? 0),
+      midwestCount: Number(res?.midwest_count ?? 0),
+    };
   }
 
   public async count(): Promise<number> {
@@ -318,36 +503,39 @@ export class JobRepository {
   }
 
   private mapRowToJob(row: Record<string, unknown>): Job {
-    const skills = typeof row["skills"] === "string" ? JSON.parse(row["skills"] as string) : [];
+    let skills: string[] = [];
+    try {
+      skills = typeof row["skills"] === "string" ? JSON.parse(row["skills"] as string) : [];
+    } catch {}
 
-    return JobSchema.parse({
-      id: row["id"],
-      companyId: row["company_id"],
-      careerPageId: row["career_page_id"],
-      title: row["title"],
-      department: row["department"] ?? undefined,
-      seniorityLevel: row["seniority_level"] ?? "mid",
-      techCategory: row["tech_category"] ?? "fullstack",
+    return {
+      id: String(row["id"]),
+      companyId: String(row["company_id"]),
+      careerPageId: String(row["career_page_id"]),
+      title: String(row["title"]),
+      department: row["department"] != null ? String(row["department"]) : undefined,
+      seniorityLevel: (row["seniority_level"] as any) ?? "mid",
+      techCategory: (row["tech_category"] as any) ?? "fullstack",
       isTechRole: Number(row["is_tech_role"] ?? 1) === 1,
-      employmentType: row["employment_type"],
-      location: row["location"] ?? undefined,
+      employmentType: (row["employment_type"] as any) ?? "full-time",
+      location: row["location"] != null ? String(row["location"]) : undefined,
       isRemote: Number(row["is_remote"]) === 1,
-      remoteScope: row["remote_scope"] ?? "worldwide",
-      salaryMin: row["salary_min"] !== null ? Number(row["salary_min"]) : undefined,
-      salaryMax: row["salary_max"] !== null ? Number(row["salary_max"]) : undefined,
-      salaryCurrency: row["salary_currency"] ?? undefined,
+      remoteScope: (row["remote_scope"] as any) ?? "worldwide",
+      salaryMin: row["salary_min"] !== null && row["salary_min"] !== undefined ? Number(row["salary_min"]) : undefined,
+      salaryMax: row["salary_max"] !== null && row["salary_max"] !== undefined ? Number(row["salary_max"]) : undefined,
+      salaryCurrency: row["salary_currency"] != null ? String(row["salary_currency"]) : undefined,
       skills,
-      descriptionSummary: row["description_summary"] ?? undefined,
-      rawContent: row["raw_content"] ?? undefined,
-      applyType: row["apply_type"],
-      applyTarget: row["apply_target"],
-      status: row["status"],
-      contentHash: row["content_hash"],
+      descriptionSummary: row["description_summary"] != null ? String(row["description_summary"]) : undefined,
+      rawContent: row["raw_content"] != null ? String(row["raw_content"]) : undefined,
+      applyType: (row["apply_type"] as any) ?? "url",
+      applyTarget: String(row["apply_target"]),
+      status: (row["status"] as any) ?? "open",
+      contentHash: String(row["content_hash"]),
       companyName: row["company_name"] != null ? String(row["company_name"]) : undefined,
       companyWebsite: row["company_website"] != null ? String(row["company_website"]) : undefined,
       firstSeenAt: Number(row["first_seen_at"]),
       lastSeenAt: Number(row["last_seen_at"]),
-    });
+    };
   }
 }
 
@@ -541,20 +729,23 @@ export class CrawlTaskRepository {
   }
 
   private mapRowToTask(row: Record<string, unknown>): CrawlTask {
-    const metadata = typeof row["metadata"] === "string" ? JSON.parse(row["metadata"] as string) : (row["metadata"] ?? {});
+    let metadata: Record<string, unknown> = {};
+    try {
+      metadata = typeof row["metadata"] === "string" ? JSON.parse(row["metadata"] as string) : (row["metadata"] as any ?? {});
+    } catch {}
 
-    return CrawlTaskSchema.parse({
-      id: row["id"],
-      targetUrl: row["target_url"],
-      sourceType: row["source_type"] ?? "manual",
-      status: row["status"],
-      companyId: row["company_id"] ?? undefined,
+    return {
+      id: String(row["id"]),
+      targetUrl: String(row["target_url"]),
+      sourceType: (row["source_type"] as any) ?? "manual",
+      status: (row["status"] as any) ?? "pending",
+      companyId: row["company_id"] != null ? String(row["company_id"]) : undefined,
       jobsFound: Number(row["jobs_found"] ?? 0),
-      errorMessage: row["error_message"] ?? undefined,
+      errorMessage: row["error_message"] != null ? String(row["error_message"]) : undefined,
       metadata,
       createdAt: Number(row["created_at"]),
       completedAt: row["completed_at"] !== null && row["completed_at"] !== undefined ? Number(row["completed_at"]) : undefined,
-    });
+    };
   }
 }
 

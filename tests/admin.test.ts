@@ -245,5 +245,41 @@ describe("Admin Control Center Suite", () => {
       expect(dataGh.source).toBe("github");
       expect(dataGh.status).toBe("harvest_started");
     });
+
+    it("should return paged jobs with metadata via GET /api/jobs?paged=true", async () => {
+      const req = new Request("http://localhost/api/jobs?page=1&limit=2&paged=true");
+      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Cache-Control")).toContain("max-age=60");
+      const data = await res.json() as any;
+      expect(data.items).toBeDefined();
+      expect(Array.isArray(data.items)).toBe(true);
+      expect(data.pagination).toBeDefined();
+      expect(data.pagination.page).toBe(1);
+      expect(data.pagination.limit).toBe(2);
+      expect(typeof data.pagination.total).toBe("number");
+      expect(typeof data.pagination.totalPages).toBe("number");
+    });
+
+    it("should return paged companies via GET /api/companies?paged=true", async () => {
+      const req = new Request("http://localhost/api/companies?page=1&limit=5&paged=true");
+      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.items).toBeDefined();
+      expect(data.pagination).toBeDefined();
+      expect(data.pagination.page).toBe(1);
+    });
+
+    it("should support search filter in listPaged for jobs and companies", async () => {
+      const pagedJobs = await jobRepo.listPaged({ search: "Engineer", page: 1, limit: 10 });
+      expect(pagedJobs.pagination).toBeDefined();
+      expect(Array.isArray(pagedJobs.items)).toBe(true);
+
+      const pagedComps = await companyRepo.listPaged({ search: "tech", page: 1, limit: 10 });
+      expect(pagedComps.pagination).toBeDefined();
+      expect(Array.isArray(pagedComps.items)).toBe(true);
+    });
   });
 });
+
