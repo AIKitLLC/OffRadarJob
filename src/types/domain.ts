@@ -44,6 +44,7 @@ export const CompanySchema = z.object({
   headcountEstimate: z.string().nullable().optional(), // e.g. "1-5", "6-15"
   locationHint: z.string().nullable().optional(),
   discoverySource: z.string().default("seed"),
+  isMidwest: z.boolean().optional(),
   createdAt: z.number().int().positive(),
   updatedAt: z.number().int().positive(),
 });
@@ -153,6 +154,7 @@ export const JobSchema = z.object({
   companyWebsite: z.string().nullable().optional(),
   firstSeenAt: z.number().int().positive(),
   lastSeenAt: z.number().int().positive(),
+  isMidwest: z.boolean().optional(),
 });
 export type Job = z.infer<typeof JobSchema>;
 

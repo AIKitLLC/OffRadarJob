@@ -91,7 +91,7 @@ export class McpServerHandler {
     return [
       {
         name: "search_jobs",
-        description: "Search and filter unlisted & micro-company tech jobs from verified company career portals. Free for authenticated MCP clients.",
+        description: "Search and filter unlisted & micro-company tech jobs from verified company career portals. Prioritizes US-Midwest tech hubs (Chicago, Indianapolis, Minneapolis, Madison, etc.) first. Free for authenticated MCP clients.",
         inputSchema: {
           type: "object",
           properties: {
@@ -109,7 +109,7 @@ export class McpServerHandler {
             region: {
               type: "string",
               enum: ["all", "midwest", "remote"],
-              description: "Location filter (midwest focus or 100% remote)",
+              description: "Location filter. Defaults to prioritizing US-Midwest focus first (options: 'midwest', 'all', 'remote')",
             },
             limit: { type: "number", description: "Number of jobs to return (default 10, max 50)" },
           },
@@ -212,6 +212,7 @@ export class McpServerHandler {
             salary: j.salaryMin ? `$${j.salaryMin.toLocaleString()} - $${j.salaryMax?.toLocaleString()} ${j.salaryCurrency || "USD"}` : "Unspecified",
             skills: j.skills,
             summary: j.descriptionSummary,
+            is_midwest_priority: j.isMidwest ?? false,
             apply_type: j.applyType,
             apply_target: j.applyTarget,
           })),

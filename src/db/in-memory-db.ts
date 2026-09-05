@@ -85,7 +85,22 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
 
     if (q.includes("FROM companies")) {
       const rows = Array.from(this.db.tables.get("companies")!.values());
-      rows.sort((a, b) => Number(b["updated_at"] ?? 0) - Number(a["updated_at"] ?? 0));
+      if (q.includes("is_midwest_priority")) {
+        rows.sort((a, b) => {
+          const locA = String(a["location_hint"] ?? "");
+          const locB = String(b["location_hint"] ?? "");
+          const checkMid = (loc: string) => loc.toLowerCase().includes("midwest") ||
+            /\b(Illinois|Indiana|Wisconsin|Minnesota|Ohio|Michigan|Missouri|Iowa|Kansas|Nebraska|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Milwaukee|Saint Louis|Des Moines)\b/i.test(loc) ||
+            /(?:,\s*|\s+)(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD)(?:\s+|,|$)/.test(loc);
+          const aMid = checkMid(locA);
+          const bMid = checkMid(locB);
+          if (aMid && !bMid) return -1;
+          if (!aMid && bMid) return 1;
+          return Number(b["updated_at"] ?? 0) - Number(a["updated_at"] ?? 0);
+        });
+      } else {
+        rows.sort((a, b) => Number(b["updated_at"] ?? 0) - Number(a["updated_at"] ?? 0));
+      }
       return { results: rows as T[], success: true };
     }
 
@@ -163,10 +178,6 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         }
       }
 
-      if (q.includes("COUNT(*)")) {
-        return { results: [{ total: rows.length, count: rows.length } as T], success: true };
-      }
-
       const compTable = this.db.tables.get("companies");
       rows = rows.map((r) => {
         const comp = compTable?.get(String(r["company_id"]));
@@ -174,10 +185,46 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
           ...r,
           company_name: comp?.["name"] || r["company_name"] || r["company_id"],
           company_website: comp?.["website_url"] || r["company_website"],
+          location_hint: comp?.["location_hint"] || r["location_hint"],
         };
       });
 
-      rows.sort((a, b) => Number(b["first_seen_at"] ?? 0) - Number(a["first_seen_at"] ?? 0));
+      const isMidwestRow = (r: Record<string, unknown>) => {
+        const remoteScope = String(r["remote_scope"] ?? "");
+        const location = String(r["location"] ?? "");
+        const locationHint = String(r["location_hint"] ?? "");
+        return remoteScope.toLowerCase().includes("midwest") ||
+          location.toLowerCase().includes("midwest") ||
+          locationHint.toLowerCase().includes("midwest") ||
+          /\b(Illinois|Indiana|Wisconsin|Minnesota|Ohio|Michigan|Missouri|Iowa|Kansas|Nebraska|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Milwaukee|Saint Louis|Des Moines)\b/i.test(location) ||
+          /\b(Illinois|Indiana|Wisconsin|Minnesota|Ohio|Michigan|Missouri|Iowa|Kansas|Nebraska|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Milwaukee|Saint Louis|Des Moines)\b/i.test(locationHint) ||
+          /(?:,\s*|\s+)(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD)(?:\s+|,|$)/.test(location) ||
+          /(?:,\s*|\s+)(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD)(?:\s+|,|$)/.test(locationHint);
+      };
+
+      const whereIdx = q.indexOf("WHERE");
+      const wherePart = whereIdx !== -1 ? q.slice(whereIdx) : "";
+      if (wherePart.includes("LIKE '%midwest%'") || wherePart.includes("remote_scope LIKE '%midwest%'")) {
+        rows = rows.filter((r) => isMidwestRow(r));
+      }
+      if (wherePart.includes("j.is_remote = 1")) {
+        rows = rows.filter((r) => Number(r["is_remote"] ?? 0) === 1);
+      }
+
+      if (q.includes("COUNT(*)")) {
+        return { results: [{ total: rows.length, count: rows.length } as T], success: true };
+      }
+
+      if (q.includes("is_midwest_match DESC") || q.includes("ORDER BY is_midwest")) {
+        rows.sort((a, b) => {
+          const aMid = isMidwestRow(a) ? 1 : 0;
+          const bMid = isMidwestRow(b) ? 1 : 0;
+          if (bMid !== aMid) return bMid - aMid;
+          return Number(b["first_seen_at"] ?? 0) - Number(a["first_seen_at"] ?? 0);
+        });
+      } else {
+        rows.sort((a, b) => Number(b["first_seen_at"] ?? 0) - Number(a["first_seen_at"] ?? 0));
+      }
       return { results: rows as T[], success: true };
     }
 

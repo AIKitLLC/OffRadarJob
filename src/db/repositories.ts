@@ -15,6 +15,49 @@ import {
   CvVersion,
 } from "../types/domain.js";
 
+export const MIDWEST_COMPANY_SQL_CONDITION = `(
+  COALESCE(location_hint, '') LIKE '%midwest%' 
+  OR COALESCE(location_hint, '') LIKE '%illinois%' 
+  OR COALESCE(location_hint, '') LIKE '%indiana%' 
+  OR COALESCE(location_hint, '') LIKE '%wisconsin%' 
+  OR COALESCE(location_hint, '') LIKE '%minnesota%' 
+  OR COALESCE(location_hint, '') LIKE '%ohio%' 
+  OR COALESCE(location_hint, '') LIKE '%michigan%' 
+  OR COALESCE(location_hint, '') LIKE '%missouri%' 
+  OR COALESCE(location_hint, '') LIKE '%iowa%' 
+  OR COALESCE(location_hint, '') LIKE '%kansas%' 
+  OR COALESCE(location_hint, '') LIKE '%nebraska%' 
+  OR COALESCE(location_hint, '') LIKE '%chicago%' 
+  OR COALESCE(location_hint, '') LIKE '%indianapolis%' 
+  OR COALESCE(location_hint, '') LIKE '%minneapolis%' 
+  OR COALESCE(location_hint, '') LIKE '%madison%' 
+  OR COALESCE(location_hint, '') LIKE '%cincinnati%' 
+  OR COALESCE(location_hint, '') LIKE '%columbus%' 
+  OR COALESCE(location_hint, '') LIKE '%cleveland%' 
+  OR COALESCE(location_hint, '') LIKE '%detroit%' 
+  OR COALESCE(location_hint, '') LIKE '%ann arbor%' 
+  OR COALESCE(location_hint, '') LIKE '%milwaukee%' 
+  OR COALESCE(location_hint, '') LIKE '%st. louis%' 
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, il %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, in %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, wi %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, mn %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, oh %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, mi %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, mo %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ia %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ks %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ne %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, il,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, in,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, wi,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, mn,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, oh,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, mi,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, mo,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ia,%'
+)`;
+
 export class CompanyRepository {
   constructor(private readonly db: ID1Database) {}
 
@@ -122,7 +165,14 @@ export class CompanyRepository {
     }
 
     const countSql = `SELECT COUNT(*) as total FROM companies ${whereClause}`;
-    const itemsSql = `SELECT * FROM companies ${whereClause} ORDER BY updated_at DESC LIMIT ? OFFSET ?`;
+    const itemsSql = `
+      SELECT *, 
+        (CASE WHEN ${MIDWEST_COMPANY_SQL_CONDITION} THEN 1 ELSE 0 END) AS is_midwest_priority 
+      FROM companies 
+      ${whereClause} 
+      ORDER BY is_midwest_priority DESC, updated_at DESC 
+      LIMIT ? OFFSET ?
+    `;
 
     const [countRes, itemsRes] = await Promise.all([
       this.db.prepare(countSql).bind(...bindings).first<{ total: number }>(),
@@ -178,6 +228,11 @@ export class CompanyRepository {
       headcountEstimate: row["headcount_estimate"] != null ? String(row["headcount_estimate"]) : undefined,
       locationHint: row["location_hint"] != null ? String(row["location_hint"]) : undefined,
       discoverySource: String(row["discovery_source"] ?? "seed"),
+      isMidwest: Number(row["is_midwest_priority"] ?? 0) === 1 || 
+        (row["location_hint"] != null && (
+          /\b(Illinois|Indiana|Wisconsin|Minnesota|Ohio|Michigan|Missouri|Iowa|Kansas|Nebraska|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Milwaukee|Saint Louis|Des Moines|Midwest)\b/i.test(String(row["location_hint"])) ||
+          /(?:,\s*|\s+)(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD)(?:\s+|,|$)/.test(String(row["location_hint"]))
+        )),
       createdAt: Number(row["created_at"]),
       updatedAt: Number(row["updated_at"]),
     };
@@ -246,6 +301,49 @@ export class CareerPageRepository {
     };
   }
 }
+
+export const MIDWEST_SQL_CONDITION = `(
+  (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%midwest%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%illinois%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%indiana%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%wisconsin%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%minnesota%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%ohio%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%michigan%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%missouri%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%iowa%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%kansas%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%nebraska%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%chicago%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%indianapolis%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%minneapolis%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%madison%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%cincinnati%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%columbus%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%cleveland%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%detroit%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%ann arbor%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%milwaukee%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%st. louis%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, il %'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, in %'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, wi %'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mn %'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, oh %'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mi %'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mo %'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, ia %'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, ks %'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, ne %'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, il,%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, in,%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, wi,%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mn,%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, oh,%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mi,%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mo,%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, ia,%'
+)`;
 
 export class JobRepository {
   constructor(private readonly db: ID1Database) {}
@@ -430,7 +528,7 @@ export class JobRepository {
       bindings.push(techCategory);
     }
     if (region === "midwest") {
-      whereClause += " AND (j.remote_scope LIKE '%midwest%' OR j.location LIKE '%Midwest%' OR j.location LIKE '%IN%' OR j.location LIKE '%IL%' OR j.location LIKE '%WI%' OR j.location LIKE '%MN%' OR j.location LIKE '%OH%')";
+      whereClause += ` AND ${MIDWEST_SQL_CONDITION}`;
     } else if (region === "remote") {
       whereClause += " AND j.is_remote = 1";
     }
@@ -441,11 +539,12 @@ export class JobRepository {
 
     const countSql = `SELECT COUNT(*) as total FROM jobs j LEFT JOIN companies c ON j.company_id = c.id ${whereClause}`;
     const itemsSql = `
-      SELECT j.*, c.name AS company_name, c.website_url AS company_website 
+      SELECT j.*, c.name AS company_name, c.website_url AS company_website,
+        (CASE WHEN ${MIDWEST_SQL_CONDITION} THEN 1 ELSE 0 END) AS is_midwest_match
       FROM jobs j 
       LEFT JOIN companies c ON j.company_id = c.id 
       ${whereClause} 
-      ORDER BY j.first_seen_at DESC 
+      ORDER BY is_midwest_match DESC, j.first_seen_at DESC 
       LIMIT ? OFFSET ?
     `;
 
@@ -481,7 +580,48 @@ export class JobRepository {
         SELECT 
           COUNT(*) as total,
           SUM(CASE WHEN seniority_level IN ('senior', 'founding', 'lead') THEN 1 ELSE 0 END) as senior_count,
-          SUM(CASE WHEN (remote_scope LIKE '%midwest%' OR location LIKE '%Midwest%' OR location LIKE '%IN%' OR location LIKE '%IL%' OR location LIKE '%WI%' OR location LIKE '%MN%' OR location LIKE '%OH%') THEN 1 ELSE 0 END) as midwest_count
+          SUM(CASE WHEN (
+            (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%midwest%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%illinois%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%indiana%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%wisconsin%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%minnesota%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%ohio%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%michigan%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%missouri%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%iowa%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%kansas%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%nebraska%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%chicago%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%indianapolis%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%minneapolis%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%madison%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%cincinnati%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%columbus%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%cleveland%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%detroit%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%ann arbor%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%milwaukee%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%st. louis%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, il %'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, in %'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, wi %'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, mn %'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, oh %'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, mi %'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, mo %'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, ia %'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, ks %'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, ne %'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, il,%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, in,%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, wi,%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, mn,%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, oh,%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, mi,%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, mo,%'
+            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%, ia,%'
+          ) THEN 1 ELSE 0 END) as midwest_count
         FROM jobs
       `)
       .first<{
@@ -510,6 +650,14 @@ export class JobRepository {
       skills = typeof row["skills"] === "string" ? JSON.parse(row["skills"] as string) : [];
     } catch {}
 
+    const remoteScope = String(row["remote_scope"] ?? "worldwide");
+    const location = row["location"] != null ? String(row["location"]) : "";
+    const isMidwestMatch = Number(row["is_midwest_match"] ?? 0) === 1 ||
+      remoteScope.toLowerCase().includes("midwest") ||
+      location.toLowerCase().includes("midwest") ||
+      /\b(Illinois|Indiana|Wisconsin|Minnesota|Ohio|Michigan|Missouri|Iowa|Kansas|Nebraska|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Milwaukee|Saint Louis|Des Moines)\b/i.test(location) ||
+      /(?:,\s*|\s+)(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD)(?:\s+|,|$)/.test(location);
+
     return {
       id: String(row["id"]),
       companyId: String(row["company_id"]),
@@ -537,6 +685,7 @@ export class JobRepository {
       companyWebsite: row["company_website"] != null ? String(row["company_website"]) : undefined,
       firstSeenAt: Number(row["first_seen_at"]),
       lastSeenAt: Number(row["last_seen_at"]),
+      isMidwest: isMidwestMatch,
     };
   }
 }

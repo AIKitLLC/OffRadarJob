@@ -237,7 +237,12 @@ export function renderDashboardHtml(): string {
       font-size: 11px;
       font-weight: 500;
     }
-    .tag-midwest { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
+    .tag-midwest { background: rgba(244, 63, 94, 0.2); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.4); font-weight: 600; }
+    .job-card.job-card-midwest {
+      border: 1px solid rgba(244, 63, 94, 0.45);
+      background: linear-gradient(135deg, rgba(244, 63, 94, 0.08), var(--card-bg));
+      box-shadow: 0 4px 14px rgba(244, 63, 94, 0.08);
+    }
     .tag-remote { background: rgba(16, 185, 129, 0.1); color: var(--success); }
     .tag-salary { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
     .apply-btn {
@@ -265,6 +270,11 @@ export function renderDashboardHtml(): string {
       display: flex;
       flex-direction: column;
       gap: 12px;
+    }
+    .company-card.company-card-midwest {
+      border: 1px solid rgba(244, 63, 94, 0.45);
+      background: linear-gradient(135deg, rgba(244, 63, 94, 0.06), var(--card-bg));
+      box-shadow: 0 4px 14px rgba(244, 63, 94, 0.06);
     }
     .company-header { display: flex; justify-content: space-between; align-items: center; }
     .company-name { font-size: 16px; font-weight: 700; color: #fff; text-decoration: none; }
@@ -582,9 +592,9 @@ export function renderDashboardHtml(): string {
 
     <div class="midwest-banner">
       <div class="midwest-banner-text">
-        <strong>📍 Active Focus: US-Midwest Region & Tech Focus</strong> — Săn tìm các công việc công nghệ (AI/LLM, Systems, Cloud, Frontend) từ các công ty siêu nhỏ, indie studios tại Chicago, Indianapolis, Minneapolis, Madison, Cincinnati và Ann Arbor.
+        <strong>📍 Khu vực trọng điểm: US-Midwest Region (Đang ưu tiên hàng đầu)</strong> — Toàn bộ Tech Jobs và Micro-Companies được ưu tiên xếp hạng cao nhất từ các studio công nghệ tại Chicago (IL), Indianapolis (IN), Minneapolis (MN), Madison (WI), Cincinnati & Columbus (OH), Detroit & Ann Arbor (MI)...
       </div>
-      <span class="midwest-tag">Tech & Midwest Focus</span>
+      <span class="midwest-tag">⭐ US-Midwest Priority</span>
     </div>
 
     <div class="stats-grid">
@@ -649,9 +659,9 @@ export function renderDashboardHtml(): string {
           <option value="product_design">📐 Product Design & Systems</option>
         </select>
         <select id="region-filter" class="region-select" onchange="applyFilters()">
-          <option value="all" selected>🌐 All US & Remote (700+ Companies)</option>
-          <option value="midwest">📍 US-Midwest Focus</option>
-          <option value="remote">🏠 100% Remote</option>
+          <option value="midwest" selected>📍 US-Midwest Focus (Đang ưu tiên)</option>
+          <option value="all">🌐 Toàn bộ US & Remote (Midwest xếp đầu)</option>
+          <option value="remote">🏠 100% Remote Only</option>
         </select>
       </div>
     </div>
@@ -951,19 +961,19 @@ export function renderDashboardHtml(): string {
       }
 
       container.innerHTML = jobs.map(j => {
-        const isMidwest = (j.remoteScope && j.remoteScope.includes('midwest')) || (j.location && j.location.includes('Midwest'));
+        const isMidwest = j.isMidwest || (j.remoteScope && j.remoteScope.toLowerCase().includes('midwest')) || (j.location && /\b(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Midwest)\b/i.test(j.location));
         return \`
-          <div class="job-card">
+          <div class="job-card \${isMidwest ? 'job-card-midwest' : ''}">
             <div class="job-main">
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                 <h3>\${j.title}</h3>
                 \${getGradeBadge(j.seniorityLevel)}
                 \${getTechBadge(j.techCategory)}
+                \${isMidwest ? '<span class="tag tag-midwest">📍 US-Midwest Priority</span>' : ''}
               </div>
               <a class="job-company" href="\${j.companyWebsite || ('https://' + j.companyId.replace('comp_', '').replace(/_/g, '.'))}" target="_blank">🏢 \${j.companyName || j.companyId.replace('comp_', '').replace(/_/g, '.')} ↗</a>
               <p class="job-desc">\${j.descriptionSummary || 'Direct tech opening from micro-company career portal.'}</p>
               <div class="job-tags">
-                \${isMidwest ? '<span class="tag tag-midwest">📍 US-Midwest</span>' : ''}
                 <span class="tag tag-remote">🌐 \${j.isRemote ? 'Remote (' + j.remoteScope + ')' : j.location}</span>
                 <span class="tag">\${j.employmentType}</span>
                 \${j.salaryMin ? \`<span class="tag tag-salary">\\$\${j.salaryMin.toLocaleString()} - \\$\${j.salaryMax.toLocaleString()} \${j.salaryCurrency || 'USD'}</span>\` : ''}
@@ -1020,22 +1030,25 @@ export function renderDashboardHtml(): string {
         return;
       }
 
-      container.innerHTML = comps.map(c => \`
-        <div class="company-card">
+      container.innerHTML = comps.map(c => {
+        const isMidwestComp = c.isMidwest || (c.locationHint && /\b(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Midwest)\b/i.test(c.locationHint));
+        return \`
+        <div class="company-card \${isMidwestComp ? 'company-card-midwest' : ''}">
           <div class="company-header">
             <a class="company-name" href="\${c.websiteUrl}" target="_blank">\${c.name} ↗</a>
             <span class="company-badge">\${c.headcountEstimate || '1-20'} team</span>
           </div>
           <p class="company-desc">\${c.description || c.tagline || 'Independent tech company.'}</p>
           <div class="job-tags">
-            \${c.locationHint && c.locationHint.includes('Midwest') ? '<span class="tag tag-midwest">📍 ' + c.locationHint + '</span>' : ''}
+            \${isMidwestComp ? '<span class="tag tag-midwest">📍 US-Midwest Focus (' + (c.locationHint || 'Midwest') + ')</span>' : (c.locationHint ? '<span class="tag">🌐 ' + c.locationHint + '</span>' : '')}
             \${(c.techStack || []).slice(0, 5).map(s => \`<span class="tag">\${s}</span>\`).join('')}
           </div>
           <div style="font-size: 11px; color: var(--text-muted); margin-top: auto;">
             \${c.contactEmail ? '📧 ' + c.contactEmail : ''} \${c.locationHint ? '• 🌐 ' + c.locationHint : ''}
           </div>
         </div>
-      \`).join('');
+      \`;
+      }).join('');
     }
 
     function renderPagination(containerId, pagination, handlerName) {
