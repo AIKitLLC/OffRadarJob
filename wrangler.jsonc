@@ -58,6 +58,9 @@
       }
     ]
   },
+  "vars": {
+    "TELEGRAM_BOT_USERNAME": "OffRadarJobBot"
+  },
   "triggers": {
     "crons": [
       "0 2 * * *",

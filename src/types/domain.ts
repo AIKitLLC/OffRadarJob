@@ -29,6 +29,17 @@ export const SocialLinksSchema = z.object({
 });
 export type SocialLinks = z.infer<typeof SocialLinksSchema>;
 
+export const UsRegionEnum = z.enum([
+  "midwest",
+  "west",
+  "northeast",
+  "south",
+  "mountain",
+  "remote",
+  "other",
+]);
+export type UsRegion = z.infer<typeof UsRegionEnum>;
+
 export const CompanySchema = z.object({
   id: z.string().min(1),
   domain: z.string().min(1),
@@ -45,6 +56,7 @@ export const CompanySchema = z.object({
   locationHint: z.string().nullable().optional(),
   discoverySource: z.string().default("seed"),
   isMidwest: z.boolean().optional(),
+  usRegion: UsRegionEnum.optional(),
   createdAt: z.number().int().positive(),
   updatedAt: z.number().int().positive(),
 });
@@ -155,6 +167,7 @@ export const JobSchema = z.object({
   firstSeenAt: z.number().int().positive(),
   lastSeenAt: z.number().int().positive(),
   isMidwest: z.boolean().optional(),
+  usRegion: UsRegionEnum.optional(),
 });
 export type Job = z.infer<typeof JobSchema>;
 
@@ -235,3 +248,17 @@ export const CvVersionSchema = z.object({
 });
 export type CvVersion = z.infer<typeof CvVersionSchema>;
 
+// -----------------------------------------------------------------------------
+// Auth Session Domain Models & Schemas (Telegram Deep-Link Login)
+// -----------------------------------------------------------------------------
+
+export const AuthSessionSchema = z.object({
+  token: z.string().min(1),
+  status: z.enum(["pending", "authenticated", "expired"]),
+  telegramId: z.string().nullable().optional(),
+  apiToken: z.string().nullable().optional(),
+  userJson: z.string().nullable().optional(),
+  createdAt: z.number().int().positive(),
+  authenticatedAt: z.number().int().positive().nullable().optional(),
+});
+export type AuthSession = z.infer<typeof AuthSessionSchema>;

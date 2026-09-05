@@ -9,6 +9,7 @@ import {
   CrawlTaskRepository,
   UserRepository,
   CvRepository,
+  AuthSessionRepository,
 } from "./db/repositories.js";
 import { McpServerHandler } from "./mcp/mcp-server.js";
 import { PipelineOrchestrator } from "./orchestrator/dispatcher.js";
@@ -32,6 +33,7 @@ export interface Env {
   DB: ID1Database;
   CACHE?: KvNamespace;
   TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_BOT_USERNAME?: string;
   DISCOVERY_QUEUE?: {
     send(message: unknown): Promise<void>;
   };
@@ -48,6 +50,15 @@ export interface Env {
     send(message: unknown): Promise<void>;
   };
 }
+
+// In-memory session store fallback for development / tests or KV fallback
+export const memoryAuthSessions = new Map<string, {
+  status: "pending" | "authenticated";
+  user?: User;
+  apiToken?: string;
+  createdAt?: number;
+  authenticatedAt?: number;
+}>();
 
 async function getOrSetKvCache<T>(
   env: Env,
@@ -155,6 +166,7 @@ export default {
     const taskRepo = new CrawlTaskRepository(env.DB);
     const userRepo = new UserRepository(env.DB);
     const cvRepo = new CvRepository(env.DB);
+    const sessionRepo = new AuthSessionRepository(env.DB);
     const mcpHandler = new McpServerHandler(jobRepo, companyRepo, cvRepo);
 
     // 1. Public Dashboard UI
@@ -187,7 +199,7 @@ export default {
       const techOnlyParam = url.searchParams.get("tech_only");
       const techOnly = techOnlyParam === "false" ? false : true;
 
-      const cacheKey = `api:jobs:v2:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
+      const cacheKey = `api:jobs:v5:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
 
       const data = await getOrSetKvCache(env, cacheKey, 120, async () => {
         if (paged) {
@@ -225,14 +237,15 @@ export default {
       const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
       const limit = Math.min(parseInt(url.searchParams.get("limit") ?? (paged ? "30" : "50"), 10), 100);
       const search = url.searchParams.get("search") ?? url.searchParams.get("q") ?? undefined;
+      const region = url.searchParams.get("region") ?? undefined;
 
-      const cacheKey = `api:companies:v2:p${page}:l${limit}:s${search || ""}:paged${paged ? 1 : 0}`;
+      const cacheKey = `api:companies:v6:p${page}:l${limit}:r${region || "all"}:s${search || ""}:paged${paged ? 1 : 0}`;
 
       const data = await getOrSetKvCache(env, cacheKey, 300, async () => {
         if (paged) {
-          return await companyRepo.listPaged({ page, limit, search });
+          return await companyRepo.listPaged({ page, limit, search, region });
         }
-        return await companyRepo.list(limit);
+        return await companyRepo.list(limit, region);
       });
 
       return Response.json(data, {
@@ -244,7 +257,7 @@ export default {
 
     // 5. API: Stats & Telemetry Logs
     if (path === "/api/stats" && request.method === "GET") {
-      const data = await getOrSetKvCache(env, "api:stats:v2", 60, async () => {
+      const data = await getOrSetKvCache(env, "api:stats:v6", 60, async () => {
         const [companiesCount, jobsCount, jobSummary, recentLogs] = await Promise.all([
           companyRepo.count(),
           jobRepo.count(),
@@ -257,6 +270,13 @@ export default {
           jobsCount,
           seniorCount: jobSummary.seniorCount,
           midwestPercent: midwestPct,
+          regionalBreakdown: {
+            midwest: jobSummary.midwestCount,
+            west: jobSummary.westCount,
+            northeast: jobSummary.northeastCount,
+            south: jobSummary.southCount,
+            mountain: jobSummary.mountainCount,
+          },
           logsCount: recentLogs.length,
           recentLogs,
         };
@@ -269,7 +289,277 @@ export default {
       });
     }
 
-    // 6. Telegram Auth: Login via Telegram WebApp / Widget
+    // 6a. Telegram Bot Auth: Create or Poll Auth Session
+    if (path === "/api/auth/telegram/session" && request.method === "GET") {
+      const token = url.searchParams.get("token");
+      const botUsername = env.TELEGRAM_BOT_USERNAME || "OffRadarJobBot";
+
+      if (token) {
+        // Check session status (poll)
+        let sessionData: any = memoryAuthSessions.get(token);
+
+        // If not found or status is still pending in memory, query strongly-consistent D1 database
+        if (!sessionData || sessionData.status === "pending") {
+          try {
+            const dbSession = await sessionRepo.findByToken(token);
+            if (dbSession) {
+              sessionData = {
+                status: dbSession.status,
+                user: dbSession.userJson ? JSON.parse(dbSession.userJson) : undefined,
+                apiToken: dbSession.apiToken,
+                createdAt: dbSession.createdAt,
+              };
+              memoryAuthSessions.set(token, sessionData);
+            }
+          } catch (err) {
+            console.warn("[Session D1] Failed polling session:", err);
+          }
+        }
+
+        // Fallback to KV if needed
+        if (!sessionData && env.CACHE && typeof env.CACHE.get === "function") {
+          try {
+            sessionData = await env.CACHE.get(`tg_session:${token}`, "json");
+            if (sessionData) {
+              memoryAuthSessions.set(token, sessionData);
+            }
+          } catch {}
+        }
+
+        if (!sessionData) {
+          return Response.json({ status: "expired" }, { status: 404 });
+        }
+
+        if (sessionData.status === "authenticated" && sessionData.user) {
+          const apiToken = sessionData.apiToken || sessionData.user.apiToken;
+          return Response.json(
+            { status: "authenticated", user: sessionData.user, token: apiToken },
+            {
+              headers: {
+                "Set-Cookie": `user_token=${apiToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+              },
+            }
+          );
+        }
+
+        return Response.json({ status: "pending" });
+      }
+
+      // Generate new session token
+      const sessionToken = "auth_" + crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+      const sessionRecord = {
+        status: "pending" as const,
+        createdAt: Date.now(),
+      };
+
+      memoryAuthSessions.set(sessionToken, sessionRecord);
+      try {
+        await sessionRepo.create(sessionToken, sessionRecord.createdAt);
+      } catch (err) {
+        console.warn("[Session D1] Failed creating session:", err);
+      }
+      if (env.CACHE && typeof env.CACHE.put === "function") {
+        try {
+          await env.CACHE.put(`tg_session:${sessionToken}`, JSON.stringify(sessionRecord), { expirationTtl: 600 });
+        } catch (err) {
+          console.warn("[Session KV] Failed storing session:", err);
+        }
+      }
+
+      const deepLink = `https://t.me/${botUsername}?start=login_${sessionToken}`;
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(deepLink)}`;
+
+      return Response.json({
+        sessionToken,
+        botUsername,
+        deepLink,
+        qrUrl,
+        expiresIn: 600,
+      });
+    }
+
+    // 6b. Telegram Bot Webhook: Handles /start login_<token> when user taps Start in Bot
+    if (path === "/api/telegram/webhook" && request.method === "POST") {
+      try {
+        const update = (await request.json()) as Record<string, any>;
+        const msg = update.message;
+        if (!msg || !msg.from) {
+          return Response.json({ ok: true });
+        }
+
+        const from = msg.from;
+        const text = String(msg.text || "").trim();
+        const chatId = msg.chat?.id;
+
+        if (text.startsWith("/start")) {
+          const payload = text.replace(/^\/start\s*/i, "").trim().replace(/^login_/i, "");
+
+          const now = Date.now();
+          const tgId = String(from.id);
+          const existingUser = await userRepo.findByTelegramId(tgId);
+          const apiToken = existingUser?.apiToken || `orp_${crypto.randomUUID().replace(/-/g, "")}`;
+
+          const userRecord: User = {
+            id: existingUser?.id || `usr_${tgId}`,
+            telegramId: tgId,
+            username: from.username ? String(from.username) : undefined,
+            firstName: String(from.first_name || from.username || "Telegram User"),
+            apiToken,
+            createdAt: existingUser?.createdAt || now,
+            updatedAt: now,
+          };
+
+          await userRepo.upsert(userRecord);
+
+          if (payload) {
+            const authData = {
+              status: "authenticated" as const,
+              user: userRecord,
+              apiToken,
+              authenticatedAt: now,
+            };
+
+            memoryAuthSessions.set(payload, authData);
+            try {
+              await sessionRepo.markAuthenticated(payload, userRecord, apiToken, now);
+            } catch (err) {
+              console.warn("[Session D1] Failed updating session in webhook:", err);
+            }
+            if (env.CACHE && typeof env.CACHE.put === "function") {
+              try {
+                await env.CACHE.put(`tg_session:${payload}`, JSON.stringify(authData), { expirationTtl: 600 });
+              } catch (err) {
+                console.warn("[Session KV] Failed updating session:", err);
+              }
+            }
+          }
+
+          // Reply back to user via Telegram Bot API if configured
+          if (env.TELEGRAM_BOT_TOKEN && chatId) {
+            const welcomeText = [
+              `🎉 *Xin chào ${from.first_name || "bạn"}!*`,
+              `Tài khoản Telegram của bạn đã được kết nối với *OffRadarJob* 🚀`,
+              ``,
+              `🔑 *Personal MCP API Token của bạn:*`,
+              `\`${apiToken}\``,
+              ``,
+              `🌐 *Trình duyệt web của bạn sẽ tự động đăng nhập ngay lập tức!*`,
+              `Bạn có thể đóng cửa sổ này hoặc dùng token trên để kết nối Cursor, Claude Desktop, Antigravity qua MCP.`,
+            ].join("\n");
+
+            try {
+              await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  chat_id: chatId,
+                  text: welcomeText,
+                  parse_mode: "Markdown",
+                }),
+              });
+            } catch (err) {
+              console.warn("[Telegram Bot] Failed sending message:", err);
+            }
+          }
+
+          return Response.json({ ok: true, authenticated: true });
+        }
+
+        if (text.startsWith("/mcp") && chatId && env.TELEGRAM_BOT_TOKEN) {
+          const tgId = String(from.id);
+          const user = await userRepo.findByTelegramId(tgId);
+          const reply = user
+            ? `🔌 *MCP Endpoint:* \`https://off-radar-jobs.tuannx87.workers.dev/mcp\`\n🔑 *Token:* \`${user.apiToken}\``
+            : "Vui lòng mở web OffRadarJob và đăng nhập để kích hoạt token.";
+          try {
+            await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: chatId, text: reply, parse_mode: "Markdown" }),
+            });
+          } catch {}
+          return Response.json({ ok: true });
+        }
+
+        return Response.json({ ok: true });
+      } catch (err: any) {
+        return Response.json({ ok: false, error: err?.message }, { status: 500 });
+      }
+    }
+
+    // 6c. Quick Confirm Session (for 1-click testing or local demo without Telegram app)
+    if (path === "/api/auth/telegram/confirm-session" && request.method === "POST") {
+      try {
+        const body = (await request.json()) as Record<string, any>;
+        const token = String(body.token || "").trim();
+        if (!token) {
+          return Response.json({ error: "Missing session token" }, { status: 400 });
+        }
+
+        const username = body.username ? String(body.username) : "telegram_user";
+        const firstName = body.first_name ? String(body.first_name) : "Telegram User";
+        const tgId = String(body.id || `tg_${username}`);
+
+        const now = Date.now();
+        const existingUser = await userRepo.findByTelegramId(tgId);
+        const apiToken = existingUser?.apiToken || `orp_${crypto.randomUUID().replace(/-/g, "")}`;
+
+        const userRecord: User = {
+          id: existingUser?.id || `usr_${tgId}`,
+          telegramId: tgId,
+          username,
+          firstName,
+          apiToken,
+          createdAt: existingUser?.createdAt || now,
+          updatedAt: now,
+        };
+
+        await userRepo.upsert(userRecord);
+
+        const authData = {
+          status: "authenticated" as const,
+          user: userRecord,
+          apiToken,
+          authenticatedAt: now,
+        };
+
+        memoryAuthSessions.set(token, authData);
+        try {
+          await sessionRepo.markAuthenticated(token, userRecord, apiToken, now);
+        } catch (err) {
+          console.warn("[Session D1] Failed updating session in confirm-session:", err);
+        }
+        if (env.CACHE && typeof env.CACHE.put === "function") {
+          try {
+            await env.CACHE.put(`tg_session:${token}`, JSON.stringify(authData), { expirationTtl: 600 });
+          } catch {}
+        }
+
+        return Response.json(
+          { success: true, user: userRecord, token: apiToken },
+          {
+            headers: {
+              "Set-Cookie": `user_token=${apiToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+            },
+          }
+        );
+      } catch (err: any) {
+        return Response.json({ error: err?.message || "Failed to confirm session" }, { status: 500 });
+      }
+    }
+
+    // 6d. Telegram Webhook Setup Helper
+    if (path === "/api/telegram/setup-webhook" && request.method === "GET") {
+      if (!env.TELEGRAM_BOT_TOKEN) {
+        return Response.json({ error: "TELEGRAM_BOT_TOKEN not configured in Worker environment" }, { status: 400 });
+      }
+      const webhookUrl = `${url.origin}/api/telegram/webhook`;
+      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
+      const data = await res.json();
+      return Response.json({ webhookUrl, result: data });
+    }
+
+    // 6e. Legacy Telegram Auth: Login via Telegram WebApp / Widget
     if (path === "/api/auth/telegram" && request.method === "POST") {
       try {
         const body = (await request.json()) as Record<string, any>;

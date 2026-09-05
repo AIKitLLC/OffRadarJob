@@ -108,8 +108,8 @@ export class McpServerHandler {
             },
             region: {
               type: "string",
-              enum: ["all", "midwest", "remote"],
-              description: "Location filter. Defaults to prioritizing US-Midwest focus first (options: 'midwest', 'all', 'remote')",
+              enum: ["all", "midwest", "west", "northeast", "south", "mountain", "remote"],
+              description: "Location filter across US regions ('midwest', 'west', 'northeast', 'south', 'mountain', 'remote', 'all')",
             },
             limit: { type: "number", description: "Number of jobs to return (default 10, max 50)" },
           },
@@ -128,11 +128,16 @@ export class McpServerHandler {
       },
       {
         name: "list_companies",
-        description: "Browse boutique, high-conviction micro-companies and tech startups in the Off-Radar directory.",
+        description: "Browse boutique, high-conviction micro-companies and tech startups in the Off-Radar directory across US regions.",
         inputSchema: {
           type: "object",
           properties: {
             search: { type: "string", description: "Search by company name, domain, tech stack, or industry" },
+            region: {
+              type: "string",
+              enum: ["all", "midwest", "west", "northeast", "south", "mountain"],
+              description: "Filter companies by US region ('midwest', 'west', 'northeast', 'south', 'mountain', 'all')",
+            },
             limit: { type: "number", description: "Number of companies to return (default 15)" },
           },
         },
@@ -209,6 +214,7 @@ export class McpServerHandler {
             seniority: j.seniorityLevel,
             techCategory: j.techCategory,
             location: j.isRemote ? `Remote (${j.remoteScope})` : j.location,
+            us_region: j.usRegion || (j.isMidwest ? "midwest" : (j.isRemote ? "remote" : "other")),
             salary: j.salaryMin ? `$${j.salaryMin.toLocaleString()} - $${j.salaryMax?.toLocaleString()} ${j.salaryCurrency || "USD"}` : "Unspecified",
             skills: j.skills,
             summary: j.descriptionSummary,
@@ -233,8 +239,9 @@ export class McpServerHandler {
 
       case "list_companies": {
         const search = args.search ?? undefined;
+        const region = args.region ?? undefined;
         const limit = Math.min(Math.max(1, args.limit ?? 15), 50);
-        const res = await this.companyRepo.listPaged({ page: 1, limit, search });
+        const res = await this.companyRepo.listPaged({ page: 1, limit, search, region });
         return {
           total: res.pagination.total,
           companies: res.items.map((c) => ({
@@ -244,6 +251,7 @@ export class McpServerHandler {
             industry: c.industry,
             headcount: c.headcountEstimate,
             location: c.locationHint,
+            us_region: c.usRegion || (c.isMidwest ? "midwest" : "other"),
             techStack: c.techStack,
             description: c.description || c.tagline,
           })),

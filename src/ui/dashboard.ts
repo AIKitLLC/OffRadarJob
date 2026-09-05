@@ -238,12 +238,47 @@ export function renderDashboardHtml(): string {
       font-weight: 500;
     }
     .tag-midwest { background: rgba(244, 63, 94, 0.2); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.4); font-weight: 600; }
+    .tag-west { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); font-weight: 600; }
+    .tag-northeast { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4); font-weight: 600; }
+    .tag-south { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); font-weight: 600; }
+    .tag-mountain { background: rgba(6, 182, 212, 0.2); color: #67e8f9; border: 1px solid rgba(6, 182, 212, 0.4); font-weight: 600; }
     .job-card.job-card-midwest {
       border: 1px solid rgba(244, 63, 94, 0.45);
       background: linear-gradient(135deg, rgba(244, 63, 94, 0.08), var(--card-bg));
       box-shadow: 0 4px 14px rgba(244, 63, 94, 0.08);
     }
-    .tag-remote { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+    .region-pills-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 16px 0 24px 0;
+      align-items: center;
+    }
+    .region-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .region-pill:hover, .region-pill.active {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: var(--primary);
+      color: #fff;
+    }
+    .pill-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .tag-remote { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.4); font-weight: 600; }
     .tag-salary { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
     .apply-btn {
       white-space: nowrap;
@@ -569,6 +604,62 @@ export function renderDashboardHtml(): string {
       flex-direction: column;
       gap: 8px;
     }
+    .tg-bot-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #2AABEE 0%, #229ED9 100%);
+      color: #ffffff !important;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 15px;
+      padding: 14px 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(42, 171, 238, 0.4);
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .tg-bot-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(42, 171, 238, 0.6);
+      background: linear-gradient(135deg, #38bdf8 0%, #2AABEE 100%);
+    }
+    .tg-sync-container {
+      background: rgba(14, 165, 233, 0.08);
+      border: 1px solid rgba(14, 165, 233, 0.25);
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      text-align: left;
+    }
+    .radar-spinner {
+      width: 22px;
+      height: 22px;
+      border: 2px solid rgba(56, 189, 248, 0.2);
+      border-top-color: #38bdf8;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      flex-shrink: 0;
+    }
+    .quick-demo-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .quick-demo-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.25);
+    }
   </style>
 </head>
 <body>
@@ -592,9 +683,9 @@ export function renderDashboardHtml(): string {
 
     <div class="midwest-banner">
       <div class="midwest-banner-text">
-        <strong>📍 Khu vực trọng điểm: US-Midwest Region (Đang ưu tiên hàng đầu)</strong> — Toàn bộ Tech Jobs và Micro-Companies được ưu tiên xếp hạng cao nhất từ các studio công nghệ tại Chicago (IL), Indianapolis (IN), Minneapolis (MN), Madison (WI), Cincinnati & Columbus (OH), Detroit & Ann Arbor (MI)...
+        <strong>🇺🇸 Toàn diện 5 Vùng Công nghệ Hoa Kỳ</strong> — Khai phá việc làm tech off-radar từ các micro-companies & boutique studios: 📍 <strong>Midwest</strong> (Chicago, Indy, Twin Cities) • 🌲 <strong>West</strong> (SF Bay, Seattle, Portland) • 🗽 <strong>Northeast</strong> (NYC, Boston, Philly) • ☀️ <strong>South</strong> (Austin, Atlanta, Raleigh) • 🏔️ <strong>Mountain</strong> (Denver, Salt Lake City).
       </div>
-      <span class="midwest-tag">⭐ US-Midwest Priority</span>
+      <span class="midwest-tag">⭐ US Nationwide + Midwest Priority</span>
     </div>
 
     <div class="stats-grid">
@@ -611,8 +702,35 @@ export function renderDashboardHtml(): string {
         <span class="stat-value" id="stat-senior" style="color: #c084fc;">0</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Midwest Share</span>
+        <span class="stat-label">Midwest Focus</span>
         <span class="stat-value" id="stat-midwest" style="color: #fb7185;">100%</span>
+      </div>
+    </div>
+
+    <div class="region-pills-bar">
+      <div class="region-pill active" id="pill-all" onclick="setRegionFilter('all')">
+        <span class="pill-dot" style="background: #38bdf8;"></span>
+        <span>Toàn bộ US: <strong id="stat-reg-all">0</strong></span>
+      </div>
+      <div class="region-pill" id="pill-midwest" onclick="setRegionFilter('midwest')">
+        <span class="pill-dot" style="background: #f43f5e;"></span>
+        <span>📍 Midwest: <strong id="stat-reg-midwest">0</strong></span>
+      </div>
+      <div class="region-pill" id="pill-west" onclick="setRegionFilter('west')">
+        <span class="pill-dot" style="background: #10b981;"></span>
+        <span>🌲 West: <strong id="stat-reg-west">0</strong></span>
+      </div>
+      <div class="region-pill" id="pill-northeast" onclick="setRegionFilter('northeast')">
+        <span class="pill-dot" style="background: #6366f1;"></span>
+        <span>🗽 Northeast: <strong id="stat-reg-northeast">0</strong></span>
+      </div>
+      <div class="region-pill" id="pill-south" onclick="setRegionFilter('south')">
+        <span class="pill-dot" style="background: #f59e0b;"></span>
+        <span>☀️ South: <strong id="stat-reg-south">0</strong></span>
+      </div>
+      <div class="region-pill" id="pill-mountain" onclick="setRegionFilter('mountain')">
+        <span class="pill-dot" style="background: #06b6d4;"></span>
+        <span>🏔️ Mountain: <strong id="stat-reg-mountain">0</strong></span>
       </div>
     </div>
 
@@ -623,12 +741,13 @@ export function renderDashboardHtml(): string {
         <button id="btn-crawl" onclick="triggerCrawl()">Dispatch to Discovery Queue</button>
       </div>
       <div class="quick-seeds">
-        <span>Quick Midwest Tech Seeds:</span>
+        <span>Vetted Regional Studios:</span>
         <span class="quick-seed-chip" onclick="fillSeed('https://promptloop.com')">PromptLoop (Chicago, IL • AI)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://sixfeetup.com')">Six Feet Up (Carmel, IN • Python/AWS)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://bendyworks.com')">Bendyworks (Madison, WI • Elixir/React)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://softwareforgood.com')">Software for Good (Minneapolis, MN • Next.js)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://gaslight.co')">Gaslight (Cincinnati, OH • Ruby/Elixir)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://sixfeetup.com')">Six Feet Up (Carmel, IN • AWS)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://postlight.com')">Postlight (New York, NY • Studio)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://substantial.com')">Substantial (Seattle, WA • Studio)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://modernize.com')">Modernize (Austin, TX • South)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://automox.com')">Automox (Boulder, CO • Mountain)</span>
       </div>
     </div>
 
@@ -659,9 +778,13 @@ export function renderDashboardHtml(): string {
           <option value="product_design">📐 Product Design & Systems</option>
         </select>
         <select id="region-filter" class="region-select" onchange="applyFilters()">
-          <option value="midwest" selected>📍 US-Midwest Focus (Đang ưu tiên)</option>
-          <option value="all">🌐 Toàn bộ US & Remote (Midwest xếp đầu)</option>
-          <option value="remote">🏠 100% Remote Only</option>
+          <option value="all" selected>🌐 Toàn bộ US & Remote (Tất cả 5 vùng)</option>
+          <option value="midwest">📍 US-Midwest (IL, IN, WI, MN, OH...)</option>
+          <option value="west">🌲 US-West (CA, WA, OR, NV...)</option>
+          <option value="northeast">🗽 US-Northeast (NY, MA, PA, NJ...)</option>
+          <option value="south">☀️ US-South (TX, FL, GA, NC, VA...)</option>
+          <option value="mountain">🏔️ US-Mountain (CO, UT, AZ, ID...)</option>
+          <option value="remote">🏠 100% Remote US</option>
         </select>
       </div>
     </div>
@@ -687,30 +810,58 @@ export function renderDashboardHtml(): string {
     </div>
   </div>
 
-  <!-- Modal 1: Telegram Login -->
+  <!-- Modal 1: Telegram Bot Login -->
   <div id="modal-login" class="modal-backdrop">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3><span>✈️</span> Sign in with Telegram</h3>
+    <div class="modal-content" style="max-width: 480px; text-align: center;">
+      <div class="modal-header" style="justify-content: space-between;">
+        <h3 style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 22px;">✈️</span> Đăng nhập qua Telegram Bot
+        </h3>
         <button class="modal-close-btn" onclick="closeModal('modal-login')">✕</button>
       </div>
-      <p style="font-size: 13px; color: var(--text-muted);">
-        Authenticate with your Telegram account to unlock your personal MCP server configuration for Cursor/Claude and activate multi-version CV storage tailored to specific Job descriptions.
+
+      <p style="font-size: 13px; color: var(--text-muted); margin: 0 0 16px 0; text-align: left; line-height: 1.5;">
+        Xác thực 1 chạm qua <strong>Telegram Bot</strong> để tự động nhận <strong>API Token MCP cá nhân</strong> miễn phí (dùng cho Cursor, Claude Desktop, Antigravity) và mở khóa tính năng lưu trữ nhiều bản CV theo từng Job JD.
       </p>
-      <div style="background: rgba(42, 171, 238, 0.08); border: 1px solid rgba(42, 171, 238, 0.25); border-radius: 8px; padding: 12px; font-size: 12px; color: #7dd3fc;">
-        💡 <strong>Free Access</strong>: No credit card required. Instantly receives an <code>orp_...</code> API token with 100% free search, filters, and JD-tailored CV storage.
+
+      <!-- Primary Action: Open Bot Button -->
+      <div style="margin-bottom: 16px;">
+        <a id="tg-bot-link" href="#" target="_blank" rel="noopener noreferrer" class="tg-bot-btn" onclick="onOpenBotClicked()">
+          <span style="font-size: 20px;">✈️</span> Mở Telegram Bot để Đăng Nhập
+        </a>
       </div>
-      <div style="display: flex; flex-direction: column; gap: 12px;">
+
+      <!-- Live Sync Radar Box -->
+      <div id="tg-sync-box" class="tg-sync-container">
+        <div class="radar-spinner"></div>
         <div>
-          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Telegram Username</label>
-          <input type="text" id="login-username" placeholder="e.g. johndoe (without @)" style="width: 100%;" />
+          <div id="tg-sync-title" style="font-weight: 600; font-size: 13px; color: #38bdf8;">
+            Đang khởi tạo phiên kết nối bot...
+          </div>
+          <div id="tg-sync-subtitle" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+            Sau khi mở bot, bạn chỉ cần bấm nút [Start] là xong!
+          </div>
         </div>
-        <div>
-          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Your Name</label>
-          <input type="text" id="login-name" placeholder="e.g. John Doe" style="width: 100%;" />
+      </div>
+
+      <!-- Divider with QR option -->
+      <div style="display: flex; align-items: center; margin: 18px 0 14px 0; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
+        <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
+        <span style="padding: 0 10px; color: var(--text-muted);">Hoặc quét mã QR bằng điện thoại</span>
+        <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
+      </div>
+
+      <div style="display: flex; justify-content: center; margin-bottom: 14px;">
+        <div style="background: white; padding: 8px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+          <img id="tg-qr-img" src="" alt="Telegram Login QR Code" style="width: 140px; height: 140px; display: block;" />
         </div>
-        <button onclick="submitTelegramLogin()" id="btn-submit-login" class="header-btn-primary" style="justify-content: center; padding: 12px; font-size: 14px; margin-top: 6px;">
-          🚀 Continue with Telegram
+      </div>
+
+      <!-- Instant 1-click Demo / Test Fallback -->
+      <div style="padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; color: var(--text-muted);">Không tiện mở Telegram lúc này?</span>
+        <button onclick="quickDemoLogin()" class="quick-demo-btn" id="btn-quick-demo">
+          ⚡ Đăng nhập 1 chạm (Demo)
         </button>
       </div>
     </div>
@@ -888,10 +1039,19 @@ export function renderDashboardHtml(): string {
       try {
         const stats = await fetch('/api/stats').then(r => r.json());
         if (!stats) return;
-        document.getElementById('stat-companies').innerText = stats.companiesCount || 0;
-        document.getElementById('stat-jobs').innerText = stats.jobsCount || 0;
-        document.getElementById('stat-senior').innerText = stats.seniorCount || 0;
+        document.getElementById('stat-companies').innerText = (stats.companiesCount || 0).toLocaleString();
+        document.getElementById('stat-jobs').innerText = (stats.jobsCount || 0).toLocaleString();
+        document.getElementById('stat-senior').innerText = (stats.seniorCount || 0).toLocaleString();
         document.getElementById('stat-midwest').innerText = (stats.midwestPercent !== undefined ? stats.midwestPercent : 100) + '%';
+        if (stats.regionalBreakdown) {
+          const rb = stats.regionalBreakdown;
+          if (document.getElementById('stat-reg-all')) document.getElementById('stat-reg-all').innerText = (stats.jobsCount || 0).toLocaleString();
+          if (document.getElementById('stat-reg-midwest')) document.getElementById('stat-reg-midwest').innerText = (rb.midwest || 0).toLocaleString();
+          if (document.getElementById('stat-reg-west')) document.getElementById('stat-reg-west').innerText = (rb.west || 0).toLocaleString();
+          if (document.getElementById('stat-reg-northeast')) document.getElementById('stat-reg-northeast').innerText = (rb.northeast || 0).toLocaleString();
+          if (document.getElementById('stat-reg-south')) document.getElementById('stat-reg-south').innerText = (rb.south || 0).toLocaleString();
+          if (document.getElementById('stat-reg-mountain')) document.getElementById('stat-reg-mountain').innerText = (rb.mountain || 0).toLocaleString();
+        }
         renderLogs(stats.recentLogs || []);
       } catch (err) {
         console.warn('Stats fetch error:', err);
@@ -905,8 +1065,24 @@ export function renderDashboardHtml(): string {
       }, 300);
     }
 
+    function setRegionFilter(region) {
+      const select = document.getElementById('region-filter');
+      if (select) {
+        select.value = region;
+      }
+      applyFilters();
+    }
+
     function applyFilters() {
+      const region = document.getElementById('region-filter')?.value || 'all';
+      document.querySelectorAll('.region-pill').forEach(el => el.classList.remove('active'));
+      const activePill = document.getElementById('pill-' + region);
+      if (activePill) activePill.classList.add('active');
+
       fetchJobs(1);
+      if (companiesLoaded) {
+        fetchCompanies(1);
+      }
     }
 
     async function fetchJobs(page = 1) {
@@ -953,6 +1129,19 @@ export function renderDashboardHtml(): string {
       window.scrollTo({ top: 350, behavior: 'smooth' });
     }
 
+    function getRegionBadge(j) {
+      const reg = j.usRegion || (j.isMidwest ? 'midwest' : (j.isRemote ? 'remote' : 'other'));
+      switch(reg) {
+        case 'midwest': return '<span class="tag tag-midwest">📍 US-Midwest</span>';
+        case 'west': return '<span class="tag tag-west">🌲 US-West</span>';
+        case 'northeast': return '<span class="tag tag-northeast">🗽 US-Northeast</span>';
+        case 'south': return '<span class="tag tag-south">☀️ US-South</span>';
+        case 'mountain': return '<span class="tag tag-mountain">🏔️ US-Mountain</span>';
+        case 'remote': return '<span class="tag tag-remote">🌐 100% Remote US</span>';
+        default: return '';
+      }
+    }
+
     function renderJobsList(jobs) {
       const container = document.getElementById('jobs-container');
       if (!jobs || jobs.length === 0) {
@@ -961,7 +1150,7 @@ export function renderDashboardHtml(): string {
       }
 
       container.innerHTML = jobs.map(j => {
-        const isMidwest = j.isMidwest || (j.remoteScope && j.remoteScope.toLowerCase().includes('midwest')) || (j.location && /\b(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Midwest)\b/i.test(j.location));
+        const isMidwest = j.isMidwest || j.usRegion === 'midwest' || (j.remoteScope && j.remoteScope.toLowerCase().includes('midwest')) || (j.location && /\b(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Midwest)\b/i.test(j.location));
         return \`
           <div class="job-card \${isMidwest ? 'job-card-midwest' : ''}">
             <div class="job-main">
@@ -969,7 +1158,7 @@ export function renderDashboardHtml(): string {
                 <h3>\${j.title}</h3>
                 \${getGradeBadge(j.seniorityLevel)}
                 \${getTechBadge(j.techCategory)}
-                \${isMidwest ? '<span class="tag tag-midwest">📍 US-Midwest Priority</span>' : ''}
+                \${getRegionBadge(j)}
               </div>
               <a class="job-company" href="\${j.companyWebsite || ('https://' + j.companyId.replace('comp_', '').replace(/_/g, '.'))}" target="_blank">🏢 \${j.companyName || j.companyId.replace('comp_', '').replace(/_/g, '.')} ↗</a>
               <p class="job-desc">\${j.descriptionSummary || 'Direct tech opening from micro-company career portal.'}</p>
@@ -999,7 +1188,11 @@ export function renderDashboardHtml(): string {
       container.innerHTML = '<p style="color: var(--text-muted); padding: 32px; text-align: center; grid-column: 1/-1;">⚡ Loading micro-companies (page ' + page + ')...</p>';
 
       try {
-        const res = await fetch('/api/companies?page=' + page + '&limit=30&paged=true');
+        const region = document.getElementById('region-filter')?.value;
+        let compUrl = '/api/companies?page=' + page + '&limit=30&paged=true';
+        if (region && region !== 'all') compUrl += '&region=' + encodeURIComponent(region);
+
+        const res = await fetch(compUrl);
         const data = await res.json();
 
         const comps = data.items || (Array.isArray(data) ? data : []);
@@ -1023,6 +1216,24 @@ export function renderDashboardHtml(): string {
       window.scrollTo({ top: 350, behavior: 'smooth' });
     }
 
+    function getCompanyRegionBadge(c) {
+      const reg = c.usRegion || (c.isMidwest ? 'midwest' : 'other');
+      switch(reg) {
+        case 'midwest':
+          return '<span class="tag tag-midwest">📍 US-Midwest (' + (c.locationHint || 'Midwest') + ')</span>';
+        case 'west':
+          return '<span class="tag tag-west">🌲 US-West (' + (c.locationHint || 'West') + ')</span>';
+        case 'northeast':
+          return '<span class="tag tag-northeast">🗽 US-Northeast (' + (c.locationHint || 'Northeast') + ')</span>';
+        case 'south':
+          return '<span class="tag tag-south">☀️ US-South (' + (c.locationHint || 'South') + ')</span>';
+        case 'mountain':
+          return '<span class="tag tag-mountain">🏔️ US-Mountain (' + (c.locationHint || 'Mountain') + ')</span>';
+        default:
+          return c.locationHint ? '<span class="tag">🌐 ' + c.locationHint + '</span>' : '';
+      }
+    }
+
     function renderCompaniesList(comps) {
       const container = document.getElementById('companies-container');
       if (!comps || comps.length === 0) {
@@ -1031,7 +1242,7 @@ export function renderDashboardHtml(): string {
       }
 
       container.innerHTML = comps.map(c => {
-        const isMidwestComp = c.isMidwest || (c.locationHint && /\b(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Midwest)\b/i.test(c.locationHint));
+        const isMidwestComp = c.isMidwest || c.usRegion === 'midwest' || (c.locationHint && /\b(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Midwest)\b/i.test(c.locationHint));
         return \`
         <div class="company-card \${isMidwestComp ? 'company-card-midwest' : ''}">
           <div class="company-header">
@@ -1040,7 +1251,7 @@ export function renderDashboardHtml(): string {
           </div>
           <p class="company-desc">\${c.description || c.tagline || 'Independent tech company.'}</p>
           <div class="job-tags">
-            \${isMidwestComp ? '<span class="tag tag-midwest">📍 US-Midwest Focus (' + (c.locationHint || 'Midwest') + ')</span>' : (c.locationHint ? '<span class="tag">🌐 ' + c.locationHint + '</span>' : '')}
+            \${getCompanyRegionBadge(c)}
             \${(c.techStack || []).slice(0, 5).map(s => \`<span class="tag">\${s}</span>\`).join('')}
           </div>
           <div style="font-size: 11px; color: var(--text-muted); margin-top: auto;">
@@ -1235,6 +1446,9 @@ export function renderDashboardHtml(): string {
       }
     }
 
+    let currentTgSession = null;
+    let tgPollingInterval = null;
+
     function openModal(id) {
       const el = document.getElementById(id);
       if (el) el.classList.add('active');
@@ -1243,56 +1457,130 @@ export function renderDashboardHtml(): string {
     function closeModal(id) {
       const el = document.getElementById(id);
       if (el) el.classList.remove('active');
+      if (id === 'modal-login') {
+        stopTgPolling();
+      }
     }
 
     function openLoginModal() {
       openModal('modal-login');
-      document.getElementById('login-username')?.focus();
+      initTelegramBotAuth();
     }
 
-    async function submitTelegramLogin() {
-      const usernameInput = document.getElementById('login-username');
-      const nameInput = document.getElementById('login-name');
-      const username = usernameInput?.value.trim().replace(/^@/, '');
-      const firstName = nameInput?.value.trim() || username || 'Telegram User';
+    async function initTelegramBotAuth() {
+      const syncTitle = document.getElementById('tg-sync-title');
+      const syncSubtitle = document.getElementById('tg-sync-subtitle');
+      const botLink = document.getElementById('tg-bot-link');
+      const qrImg = document.getElementById('tg-qr-img');
 
-      if (!username) {
-        alert('Please enter your Telegram username.');
-        return;
-      }
-
-      const btn = document.getElementById('btn-submit-login');
-      btn.innerText = 'Signing in...';
-      btn.disabled = true;
+      if (syncTitle) syncTitle.innerText = 'Đang khởi tạo kết nối với Telegram Bot...';
+      if (syncSubtitle) syncSubtitle.innerText = 'Vui lòng chờ trong giây lát...';
 
       try {
-        const res = await fetch('/api/auth/telegram', {
+        const res = await fetch('/api/auth/telegram/session');
+        const data = await res.json();
+        currentTgSession = data.sessionToken;
+
+        if (botLink) {
+          botLink.href = data.deepLink;
+          botLink.innerHTML = '<span style="font-size: 20px;">✈️</span> Mở Bot @' + data.botUsername + ' để Đăng Nhập';
+        }
+        if (qrImg) {
+          qrImg.src = data.qrUrl;
+        }
+        if (syncTitle) syncTitle.innerText = 'Đang chờ bạn nhấn [Start] trong Telegram...';
+        if (syncSubtitle) syncSubtitle.innerText = 'Sau khi mở bot @' + data.botUsername + ', hãy nhấn nút [Start]';
+
+        startTgPolling();
+      } catch (err) {
+        if (syncTitle) syncTitle.innerText = 'Lỗi kết nối bot: ' + err.message;
+      }
+    }
+
+    function onOpenBotClicked() {
+      const syncTitle = document.getElementById('tg-sync-title');
+      if (syncTitle) syncTitle.innerHTML = '⚡ Đang đợi bạn nhấn [Start] trên Telegram...';
+    }
+
+    function startTgPolling() {
+      stopTgPolling();
+      tgPollingInterval = setInterval(pollTgAuthStatus, 1500);
+    }
+
+    function stopTgPolling() {
+      if (tgPollingInterval) {
+        clearInterval(tgPollingInterval);
+        tgPollingInterval = null;
+      }
+    }
+
+    async function pollTgAuthStatus() {
+      if (!currentTgSession) return;
+      try {
+        const res = await fetch('/api/auth/telegram/session?token=' + encodeURIComponent(currentTgSession));
+        if (res.status === 200) {
+          const data = await res.json();
+          if (data.status === 'authenticated' && data.user) {
+            stopTgPolling();
+            const syncTitle = document.getElementById('tg-sync-title');
+            if (syncTitle) syncTitle.innerHTML = '🎉 <span style="color: #34d399;">Đăng nhập thành công! Đang chuyển hướng...</span>';
+            
+            currentUser = data.user;
+            setAuthToken(data.token || data.user.apiToken);
+            setTimeout(() => {
+              closeModal('modal-login');
+              renderAuthHeader();
+              fetchUserCvs();
+              openMcpModal();
+            }, 600);
+          }
+        }
+      } catch (err) {
+        console.warn('Polling error:', err);
+      }
+    }
+
+    async function quickDemoLogin() {
+      const btn = document.getElementById('btn-quick-demo');
+      if (btn) {
+        btn.innerText = 'Đang xử lý...';
+        btn.disabled = true;
+      }
+      try {
+        const sessionToken = currentTgSession || ('demo_' + Date.now());
+        const res = await fetch('/api/auth/telegram/confirm-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            username: username,
-            first_name: firstName,
-            id: Math.floor(Math.random() * 100000000) + 10000000
+            token: sessionToken,
+            username: 'tuan_engineer',
+            first_name: 'Tuan Nguyen'
           })
         });
-
         const data = await res.json();
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || 'Failed to authenticate');
+        if (data.success && data.user) {
+          stopTgPolling();
+          currentUser = data.user;
+          setAuthToken(data.token || data.user.apiToken);
+          closeModal('modal-login');
+          renderAuthHeader();
+          await fetchUserCvs();
+          openMcpModal();
+        } else {
+          alert('Demo login failed: ' + (data.error || 'Unknown error'));
         }
-
-        currentUser = data.user;
-        setAuthToken(data.user.apiToken);
-        closeModal('modal-login');
-        renderAuthHeader();
-        await fetchUserCvs();
-        openMcpModal();
       } catch (err) {
-        alert('Telegram Login failed: ' + err.message);
+        alert('Quick demo failed: ' + err.message);
       } finally {
-        btn.innerText = '🚀 Continue with Telegram';
-        btn.disabled = false;
+        if (btn) {
+          btn.innerText = '⚡ Đăng nhập 1 chạm (Demo)';
+          btn.disabled = false;
+        }
       }
+    }
+
+    async function submitTelegramLogin() {
+      quickDemoLogin();
     }
 
     async function logout() {
@@ -1649,6 +1937,8 @@ export function renderDashboardHtml(): string {
     window.changeCompsPage = changeCompsPage;
     window.openLoginModal = openLoginModal;
     window.closeModal = closeModal;
+    window.onOpenBotClicked = onOpenBotClicked;
+    window.quickDemoLogin = quickDemoLogin;
     window.submitTelegramLogin = submitTelegramLogin;
     window.logout = logout;
     window.openMcpModal = openMcpModal;

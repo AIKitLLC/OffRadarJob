@@ -1,4 +1,5 @@
 import { ID1Database, ID1PreparedStatement, ID1Result, ID1Response } from "./types.js";
+import { detectUsRegion } from "./repositories.js";
 
 /**
  * In-memory ID1Database mock for Node / Vitest testing & standalone simulation.
@@ -15,6 +16,7 @@ export class InMemoryD1Database implements ID1Database {
     this.tables.set("crawl_tasks", new Map());
     this.tables.set("users", new Map());
     this.tables.set("cv_versions", new Map());
+    this.tables.set("auth_sessions", new Map());
   }
 
   public prepare(query: string): ID1PreparedStatement {
@@ -78,22 +80,60 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: row ? [row as T] : [], success: true };
     }
 
+    const extractWhereClause = (sql: string): string => {
+      const whereIdx = sql.indexOf("WHERE");
+      if (whereIdx === -1) return "";
+      const afterWhere = sql.slice(whereIdx);
+      const orderIdx = afterWhere.indexOf("ORDER BY");
+      const limitIdx = afterWhere.indexOf("LIMIT");
+      const groupIdx = afterWhere.indexOf("GROUP BY");
+      const endIdx = Math.min(
+        orderIdx !== -1 ? orderIdx : Infinity,
+        limitIdx !== -1 ? limitIdx : Infinity,
+        groupIdx !== -1 ? groupIdx : Infinity
+      );
+      return endIdx === Infinity ? afterWhere : afterWhere.slice(0, endIdx);
+    };
+
     if (q.includes("FROM companies") && q.includes("COUNT(*)")) {
-      const count = this.db.tables.get("companies")!.size;
-      return { results: [{ count } as T], success: true };
+      const rows = Array.from(this.db.tables.get("companies")!.values());
+      const wherePart = extractWhereClause(q);
+      let filtered = rows;
+      if (wherePart.includes("LIKE '%california%'") || wherePart.includes("LIKE '%, ca %'")) {
+        filtered = filtered.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "west");
+      } else if (wherePart.includes("LIKE '%new york%'") || wherePart.includes("LIKE '%, ny %'")) {
+        filtered = filtered.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "northeast");
+      } else if (wherePart.includes("LIKE '%texas%'") || wherePart.includes("LIKE '%, tx %'")) {
+        filtered = filtered.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "south");
+      } else if (wherePart.includes("LIKE '%colorado%'") || wherePart.includes("LIKE '%, co %'")) {
+        filtered = filtered.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "mountain");
+      } else if (wherePart.includes("LIKE '%midwest%'") || wherePart.includes("LIKE '%illinois%'") || wherePart.includes("LIKE '%, il %'")) {
+        filtered = filtered.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "midwest");
+      }
+      return { results: [{ count: filtered.length, total: filtered.length } as T], success: true };
     }
 
     if (q.includes("FROM companies")) {
-      const rows = Array.from(this.db.tables.get("companies")!.values());
+      let rows = Array.from(this.db.tables.get("companies")!.values());
+      const wherePart = extractWhereClause(q);
+      if (wherePart.includes("LIKE '%california%'") || wherePart.includes("LIKE '%, ca %'")) {
+        rows = rows.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "west");
+      } else if (wherePart.includes("LIKE '%new york%'") || wherePart.includes("LIKE '%, ny %'")) {
+        rows = rows.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "northeast");
+      } else if (wherePart.includes("LIKE '%texas%'") || wherePart.includes("LIKE '%, tx %'")) {
+        rows = rows.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "south");
+      } else if (wherePart.includes("LIKE '%colorado%'") || wherePart.includes("LIKE '%, co %'")) {
+        rows = rows.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "mountain");
+      } else if (wherePart.includes("LIKE '%midwest%'") || wherePart.includes("LIKE '%illinois%'") || wherePart.includes("LIKE '%, il %'")) {
+        rows = rows.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "midwest");
+      }
+
       if (q.includes("is_midwest_priority")) {
         rows.sort((a, b) => {
           const locA = String(a["location_hint"] ?? "");
           const locB = String(b["location_hint"] ?? "");
-          const checkMid = (loc: string) => loc.toLowerCase().includes("midwest") ||
-            /\b(Illinois|Indiana|Wisconsin|Minnesota|Ohio|Michigan|Missouri|Iowa|Kansas|Nebraska|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Milwaukee|Saint Louis|Des Moines)\b/i.test(loc) ||
-            /(?:,\s*|\s+)(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD)(?:\s+|,|$)/.test(loc);
-          const aMid = checkMid(locA);
-          const bMid = checkMid(locB);
+          const aMid = detectUsRegion(null, locA, null, false) === "midwest";
+          const bMid = detectUsRegion(null, locB, null, false) === "midwest";
           if (aMid && !bMid) return -1;
           if (!aMid && bMid) return 1;
           return Number(b["updated_at"] ?? 0) - Number(a["updated_at"] ?? 0);
@@ -202,13 +242,58 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
           /(?:,\s*|\s+)(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD)(?:\s+|,|$)/.test(locationHint);
       };
 
-      const whereIdx = q.indexOf("WHERE");
-      const wherePart = whereIdx !== -1 ? q.slice(whereIdx) : "";
-      if (wherePart.includes("LIKE '%midwest%'") || wherePart.includes("remote_scope LIKE '%midwest%'")) {
+      const wherePart = extractWhereClause(q);
+      if (wherePart.includes("LIKE '%california%'") || wherePart.includes("LIKE '%, ca %'")) {
+        rows = rows.filter((r) => detectUsRegion(String(r["location"] ?? ""), String(r["location_hint"] ?? ""), String(r["remote_scope"] ?? ""), Number(r["is_remote"] ?? 0) === 1) === "west");
+      } else if (wherePart.includes("LIKE '%new york%'") || wherePart.includes("LIKE '%, ny %'")) {
+        rows = rows.filter((r) => detectUsRegion(String(r["location"] ?? ""), String(r["location_hint"] ?? ""), String(r["remote_scope"] ?? ""), Number(r["is_remote"] ?? 0) === 1) === "northeast");
+      } else if (wherePart.includes("LIKE '%texas%'") || wherePart.includes("LIKE '%, tx %'")) {
+        rows = rows.filter((r) => detectUsRegion(String(r["location"] ?? ""), String(r["location_hint"] ?? ""), String(r["remote_scope"] ?? ""), Number(r["is_remote"] ?? 0) === 1) === "south");
+      } else if (wherePart.includes("LIKE '%colorado%'") || wherePart.includes("LIKE '%, co %'")) {
+        rows = rows.filter((r) => detectUsRegion(String(r["location"] ?? ""), String(r["location_hint"] ?? ""), String(r["remote_scope"] ?? ""), Number(r["is_remote"] ?? 0) === 1) === "mountain");
+      } else if (wherePart.includes("LIKE '%midwest%'") || wherePart.includes("remote_scope LIKE '%midwest%'") || wherePart.includes("LIKE '%illinois%'")) {
         rows = rows.filter((r) => isMidwestRow(r));
       }
       if (wherePart.includes("j.is_remote = 1")) {
         rows = rows.filter((r) => Number(r["is_remote"] ?? 0) === 1);
+      }
+
+      if (q.includes("COUNT(*)") && q.includes("midwest_count")) {
+        let seniorCount = 0;
+        let midwestCount = 0;
+        let westCount = 0;
+        let northeastCount = 0;
+        let southCount = 0;
+        let mountainCount = 0;
+
+        for (const r of rows) {
+          const level = String(r["seniority_level"] ?? "");
+          if (["senior", "founding", "lead"].includes(level)) seniorCount++;
+          const reg = detectUsRegion(
+            String(r["location"] ?? ""),
+            String(r["location_hint"] ?? ""),
+            String(r["remote_scope"] ?? ""),
+            Number(r["is_remote"] ?? 0) === 1
+          );
+          if (reg === "midwest" || isMidwestRow(r)) midwestCount++;
+          if (reg === "west") westCount++;
+          if (reg === "northeast") northeastCount++;
+          if (reg === "south") southCount++;
+          if (reg === "mountain") mountainCount++;
+        }
+
+        return {
+          results: [{
+            total: rows.length,
+            senior_count: seniorCount,
+            midwest_count: midwestCount,
+            west_count: westCount,
+            northeast_count: northeastCount,
+            south_count: southCount,
+            mountain_count: mountainCount,
+          } as T],
+          success: true,
+        };
       }
 
       if (q.includes("COUNT(*)")) {
@@ -316,6 +401,14 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       const rows = Array.from(table.values()).filter((r) => r["user_id"] === userId);
       rows.sort((a, b) => Number(b["updated_at"] ?? 0) - Number(a["updated_at"] ?? 0));
       return { results: rows as T[], success: true };
+    }
+
+    // Auth sessions queries
+    if (q.includes("FROM auth_sessions") && q.includes("WHERE token = ?")) {
+      const token = String(this.boundValues[0]);
+      const table = this.db.tables.get("auth_sessions")!;
+      const row = table.get(token);
+      return { results: row ? [row as T] : [], success: true };
     }
 
     return { results: [], success: true };
@@ -613,6 +706,36 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         table.delete(id);
       }
       return { success: true, meta: { changes: 1 } };
+    }
+
+    // INSERT INTO auth_sessions
+    if (q.includes("INTO auth_sessions")) {
+      const [token, createdAt] = [String(this.boundValues[0]), Number(this.boundValues[1])];
+      const table = this.db.tables.get("auth_sessions")!;
+      const existing = table.get(token) || {};
+      table.set(token, {
+        ...existing,
+        token,
+        status: "pending",
+        created_at: createdAt,
+      });
+      return { success: true };
+    }
+
+    // UPDATE auth_sessions
+    if (q.includes("UPDATE auth_sessions")) {
+      const [telegramId, apiToken, userJson, authenticatedAt, token] = this.boundValues;
+      const table = this.db.tables.get("auth_sessions")!;
+      const existing = table.get(String(token)) || { token: String(token), created_at: Date.now() };
+      table.set(String(token), {
+        ...existing,
+        status: "authenticated",
+        telegram_id: String(telegramId),
+        api_token: String(apiToken),
+        user_json: String(userJson),
+        authenticated_at: Number(authenticatedAt),
+      });
+      return { success: true };
     }
 
     return { success: true };
