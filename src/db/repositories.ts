@@ -8,6 +8,9 @@ import {
   JobSchema,
   CrawlLog,
   CrawlLogSchema,
+  CrawlTask,
+  CrawlTaskSchema,
+  CrawlTaskStatus,
 } from "../types/domain.js";
 
 export class CompanyRepository {
@@ -248,6 +251,30 @@ export class JobRepository {
     return this.mapRowToJob(row);
   }
 
+  public async getById(id: string): Promise<Job | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM jobs WHERE id = ? LIMIT 1")
+      .bind(id)
+      .first<Record<string, unknown>>();
+
+    if (!row) return null;
+    return this.mapRowToJob(row);
+  }
+
+  public async updateStatus(id: string, status: "open" | "closed"): Promise<void> {
+    await this.db
+      .prepare("UPDATE jobs SET status = ?, last_seen_at = ? WHERE id = ?")
+      .bind(status, Date.now(), id)
+      .run();
+  }
+
+  public async delete(id: string): Promise<void> {
+    await this.db
+      .prepare("DELETE FROM jobs WHERE id = ?")
+      .bind(id)
+      .run();
+  }
+
   public async list(options: {
     limit?: number | undefined;
     grade?: string | undefined;
@@ -367,3 +394,165 @@ export class LogRepository {
     );
   }
 }
+
+export class CrawlTaskRepository {
+  constructor(private readonly db: ID1Database) {}
+
+  public async create(task: CrawlTask): Promise<void> {
+    const query = `
+      INSERT INTO crawl_tasks (
+        id, target_url, source_type, status, company_id,
+        jobs_found, error_message, metadata, created_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    await this.db
+      .prepare(query)
+      .bind(
+        task.id,
+        task.targetUrl,
+        task.sourceType,
+        task.status,
+        task.companyId ?? null,
+        task.jobsFound,
+        task.errorMessage ?? null,
+        JSON.stringify(task.metadata ?? {}),
+        task.createdAt,
+        task.completedAt ?? null
+      )
+      .run();
+  }
+
+  public async update(
+    id: string,
+    updates: {
+      status?: CrawlTaskStatus | undefined;
+      companyId?: string | null | undefined;
+      jobsFound?: number | undefined;
+      errorMessage?: string | null | undefined;
+      completedAt?: number | null | undefined;
+      metadata?: Record<string, unknown> | undefined;
+    }
+  ): Promise<void> {
+    const setClauses: string[] = [];
+    const bindings: unknown[] = [];
+
+    if (updates.status !== undefined) {
+      setClauses.push("status = ?");
+      bindings.push(updates.status);
+    }
+    if (updates.companyId !== undefined) {
+      setClauses.push("company_id = ?");
+      bindings.push(updates.companyId);
+    }
+    if (updates.jobsFound !== undefined) {
+      setClauses.push("jobs_found = ?");
+      bindings.push(updates.jobsFound);
+    }
+    if (updates.errorMessage !== undefined) {
+      setClauses.push("error_message = ?");
+      bindings.push(updates.errorMessage);
+    }
+    if (updates.completedAt !== undefined) {
+      setClauses.push("completed_at = ?");
+      bindings.push(updates.completedAt);
+    }
+    if (updates.metadata !== undefined) {
+      setClauses.push("metadata = ?");
+      bindings.push(JSON.stringify(updates.metadata));
+    }
+
+    if (setClauses.length === 0) return;
+
+    const query = `UPDATE crawl_tasks SET ${setClauses.join(", ")} WHERE id = ?`;
+    bindings.push(id);
+
+    await this.db.prepare(query).bind(...bindings).run();
+  }
+
+  public async getById(id: string): Promise<CrawlTask | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM crawl_tasks WHERE id = ? LIMIT 1")
+      .bind(id)
+      .first<Record<string, unknown>>();
+
+    if (!row) return null;
+    return this.mapRowToTask(row);
+  }
+
+  public async list(options: {
+    status?: CrawlTaskStatus | undefined;
+    limit?: number | undefined;
+  } = {}): Promise<CrawlTask[]> {
+    const limit = options.limit ?? 50;
+    let query = "SELECT * FROM crawl_tasks";
+    const bindings: unknown[] = [];
+
+    if (options.status) {
+      query += " WHERE status = ?";
+      bindings.push(options.status);
+    }
+
+    query += " ORDER BY created_at DESC LIMIT ?";
+    bindings.push(limit);
+
+    const res = await this.db.prepare(query).bind(...bindings).all<Record<string, unknown>>();
+    return (res.results ?? []).map((r) => this.mapRowToTask(r));
+  }
+
+  public async getStats(): Promise<{
+    total: number;
+    pending: number;
+    running: number;
+    completed: number;
+    failed: number;
+    jobsFound: number;
+  }> {
+    const res = await this.db
+      .prepare(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+          SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as running,
+          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+          COALESCE(SUM(jobs_found), 0) as jobs_found
+        FROM crawl_tasks
+      `)
+      .first<{
+        total: number;
+        pending: number;
+        running: number;
+        completed: number;
+        failed: number;
+        jobs_found: number;
+      }>();
+
+    return {
+      total: Number(res?.total ?? 0),
+      pending: Number(res?.pending ?? 0),
+      running: Number(res?.running ?? 0),
+      completed: Number(res?.completed ?? 0),
+      failed: Number(res?.failed ?? 0),
+      jobsFound: Number(res?.jobs_found ?? 0),
+    };
+  }
+
+  private mapRowToTask(row: Record<string, unknown>): CrawlTask {
+    const metadata = typeof row["metadata"] === "string" ? JSON.parse(row["metadata"] as string) : (row["metadata"] ?? {});
+
+    return CrawlTaskSchema.parse({
+      id: row["id"],
+      targetUrl: row["target_url"],
+      sourceType: row["source_type"] ?? "manual",
+      status: row["status"],
+      companyId: row["company_id"] ?? undefined,
+      jobsFound: Number(row["jobs_found"] ?? 0),
+      errorMessage: row["error_message"] ?? undefined,
+      metadata,
+      createdAt: Number(row["created_at"]),
+      completedAt: row["completed_at"] !== null && row["completed_at"] !== undefined ? Number(row["completed_at"]) : undefined,
+    });
+  }
+}
+

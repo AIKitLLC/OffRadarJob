@@ -12,6 +12,7 @@ export class InMemoryD1Database implements ID1Database {
     this.tables.set("career_pages", new Map());
     this.tables.set("jobs", new Map());
     this.tables.set("crawl_logs", new Map());
+    this.tables.set("crawl_tasks", new Map());
   }
 
   public prepare(query: string): ID1PreparedStatement {
@@ -118,6 +119,13 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: [], success: true };
     }
 
+    if (q.includes("FROM jobs") && q.includes("WHERE id = ?")) {
+      const id = String(this.boundValues[0]);
+      const table = this.db.tables.get("jobs")!;
+      const row = table.get(id);
+      return { results: row ? [row as T] : [], success: true };
+    }
+
     if (q.includes("FROM jobs") && q.includes("COUNT(*)")) {
       const count = this.db.tables.get("jobs")!.size;
       return { results: [{ count } as T], success: true };
@@ -145,6 +153,39 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
     // Crawl logs queries
     if (q.includes("FROM crawl_logs")) {
       const rows = Array.from(this.db.tables.get("crawl_logs")!.values());
+      rows.sort((a, b) => Number(b["created_at"] ?? 0) - Number(a["created_at"] ?? 0));
+      return { results: rows as T[], success: true };
+    }
+
+    // Crawl tasks queries
+    if (q.includes("FROM crawl_tasks") && (q.includes("COUNT(*)") || q.includes("SUM("))) {
+      const table = this.db.tables.get("crawl_tasks")!;
+      const rows = Array.from(table.values());
+      const total = rows.length;
+      const pending = rows.filter((r) => r["status"] === "pending").length;
+      const running = rows.filter((r) => r["status"] === "running").length;
+      const completed = rows.filter((r) => r["status"] === "completed").length;
+      const failed = rows.filter((r) => r["status"] === "failed").length;
+      const jobs_found = rows.reduce((acc, r) => acc + Number(r["jobs_found"] ?? 0), 0);
+      return {
+        results: [{ total, pending, running, completed, failed, jobs_found } as T],
+        success: true,
+      };
+    }
+
+    if (q.includes("FROM crawl_tasks") && q.includes("WHERE id = ?")) {
+      const id = String(this.boundValues[0]);
+      const table = this.db.tables.get("crawl_tasks")!;
+      const row = table.get(id);
+      return { results: row ? [row as T] : [], success: true };
+    }
+
+    if (q.includes("FROM crawl_tasks")) {
+      let rows = Array.from(this.db.tables.get("crawl_tasks")!.values());
+      if (q.includes("WHERE status = ?")) {
+        const statusVal = String(this.boundValues[0]);
+        rows = rows.filter((r) => r["status"] === statusVal);
+      }
       rows.sort((a, b) => Number(b["created_at"] ?? 0) - Number(a["created_at"] ?? 0));
       return { results: rows as T[], success: true };
     }
@@ -287,6 +328,81 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         created_at: Number(createdAt),
       };
       this.db.tables.get("crawl_logs")!.set(String(id), record);
+      return { success: true };
+    }
+
+    // UPDATE jobs SET status = ?, last_seen_at = ? WHERE id = ?
+    if (q.includes("UPDATE jobs SET status =")) {
+      const [status, lastSeenAt, id] = this.boundValues;
+      const table = this.db.tables.get("jobs")!;
+      const existing = table.get(String(id));
+      if (existing) {
+        existing["status"] = String(status);
+        existing["last_seen_at"] = Number(lastSeenAt);
+      }
+      return { success: true };
+    }
+
+    // DELETE FROM jobs WHERE id = ?
+    if (q.includes("DELETE FROM jobs WHERE id = ?")) {
+      const id = String(this.boundValues[0]);
+      this.db.tables.get("jobs")!.delete(id);
+      return { success: true };
+    }
+
+    // INSERT INTO crawl_tasks
+    if (q.includes("INTO crawl_tasks")) {
+      const [
+        id, targetUrl, sourceType, status, companyId,
+        jobsFound, errorMessage, metadata, createdAt, completedAt
+      ] = this.boundValues;
+
+      const record: Record<string, unknown> = {
+        id: String(id),
+        target_url: String(targetUrl),
+        source_type: String(sourceType),
+        status: String(status),
+        company_id: companyId ? String(companyId) : null,
+        jobs_found: Number(jobsFound ?? 0),
+        error_message: errorMessage ? String(errorMessage) : null,
+        metadata: String(metadata ?? "{}"),
+        created_at: Number(createdAt),
+        completed_at: completedAt ? Number(completedAt) : null,
+      };
+
+      this.db.tables.get("crawl_tasks")!.set(String(id), record);
+      return { success: true };
+    }
+
+    // UPDATE crawl_tasks SET ... WHERE id = ?
+    if (q.includes("UPDATE crawl_tasks SET")) {
+      const table = this.db.tables.get("crawl_tasks")!;
+      const id = String(this.boundValues[this.boundValues.length - 1]);
+      const record = table.get(id);
+      if (record) {
+        let valIndex = 0;
+        if (q.includes("status = ?")) {
+          record["status"] = String(this.boundValues[valIndex++]);
+        }
+        if (q.includes("company_id = ?")) {
+          const cId = this.boundValues[valIndex++];
+          record["company_id"] = cId ? String(cId) : null;
+        }
+        if (q.includes("jobs_found = ?")) {
+          record["jobs_found"] = Number(this.boundValues[valIndex++]);
+        }
+        if (q.includes("error_message = ?")) {
+          const em = this.boundValues[valIndex++];
+          record["error_message"] = em ? String(em) : null;
+        }
+        if (q.includes("completed_at = ?")) {
+          const ca = this.boundValues[valIndex++];
+          record["completed_at"] = ca ? Number(ca) : null;
+        }
+        if (q.includes("metadata = ?")) {
+          record["metadata"] = String(this.boundValues[valIndex++]);
+        }
+      }
       return { success: true };
     }
 

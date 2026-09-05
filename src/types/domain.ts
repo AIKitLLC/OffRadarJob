@@ -106,6 +106,7 @@ export type JobStatus = z.infer<typeof JobStatusEnum>;
 
 export const SeniorityLevelEnum = z.enum([
   "intern",
+  "new_grad",
   "junior",
   "mid",
   "senior",
@@ -171,3 +172,24 @@ export const CrawlLogSchema = z.object({
   createdAt: z.number().int().positive(),
 });
 export type CrawlLog = z.infer<typeof CrawlLogSchema>;
+
+// -----------------------------------------------------------------------------
+// Crawl Task / Process Schema (Admin Control Center)
+// -----------------------------------------------------------------------------
+
+export const CrawlTaskStatusEnum = z.enum(["pending", "running", "completed", "failed"]);
+export type CrawlTaskStatus = z.infer<typeof CrawlTaskStatusEnum>;
+
+export const CrawlTaskSchema = z.object({
+  id: z.string().min(1),
+  targetUrl: z.string().min(1),
+  sourceType: z.string().default("manual"), // 'manual', 'batch', 'scheduled', 'midwest_preset'
+  status: CrawlTaskStatusEnum,
+  companyId: z.string().nullable().optional(),
+  jobsFound: z.number().int().nonnegative().default(0),
+  errorMessage: z.string().nullable().optional(),
+  metadata: z.record(z.unknown()).default({}),
+  createdAt: z.number().int().positive(),
+  completedAt: z.number().int().positive().nullable().optional(),
+});
+export type CrawlTask = z.infer<typeof CrawlTaskSchema>;

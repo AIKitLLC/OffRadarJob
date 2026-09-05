@@ -1,0 +1,63 @@
+-- Migration: 0005_seed_new_grad_jobs.sql
+-- Seed New Grad & Entry Level off-radar tech jobs in US-Midwest
+
+INSERT OR IGNORE INTO jobs (
+  id, company_id, career_page_id, title, department,
+  seniority_level, tech_category, is_tech_role,
+  employment_type, location, is_remote, remote_scope,
+  salary_min, salary_max, salary_currency, skills,
+  description_summary, raw_content, apply_type, apply_target,
+  status, content_hash, first_seen_at, last_seen_at
+) VALUES 
+(
+  'job_sfg_newgrad',
+  'comp_softwareforgood_com',
+  'page_sfg',
+  'Junior / New Grad Full-Stack Engineer (Class of 2025/2026)',
+  'Engineering',
+  'new_grad',
+  'fullstack',
+  1,
+  'full-time',
+  'Minneapolis, MN / Remote (US Midwest)',
+  1,
+  'us_midwest',
+  75000,
+  92000,
+  'USD',
+  '["TypeScript", "React", "Node.js", "PostgreSQL", "Git"]',
+  'Designed specifically for recent college graduates and entry-level engineers with strong foundations in TypeScript and web engineering.',
+  'We pair all new grads with senior engineer mentors. 100% remote friendly across the Midwest with 36-hour workweeks.',
+  'email',
+  'careers@softwareforgood.com',
+  'open',
+  'hash_midwest_newgrad_1',
+  1757000000000,
+  1757000000000
+),
+(
+  'job_gaslight_newgrad',
+  'comp_gaslight_co',
+  'page_gaslight',
+  'Associate / New Grad Software Engineer',
+  'Engineering',
+  'new_grad',
+  'backend_systems',
+  1,
+  'full-time',
+  'Cincinnati, OH / Remote (Midwest)',
+  1,
+  'us_midwest',
+  78000,
+  95000,
+  'USD',
+  '["Ruby", "Elixir", "PostgreSQL", "JavaScript", "Linux"]',
+  'Entry-level role for new grads passionate about software craftsmanship, clean code, and distributed backend systems.',
+  'Mentorship program with experienced developers in Cincinnati, OH and remote.',
+  'email',
+  'careers@gaslight.co',
+  'open',
+  'hash_midwest_newgrad_2',
+  1757000000000,
+  1757000000000
+);

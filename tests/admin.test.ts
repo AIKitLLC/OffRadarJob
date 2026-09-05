@@ -1,0 +1,249 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { InMemoryD1Database } from "../src/db/in-memory-db.js";
+import {
+  CrawlTaskRepository,
+  JobRepository,
+  CompanyRepository,
+  LogRepository,
+} from "../src/db/repositories.js";
+import { PipelineOrchestrator } from "../src/orchestrator/dispatcher.js";
+import { MOCK_FIXTURES } from "../src/demo/mock-seed.js";
+import worker from "../src/index.js";
+
+describe("Admin Control Center Suite", () => {
+  let db: InMemoryD1Database;
+  let taskRepo: CrawlTaskRepository;
+  let jobRepo: JobRepository;
+  let companyRepo: CompanyRepository;
+  let logRepo: LogRepository;
+
+  beforeEach(() => {
+    db = new InMemoryD1Database();
+    taskRepo = new CrawlTaskRepository(db);
+    jobRepo = new JobRepository(db);
+    companyRepo = new CompanyRepository(db);
+    logRepo = new LogRepository(db);
+
+    globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+      const urlStr = typeof input === "string" ? input : input.toString();
+
+      for (const fix of MOCK_FIXTURES) {
+        if (urlStr === fix.url || urlStr === `${fix.url}/`) {
+          return new Response(fix.homepageHtml, {
+            status: 200,
+            headers: { "Content-Type": "text/html" },
+          });
+        }
+        if (fix.careerPages[urlStr]) {
+          return new Response(fix.careerPages[urlStr]!, {
+            status: 200,
+            headers: { "Content-Type": "text/html" },
+          });
+        }
+      }
+      return new Response("Not found", { status: 404 });
+    };
+  });
+
+  describe("CrawlTaskRepository", () => {
+    it("should create, list, and update crawl tasks", async () => {
+      const now = Date.now();
+      await taskRepo.create({
+        id: "task_test_1",
+        targetUrl: "https://midweststudio.io",
+        sourceType: "midwest_preset",
+        status: "pending",
+        jobsFound: 0,
+        metadata: { region: "midwest" },
+        createdAt: now,
+      });
+
+      const tasks = await taskRepo.list();
+      expect(tasks.length).toBe(1);
+      expect(tasks[0]?.id).toBe("task_test_1");
+      expect(tasks[0]?.status).toBe("pending");
+
+      // Update to running then completed
+      await taskRepo.update("task_test_1", { status: "running" });
+      let updated = await taskRepo.getById("task_test_1");
+      expect(updated?.status).toBe("running");
+
+      await taskRepo.update("task_test_1", {
+        status: "completed",
+        jobsFound: 2,
+        completedAt: now + 500,
+      });
+      updated = await taskRepo.getById("task_test_1");
+      expect(updated?.status).toBe("completed");
+      expect(updated?.jobsFound).toBe(2);
+
+      // Verify stats
+      const stats = await taskRepo.getStats();
+      expect(stats.total).toBe(1);
+      expect(stats.completed).toBe(1);
+      expect(stats.jobsFound).toBe(2);
+    });
+  });
+
+  describe("JobRepository Moderation", () => {
+    it("should update job status and delete jobs", async () => {
+      const testJob = {
+        id: "job_mod_1",
+        companyId: "comp_1",
+        careerPageId: "page_1",
+        title: "Senior Rust Engineer",
+        seniorityLevel: "senior" as const,
+        techCategory: "backend_systems" as const,
+        isTechRole: true,
+        employmentType: "full-time" as const,
+        isRemote: true,
+        remoteScope: "us_midwest",
+        skills: ["Rust", "Distributed Systems"],
+        applyType: "email" as const,
+        applyTarget: "founders@midweststudio.io",
+        status: "open" as const,
+        contentHash: "hash_mod_1",
+        firstSeenAt: Date.now(),
+        lastSeenAt: Date.now(),
+      };
+
+      await jobRepo.upsert(testJob);
+      let job = await jobRepo.getById("job_mod_1");
+      expect(job).not.toBeNull();
+      expect(job?.status).toBe("open");
+
+      // Toggle status to closed
+      await jobRepo.updateStatus("job_mod_1", "closed");
+      job = await jobRepo.getById("job_mod_1");
+      expect(job?.status).toBe("closed");
+
+      // Delete job
+      await jobRepo.delete("job_mod_1");
+      job = await jobRepo.getById("job_mod_1");
+      expect(job).toBeNull();
+    });
+
+    it("should filter jobs by new_grad grade", async () => {
+      await jobRepo.upsert({
+        id: "job_ng_test",
+        companyId: "comp_1",
+        careerPageId: "page_1",
+        title: "New Grad Software Engineer (2025)",
+        seniorityLevel: "new_grad",
+        techCategory: "fullstack",
+        isTechRole: true,
+        employmentType: "full-time",
+        isRemote: true,
+        remoteScope: "us_midwest",
+        skills: ["TypeScript", "React"],
+        applyType: "email",
+        applyTarget: "careers@test.com",
+        status: "open",
+        contentHash: "hash_ng_1",
+        firstSeenAt: Date.now(),
+        lastSeenAt: Date.now(),
+      });
+
+      const newGradJobs = await jobRepo.list({ grade: "new_grad" });
+      expect(newGradJobs.length).toBe(1);
+      expect(newGradJobs[0]?.seniorityLevel).toBe("new_grad");
+    });
+  });
+
+  describe("PipelineOrchestrator Task Tracking", () => {
+    it("should automatically track crawl task lifecycle in D1", async () => {
+      const orchestrator = new PipelineOrchestrator(db);
+      const res = await orchestrator.processSeedAsync(
+        "https://tinysaas.dev",
+        "manual_test"
+      );
+
+      expect(res.taskId).toBeDefined();
+      expect(res.companies.length).toBeGreaterThan(0);
+
+      const task = await taskRepo.getById(res.taskId);
+      expect(task).not.toBeNull();
+      expect(task?.status).toBe("completed");
+      expect(task?.jobsFound).toBeGreaterThan(0);
+      expect(task?.completedAt).toBeDefined();
+    });
+  });
+
+  describe("Worker Admin Endpoints & Security", () => {
+    const mockCtx = {
+      waitUntil: (p: Promise<unknown>) => p,
+      passThroughOnException: () => {},
+    } as any;
+
+    it("should deny unauthorized access to /api/admin/* without token", async () => {
+      const req = new Request("http://localhost/api/admin/tasks");
+      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      expect(res.status).toBe(401);
+    });
+
+    it("should allow authorized access to /api/admin/stats with header or query token", async () => {
+      const req = new Request("http://localhost/api/admin/stats?token=offradar-admin-2026");
+      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.tasks).toBeDefined();
+      expect(data.companiesCount).toBeDefined();
+    });
+
+    it("should render admin UI on /admin", async () => {
+      const req = new Request("http://localhost/admin");
+      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain("OffRadarJob Control Center");
+      expect(html).toContain("Crawl Tasks Monitor");
+      expect(html).toContain("Job Moderation");
+    });
+
+    it("should dispatch a crawl task via POST /api/admin/tasks/create", async () => {
+      const req = new Request("http://localhost/api/admin/tasks/create?token=offradar-admin-2026", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: "https://boutiquestudio.design", source: "admin_test" }),
+      });
+
+      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      expect(res.status).toBe(200);
+      const body = await res.json() as any;
+      expect(body.success).toBe(true);
+      expect(body.taskId).toBeDefined();
+
+      const createdTask = await taskRepo.getById(body.taskId);
+      expect(createdTask).not.toBeNull();
+      expect(createdTask?.targetUrl).toBe("https://boutiquestudio.design");
+    });
+
+    it("should dispatch public source harvest tasks via POST /api/admin/harvest/hn and /github", async () => {
+      // Test HN Harvest endpoint
+      const reqHn = new Request("http://localhost/api/admin/harvest/hn?token=offradar-admin-2026", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 5 }),
+      });
+      const resHn = await worker.fetch(reqHn, { DB: db } as any, mockCtx);
+      expect(resHn.status).toBe(200);
+      const dataHn = await resHn.json() as any;
+      expect(dataHn.success).toBe(true);
+      expect(dataHn.source).toBe("hn");
+      expect(dataHn.status).toBe("harvest_started");
+
+      // Test GitHub Harvest endpoint
+      const reqGh = new Request("http://localhost/api/admin/harvest/github?token=offradar-admin-2026", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 5 }),
+      });
+      const resGh = await worker.fetch(reqGh, { DB: db } as any, mockCtx);
+      expect(resGh.status).toBe(200);
+      const dataGh = await resGh.json() as any;
+      expect(dataGh.success).toBe(true);
+      expect(dataGh.source).toBe("github");
+      expect(dataGh.status).toBe("harvest_started");
+    });
+  });
+});

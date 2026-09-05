@@ -303,6 +303,7 @@ export function renderDashboardHtml(): string {
     .tag-grade-senior { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
     .tag-grade-mid { background: rgba(45, 212, 191, 0.15); color: #2dd4bf; }
     .tag-grade-junior { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+    .tag-grade-newgrad { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); font-weight: 600; }
     .tag-cat { background: #1e1b4b; color: #a5b4fc; border: 1px solid #312e81; }
 
     .filter-controls {
@@ -320,9 +321,12 @@ export function renderDashboardHtml(): string {
         <h1><span>🎯</span> OffRadarJob Gatherer</h1>
         <p>Decoupled Cloudflare Agent Pipeline for Micro-Companies & Unlisted Tech Jobs</p>
       </div>
-      <div class="status-badge">
-        <span class="status-dot"></span>
-        Cloudflare Edge Active
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <a href="/admin" style="text-decoration: none; color: #38bdf8; font-size: 13px; font-weight: 600; padding: 6px 14px; border: 1px solid #1f2a44; border-radius: 8px; background: #131b2e;">⚙️ Admin Control Center</a>
+        <div class="status-badge">
+          <span class="status-dot"></span>
+          Cloudflare Edge Active
+        </div>
       </div>
     </header>
 
@@ -377,10 +381,13 @@ export function renderDashboardHtml(): string {
       <div class="filter-controls">
         <select id="grade-filter" class="region-select" onchange="applyFilters()">
           <option value="all">🎓 All Grades / Seniority</option>
-          <option value="founding">🚀 Founding / Lead / Staff</option>
+          <option value="founding">🚀 Founding / Principal</option>
+          <option value="lead">👑 Lead / Staff</option>
           <option value="senior">💎 Senior</option>
           <option value="mid">⚡ Mid-Level</option>
-          <option value="junior">🌱 Junior / Intern</option>
+          <option value="junior">🌱 Junior</option>
+          <option value="new_grad">🎓 New Grad / Entry Level</option>
+          <option value="intern">🐣 Intern</option>
         </select>
         <select id="tech-filter" class="region-select" onchange="applyFilters()">
           <option value="all">💻 All Tech Disciplines</option>
@@ -464,8 +471,10 @@ export function renderDashboardHtml(): string {
         case 'founding': return '<span class="tag tag-grade-founding">🚀 Founding</span>';
         case 'lead': return '<span class="tag tag-grade-lead">👑 Lead / Staff</span>';
         case 'senior': return '<span class="tag tag-grade-senior">💎 Senior</span>';
+        case 'mid': return '<span class="tag tag-grade-mid">⚡ Mid-Level</span>';
         case 'junior': return '<span class="tag tag-grade-junior">🌱 Junior</span>';
-        case 'intern': return '<span class="tag tag-grade-junior">🌱 Intern</span>';
+        case 'new_grad': return '<span class="tag tag-grade-newgrad">🎓 New Grad</span>';
+        case 'intern': return '<span class="tag tag-grade-junior">🐣 Intern</span>';
         default: return '<span class="tag tag-grade-mid">⚡ Mid-Level</span>';
       }
     }
@@ -504,13 +513,19 @@ export function renderDashboardHtml(): string {
 
       // 3. Grade filter
       if (grade === 'founding') {
-        filtered = filtered.filter(j => j.seniorityLevel === 'founding' || j.seniorityLevel === 'lead');
+        filtered = filtered.filter(j => j.seniorityLevel === 'founding');
+      } else if (grade === 'lead') {
+        filtered = filtered.filter(j => j.seniorityLevel === 'lead');
       } else if (grade === 'senior') {
         filtered = filtered.filter(j => j.seniorityLevel === 'senior');
       } else if (grade === 'mid') {
         filtered = filtered.filter(j => j.seniorityLevel === 'mid');
       } else if (grade === 'junior') {
-        filtered = filtered.filter(j => j.seniorityLevel === 'junior' || j.seniorityLevel === 'intern');
+        filtered = filtered.filter(j => j.seniorityLevel === 'junior');
+      } else if (grade === 'new_grad') {
+        filtered = filtered.filter(j => j.seniorityLevel === 'new_grad');
+      } else if (grade === 'intern') {
+        filtered = filtered.filter(j => j.seniorityLevel === 'intern');
       }
 
       // 4. Tech discipline filter

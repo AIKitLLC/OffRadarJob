@@ -274,11 +274,24 @@ export class JobExtractorAgent extends BaseAgent {
       return "intern";
     }
     if (
+      lower.includes("new grad") ||
+      lower.includes("new-grad") ||
+      lower.includes("new graduate") ||
+      lower.includes("recent grad") ||
+      lower.includes("recent graduate") ||
+      lower.includes("fresh grad") ||
+      lower.includes("fresh graduate") ||
+      lower.includes("entry-level") ||
+      lower.includes("entry level") ||
+      lower.includes("college grad") ||
+      lower.includes("university grad")
+    ) {
+      return "new_grad";
+    }
+    if (
       lower.includes("junior") ||
       lower.includes("jr.") ||
       lower.includes("jr ") ||
-      lower.includes("entry-level") ||
-      lower.includes("entry level") ||
       lower.includes("associate")
     ) {
       return "junior";

@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "demo": "tsx src/demo/local-runner.ts",
+    "feed:continuous": "tsx src/scripts/continuous-batch-feeder.ts",
+    "harvest:public": "tsx src/scripts/harvest-public-sources.ts",
     "cf-db:init": "wrangler d1 execute DB --local --file=migrations/0001_initial_schema.sql"
   },
   "dependencies": {
