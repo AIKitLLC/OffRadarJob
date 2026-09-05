@@ -1,0 +1,65 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "off-radar-jobs",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-02-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "off_radar_db",
+      "database_id": "local-off-radar-db",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "local-cache-kv"
+    }
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "DISCOVERY_QUEUE", "queue": "discovery-queue" },
+      { "binding": "PROFILE_QUEUE", "queue": "profile-queue" },
+      { "binding": "HUNT_QUEUE", "queue": "career-hunt-queue" },
+      { "binding": "EXTRACT_QUEUE", "queue": "job-extract-queue" },
+      { "binding": "DLQ", "queue": "off-radar-dlq" }
+    ],
+    "consumers": [
+      {
+        "queue": "discovery-queue",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "off-radar-dlq"
+      },
+      {
+        "queue": "profile-queue",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "off-radar-dlq"
+      },
+      {
+        "queue": "career-hunt-queue",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "off-radar-dlq"
+      },
+      {
+        "queue": "job-extract-queue",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "off-radar-dlq"
+      }
+    ]
+  },
+  "triggers": {
+    "crons": [
+      "0 */6 * * *"
+    ]
+  }
+}
