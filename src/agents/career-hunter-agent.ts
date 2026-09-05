@@ -64,6 +64,19 @@ export class CareerHunterAgent extends BaseAgent {
       let foundPagesCount = 0;
 
       for (const targetUrl of targets) {
+        try {
+          const parsed = new URL(targetUrl);
+          if (
+            (parsed.hostname.includes("ashbyhq.com") && parsed.pathname.length <= 1) ||
+            (parsed.hostname.includes("forms.gle") && parsed.pathname.length <= 1) ||
+            (parsed.hostname.includes("linkedin.com") && !targetUrl.includes("/jobs/view/"))
+          ) {
+            continue;
+          }
+        } catch {
+          continue;
+        }
+
         await this.politeDelay(200, 400);
 
         const pageType = this.determinePageType(targetUrl);
@@ -78,7 +91,8 @@ export class CareerHunterAgent extends BaseAgent {
 
         if (hasHiringSignals || pageType !== "internal_page") {
           const now = Date.now();
-          const pageId = `page_${msg.companyId}_${Math.random().toString(36).substring(2, 8)}`;
+          const existing = await this.careerPageRepo.findByUrl(targetUrl);
+          const pageId = existing?.id ?? `page_${msg.companyId}_${Math.random().toString(36).substring(2, 8)}`;
 
           const careerPage: CareerPage = {
             id: pageId,
@@ -87,7 +101,7 @@ export class CareerHunterAgent extends BaseAgent {
             pageType,
             status: "active",
             lastCheckedAt: now,
-            createdAt: now,
+            createdAt: existing?.createdAt ?? now,
           };
 
           await this.careerPageRepo.upsert(careerPage);

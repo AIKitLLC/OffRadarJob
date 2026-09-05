@@ -1,10 +1,10 @@
 /**
- * Comprehensive Data Updater for OffRadarJob
- * Orchestrates multi-source ingestion:
+ * Comprehensive Data Updater & Continuous Scaling Engine for OffRadarJob
+ * Multi-Source Ingestion:
  * 1. Curated US SMBs & Boutique Tech Studios (90+ companies)
  * 2. Established Remote Tech Companies (78 companies)
- * 3. Hacker News "Who is Hiring" Monthly Thread (80+ companies with active hiring posts)
- * 4. GitHub remoteintech Curated Micro & Small Tech Companies (60+ companies)
+ * 3. Multi-Month Hacker News "Who is Hiring" Threads (September & August 2026 - 400 comments)
+ * 4. GitHub remoteintech Curated Micro & Small Tech Companies (120+ companies)
  *
  * Generates clean, robust SQL batch for Cloudflare D1 with foreign key safety.
  *
@@ -59,24 +59,26 @@ function hashString(input: string): string {
   return crypto.createHash("sha256").update(input).digest("hex").substring(0, 32);
 }
 
-const REMOTEINTECH_VETTED_SLUGS = [
-  "10up", "15five", "ably", "aerolab", "aerostrat", "aestudio", "aha", "airbyte", "airgarage",
-  "automattic", "buffer", "carto", "close", "doist", "duckduckgo", "elastic", "ghost",
-  "gitlab", "grafana", "hasura", "help-scout", "honeycomb", "hotjar", "invision", "knapsack",
-  "launchdarkly", "linear", "mattermost", "meilisearch", "netlify", "postman", "prisma",
-  "sanity", "sentry", "sourcegraph", "spreedly", "stripe", "supabase", "tailscale",
-  "transistor", "trigger-dev", "turso", "twist", "typeform", "vizzuality", "zapier",
-  "codeship", "compose", "crate-io", "exercism", "expo", "fastly", "fauna",
-  "front", "gatsby", "gitbook", "gitter", "hashicorp", "heroku", "logdna",
-  "mixpanel", "mullvad", "observable", "octobox", "olark", "openphone", "pagerduty",
-  "pantheon", "plausible", "replit", "shogun", "signal", "split", "statuspage",
-  "teamwork", "tigera", "toggl", "toptal", "travis-ci", "tus", "upstatement",
-  "vanna", "vimeo", "webflow", "wp-engine", "zeit", "zerotier"
-];
+function isGenericDomain(domain: string): boolean {
+  const d = domain.toLowerCase();
+  return (
+    d === "forms.gle" ||
+    d === "docs.google.com" ||
+    d === "ashbyhq.com" ||
+    d === "jobs.ashbyhq.com" ||
+    d === "greenhouse.io" ||
+    d === "boards.greenhouse.io" ||
+    d === "lever.co" ||
+    d === "jobs.lever.co" ||
+    d === "linkedin.com" ||
+    d === "notion.site" ||
+    d === "notion.so"
+  );
+}
 
 async function main() {
   console.log("===================================================================");
-  console.log("🚀 Starting Comprehensive OffRadarJob Directory & Job Update");
+  console.log("🚀 Starting Scaled OffRadarJob Ingestion & Deduplication Pipeline");
   console.log("===================================================================\n");
 
   const companyMap = new Map<string, CompanyRecord>();
@@ -86,7 +88,7 @@ async function main() {
   console.log(`[1/4] Processing ${CURATED_SEEDS.length} Curated US SMBs & Labs...`);
   for (const seed of CURATED_SEEDS) {
     const domain = extractDomainFromUrl(seed.url);
-    if (!domain) continue;
+    if (!domain || isGenericDomain(domain)) continue;
 
     companyMap.set(domain, {
       id: `comp_${domain.replace(/[^a-z0-9]/g, "_")}`,
@@ -117,7 +119,7 @@ async function main() {
     console.log(`  Fetched ${estProfiles.length} profiles from established-remote.`);
 
     for (const p of estProfiles) {
-      if (!p.domain) continue;
+      if (!p.domain || isGenericDomain(p.domain)) continue;
       const existing = companyMap.get(p.domain);
       if (existing) {
         if (p.careersUrl && !existing.careersUrl) existing.careersUrl = p.careersUrl;
@@ -148,95 +150,140 @@ async function main() {
   }
   console.log(`  -> Accumulated ${companyMap.size} unique companies so far.`);
 
-  // 3. HARVEST HACKER NEWS "WHO IS HIRING" (100 comments)
-  console.log("\n[3/4] Harvesting latest Hacker News 'Ask HN: Who is hiring?' thread...");
+  // 3. HARVEST MULTI-MONTH HACKER NEWS THREADS (September & August 2026 - 400 comments)
+  console.log("\n[3/4] Harvesting Hacker News Multi-Month Hiring Threads...");
   try {
     const hnHarvester = new HackerNewsHarvester();
-    const story = await hnHarvester.fetchLatestHiringStory();
-    if (story) {
-      console.log(`  Hacker News Story: "${story.title}" (ID: ${story.id}, ${story.numComments} comments)`);
-      const hnProfiles = await hnHarvester.harvestStoryComments(story.id, 100);
-      console.log(`  Parsed ${hnProfiles.length} company posts from HN comments.`);
+    const stories = [
+      { id: "49522897", title: "September 2026" },
+      { id: "49156683", title: "August 2026" },
+    ];
 
-      for (const p of hnProfiles) {
-        if (!p.domain) continue;
-        const existing = companyMap.get(p.domain);
-        if (existing) {
-          if (p.contactEmail && !existing.contactEmail) existing.contactEmail = p.contactEmail;
-          if (p.careersUrl && !existing.careersUrl) existing.careersUrl = p.careersUrl;
-          if (p.inlineRoles.length > 0) existing.inlineRoles.push(...p.inlineRoles);
-          if (p.techStack.length > 0) existing.techStack = Array.from(new Set([...existing.techStack, ...p.techStack]));
-        } else {
-          companyMap.set(p.domain, {
-            id: `comp_${p.domain.replace(/[^a-z0-9]/g, "_")}`,
-            domain: p.domain,
-            name: p.name,
-            tagline: p.tagline || `Hiring tech team on Hacker News`,
-            description: p.description || `${p.name} software engineering team.`,
-            websiteUrl: p.websiteUrl,
-            logoUrl: null,
-            industry: p.industry || "Technology",
-            techStack: p.techStack,
-            socialLinks: p.socialLinks,
-            contactEmail: p.contactEmail,
-            headcountEstimate: p.headcountEstimate || "5-50",
-            locationHint: p.locationHint || "US / Remote",
-            discoverySource: "hn_whoishiring",
-            careersUrl: p.careersUrl,
-            inlineRoles: p.inlineRoles,
-          });
+    let hnAdded = 0;
+    let rolesAdded = 0;
+
+    for (const s of stories) {
+      console.log(`  Fetching Ask HN: Who is hiring? (${s.title})...`);
+      for (let page = 0; page < 2; page++) {
+        const url = `https://hn.algolia.com/api/v1/search?tags=comment,story_${s.id}&hitsPerPage=100&page=${page}`;
+        const res = await fetch(url, { headers: { "User-Agent": "OffRadarJobHarvester/1.0" } });
+        if (!res.ok) continue;
+
+        const data = (await res.json()) as { hits?: any[] };
+        for (const hit of data.hits || []) {
+          if (!hit.comment_text || String(hit.parent_id) !== String(s.id)) continue;
+
+          const p = hnHarvester.parseHnComment(hit);
+          if (!p || !p.domain || isGenericDomain(p.domain)) continue;
+
+          const existing = companyMap.get(p.domain);
+          if (existing) {
+            if (p.contactEmail && !existing.contactEmail) existing.contactEmail = p.contactEmail;
+            if (p.careersUrl && !existing.careersUrl) existing.careersUrl = p.careersUrl;
+            if (p.inlineRoles.length > 0) {
+              existing.inlineRoles.push(...p.inlineRoles);
+              rolesAdded += p.inlineRoles.length;
+            }
+            if (p.techStack.length > 0) {
+              existing.techStack = Array.from(new Set([...existing.techStack, ...p.techStack]));
+            }
+          } else {
+            hnAdded++;
+            rolesAdded += p.inlineRoles.length;
+            companyMap.set(p.domain, {
+              id: `comp_${p.domain.replace(/[^a-z0-9]/g, "_")}`,
+              domain: p.domain,
+              name: p.name,
+              tagline: p.tagline || `Hiring tech team on Hacker News (${s.title})`,
+              description: p.description || `${p.name} software engineering team.`,
+              websiteUrl: p.websiteUrl,
+              logoUrl: null,
+              industry: p.industry || "Technology",
+              techStack: p.techStack,
+              socialLinks: p.socialLinks,
+              contactEmail: p.contactEmail,
+              headcountEstimate: p.headcountEstimate || "5-50",
+              locationHint: p.locationHint || "US / Remote",
+              discoverySource: `hn_${s.title.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+              careersUrl: p.careersUrl,
+              inlineRoles: p.inlineRoles,
+            });
+          }
         }
       }
     }
+    console.log(`  Parsed ${hnAdded} new company profiles and ${rolesAdded} roles from HN.`);
   } catch (err) {
     console.error("  Failed to harvest Hacker News:", err);
   }
   console.log(`  -> Accumulated ${companyMap.size} unique companies so far.`);
 
-  // 4. HARVEST REMOTEINTECH VETTED SLUGS
-  console.log("\n[4/4] Harvesting remoteintech/remote-jobs directory...");
+  // 4. HARVEST REMOTEINTECH EXPANDED SLUGS (120 companies)
+  console.log("\n[4/4] Harvesting remoteintech/remote-jobs expanded directory (120 companies)...");
   try {
     const ghHarvester = new GitHubDirectoryHarvester();
-    let remoteInTechCount = 0;
-    for (const slug of REMOTEINTECH_VETTED_SLUGS) {
-      try {
-        const url = `https://cdn.jsdelivr.net/gh/remoteintech/remote-jobs@main/src/companies/${slug}.md`;
-        const res = await fetch(url, { headers: { "User-Agent": "OffRadarJobHarvester/1.0" } });
-        if (!res.ok) continue;
-        const content = await res.text();
-        const p = ghHarvester.parseRemoteInTechMarkdown(content);
-        if (!p || !p.domain) continue;
+    const contentsRes = await fetch(
+      "https://api.github.com/repos/remoteintech/remote-jobs/contents/src/companies",
+      { headers: { "User-Agent": "OffRadarJobHarvester/1.0" } }
+    );
 
-        remoteInTechCount++;
-        const existing = companyMap.get(p.domain);
-        if (existing) {
-          if (p.careersUrl && !existing.careersUrl) existing.careersUrl = p.careersUrl;
-          if (p.techStack.length > 0) existing.techStack = Array.from(new Set([...existing.techStack, ...p.techStack]));
-        } else {
-          companyMap.set(p.domain, {
-            id: `comp_${p.domain.replace(/[^a-z0-9]/g, "_")}`,
-            domain: p.domain,
-            name: p.name,
-            tagline: p.tagline || `Remote engineering studio (${p.headcountEstimate})`,
-            description: p.description || `${p.name} remote software development team.`,
-            websiteUrl: p.websiteUrl,
-            logoUrl: null,
-            industry: p.industry || "Software & Services",
-            techStack: p.techStack,
-            socialLinks: p.socialLinks,
-            contactEmail: p.contactEmail,
-            headcountEstimate: p.headcountEstimate || "10-100",
-            locationHint: p.locationHint || "Remote / US",
-            discoverySource: "remoteintech",
-            careersUrl: p.careersUrl,
-            inlineRoles: p.inlineRoles,
-          });
-        }
-      } catch {
-        // ignore
+    let remoteInTechCount = 0;
+    if (contentsRes.ok) {
+      const files = (await contentsRes.json()) as Array<{ name: string }>;
+      const slugs = files
+        .map((f) => f.name.replace(/\.md$/, ""))
+        .filter((s) => s !== "README")
+        .slice(0, 130);
+
+      // Process in batches of 10 for speed
+      const batchSize = 10;
+      for (let i = 0; i < slugs.length; i += batchSize) {
+        const batch = slugs.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map(async (slug) => {
+            try {
+              const url = `https://cdn.jsdelivr.net/gh/remoteintech/remote-jobs@main/src/companies/${slug}.md`;
+              const r = await fetch(url);
+              if (!r.ok) return;
+              const text = await r.text();
+              const p = ghHarvester.parseRemoteInTechMarkdown(text);
+              if (!p || !p.domain || isGenericDomain(p.domain)) return;
+
+              remoteInTechCount++;
+              const existing = companyMap.get(p.domain);
+              if (existing) {
+                if (p.careersUrl && !existing.careersUrl) existing.careersUrl = p.careersUrl;
+                if (p.techStack.length > 0) {
+                  existing.techStack = Array.from(new Set([...existing.techStack, ...p.techStack]));
+                }
+              } else {
+                companyMap.set(p.domain, {
+                  id: `comp_${p.domain.replace(/[^a-z0-9]/g, "_")}`,
+                  domain: p.domain,
+                  name: p.name,
+                  tagline: p.tagline || `Remote engineering studio (${p.headcountEstimate})`,
+                  description: p.description || `${p.name} remote software development team.`,
+                  websiteUrl: p.websiteUrl,
+                  logoUrl: null,
+                  industry: p.industry || "Software & Services",
+                  techStack: p.techStack,
+                  socialLinks: p.socialLinks,
+                  contactEmail: p.contactEmail,
+                  headcountEstimate: p.headcountEstimate || "10-100",
+                  locationHint: p.locationHint || "Remote / US",
+                  discoverySource: "remoteintech",
+                  careersUrl: p.careersUrl,
+                  inlineRoles: p.inlineRoles,
+                });
+              }
+            } catch {
+              // ignore individual slug fetch errors
+            }
+          })
+        );
       }
+      console.log(`  Parsed ${remoteInTechCount} profiles from remoteintech.`);
     }
-    console.log(`  Parsed ${remoteInTechCount} valid profiles from remoteintech.`);
   } catch (err) {
     console.error("  Failed to harvest remoteintech:", err);
   }
@@ -309,7 +356,7 @@ async function main() {
       );`
     );
 
-    // 5C. Jobs (Safely join against career_pages table to resolve valid career_page_id)
+    // 5C. Jobs
     for (const r of c.inlineRoles) {
       const title = r.title.trim();
       const contentHash = hashString(`${c.id}_${title.toLowerCase()}`);
@@ -372,7 +419,7 @@ async function main() {
   }
 
   const fullSql = [
-    "-- OffRadarJob Comprehensive Batch Update",
+    "-- OffRadarJob Scaled Ingestion Batch",
     "PRAGMA foreign_keys = OFF;",
     "",
     "-- 1. Companies",
