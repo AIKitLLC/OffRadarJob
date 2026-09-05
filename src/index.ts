@@ -84,21 +84,29 @@ export default {
 
     // 3. API: List Gathered Jobs
     if (path === "/api/jobs" && request.method === "GET") {
-      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "100", 10), 500);
+      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "100", 10), 2500);
       const grade = url.searchParams.get("grade") ?? url.searchParams.get("seniority") ?? undefined;
       const techCategory = url.searchParams.get("tech_category") ?? undefined;
       const techOnlyParam = url.searchParams.get("tech_only");
       const techOnly = techOnlyParam === "false" ? false : true;
 
       const jobs = await jobRepo.list({ limit, grade, techCategory, techOnly });
-      return Response.json(jobs);
+      return Response.json(jobs, {
+        headers: {
+          "Cache-Control": "public, max-age=30, s-maxage=120, stale-while-revalidate=300",
+        },
+      });
     }
 
     // 4. API: List Micro-Companies
     if (path === "/api/companies" && request.method === "GET") {
-      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "100", 10), 500);
+      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "100", 10), 2500);
       const companies = await companyRepo.list(limit);
-      return Response.json(companies);
+      return Response.json(companies, {
+        headers: {
+          "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+        },
+      });
     }
 
     // 5. API: Stats & Telemetry Logs
@@ -108,12 +116,19 @@ export default {
         jobRepo.count(),
         logRepo.getRecent(30),
       ]);
-      return Response.json({
-        companiesCount,
-        jobsCount,
-        logsCount: recentLogs.length,
-        recentLogs,
-      });
+      return Response.json(
+        {
+          companiesCount,
+          jobsCount,
+          logsCount: recentLogs.length,
+          recentLogs,
+        },
+        {
+          headers: {
+            "Cache-Control": "public, max-age=15, s-maxage=60, stale-while-revalidate=120",
+          },
+        }
+      );
     }
 
     // 6. Admin API: Stats & Task Metrics

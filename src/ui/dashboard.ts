@@ -379,6 +379,7 @@ export function renderDashboardHtml(): string {
         <button class="tab-btn" onclick="switchTab('telemetry')">Agent Telemetry & Logs</button>
       </div>
       <div class="filter-controls">
+        <input type="text" id="search-input" placeholder="🔍 Search roles, tech, or companies..." class="region-select" style="min-width: 250px;" oninput="applyFilters()" />
         <select id="grade-filter" class="region-select" onchange="applyFilters()">
           <option value="all">🎓 All Grades / Seniority</option>
           <option value="founding">🚀 Founding / Principal</option>
@@ -398,7 +399,7 @@ export function renderDashboardHtml(): string {
           <option value="product_design">📐 Product Design & Systems</option>
         </select>
         <select id="region-filter" class="region-select" onchange="applyFilters()">
-          <option value="all" selected>🌐 All US & Remote (240+ Companies)</option>
+          <option value="all" selected>🌐 All US & Remote (700+ Companies)</option>
           <option value="midwest">📍 US-Midwest Focus</option>
           <option value="remote">🏠 100% Remote</option>
         </select>
@@ -427,12 +428,13 @@ export function renderDashboardHtml(): string {
   <script>
     let allJobs = [];
     let allCompanies = [];
+    window._currentDisplayLimit = 60;
 
     async function loadData() {
       try {
         const [jobsRes, compsRes, statsRes] = await Promise.all([
-          fetch('/api/jobs?limit=500').then(r => r.json()),
-          fetch('/api/companies?limit=500').then(r => r.json()),
+          fetch('/api/jobs?limit=2500').then(r => r.json()),
+          fetch('/api/companies?limit=2500').then(r => r.json()),
           fetch('/api/stats').then(r => r.json())
         ]);
 
@@ -462,6 +464,7 @@ export function renderDashboardHtml(): string {
     }
 
     function applyFilters() {
+      window._currentDisplayLimit = 60;
       renderJobs();
       renderCompanies();
     }
@@ -495,13 +498,25 @@ export function renderDashboardHtml(): string {
       const region = document.getElementById('region-filter').value;
       const grade = document.getElementById('grade-filter').value;
       const tech = document.getElementById('tech-filter').value;
+      const search = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
       
       let filtered = allJobs;
 
       // 1. Tech Focus (Filter out non-tech if marked)
       filtered = filtered.filter(j => j.isTechRole !== false);
 
-      // 2. Region filter
+      // 2. Keyword Search
+      if (search) {
+        filtered = filtered.filter(j => 
+          (j.title && j.title.toLowerCase().includes(search)) ||
+          (j.companyName && j.companyName.toLowerCase().includes(search)) ||
+          (j.location && j.location.toLowerCase().includes(search)) ||
+          (j.skills && j.skills.some(s => s.toLowerCase().includes(search))) ||
+          (j.department && j.department.toLowerCase().includes(search))
+        );
+      }
+
+      // 3. Region filter
       if (region === 'midwest') {
         filtered = filtered.filter(j => 
           (j.remoteScope && j.remoteScope.includes('midwest')) || 
@@ -511,7 +526,7 @@ export function renderDashboardHtml(): string {
         filtered = filtered.filter(j => j.isRemote);
       }
 
-      // 3. Grade filter
+      // 4. Grade filter
       if (grade === 'founding') {
         filtered = filtered.filter(j => j.seniorityLevel === 'founding');
       } else if (grade === 'lead') {
@@ -528,7 +543,7 @@ export function renderDashboardHtml(): string {
         filtered = filtered.filter(j => j.seniorityLevel === 'intern');
       }
 
-      // 4. Tech discipline filter
+      // 5. Tech discipline filter
       if (tech !== 'all') {
         filtered = filtered.filter(j => j.techCategory === tech);
       }
@@ -538,7 +553,11 @@ export function renderDashboardHtml(): string {
         return;
       }
 
-      container.innerHTML = filtered.map(j => {
+      const displayLimit = window._currentDisplayLimit || 60;
+      const toShow = filtered.slice(0, displayLimit);
+      const remaining = filtered.length - toShow.length;
+
+      const itemsHtml = toShow.map(j => {
         const isMidwest = (j.remoteScope && j.remoteScope.includes('midwest')) || (j.location && j.location.includes('Midwest'));
         return \`
           <div class="job-card">
@@ -554,7 +573,7 @@ export function renderDashboardHtml(): string {
                 \${isMidwest ? '<span class="tag tag-midwest">📍 US-Midwest</span>' : ''}
                 <span class="tag tag-remote">🌐 \${j.isRemote ? 'Remote (' + j.remoteScope + ')' : j.location}</span>
                 <span class="tag">\${j.employmentType}</span>
-                \${j.salaryMin ? \`<span class="tag tag-salary">\$\${j.salaryMin.toLocaleString()} - \$\${j.salaryMax.toLocaleString()} \${j.salaryCurrency || 'USD'}</span>\` : ''}
+                \${j.salaryMin ? \`<span class="tag tag-salary">\\$\${j.salaryMin.toLocaleString()} - \\$\${j.salaryMax.toLocaleString()} \${j.salaryCurrency || 'USD'}</span>\` : ''}
                 \${(j.skills || []).map(s => \`<span class="tag">\${s}</span>\`).join('')}
               </div>
             </div>
@@ -566,6 +585,16 @@ export function renderDashboardHtml(): string {
           </div>
         \`;
       }).join('');
+
+      const loadMoreHtml = remaining > 0 ? \`
+        <div style="text-align: center; padding: 24px;">
+          <button onclick="window._currentDisplayLimit = (window._currentDisplayLimit || 60) + 60; renderJobs();" class="apply-btn" style="cursor: pointer; padding: 12px 32px; font-size: 14px; border: none;">
+            ⚡ Load More Jobs (\${remaining} remaining of \${filtered.length})
+          </button>
+        </div>
+      \` : '';
+
+      container.innerHTML = itemsHtml + loadMoreHtml;
     }
 
     function renderCompanies() {

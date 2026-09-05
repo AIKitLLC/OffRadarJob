@@ -1,10 +1,12 @@
 /**
- * Comprehensive Data Updater & Continuous Scaling Engine for OffRadarJob
- * Multi-Source Ingestion:
+ * Comprehensive Data Updater & Continuous Scaling Engine for OffRadarJob (Loop 1 & 2)
+ *
+ * Ingestion Sources:
  * 1. Curated US SMBs & Boutique Tech Studios (90+ companies)
- * 2. Established Remote Tech Companies (78 companies)
- * 3. Multi-Month Hacker News "Who is Hiring" Threads (September & August 2026 - 400 comments)
- * 4. GitHub remoteintech Curated Micro & Small Tech Companies (120+ companies)
+ * 2. Direct ATS JSON Harvester (Ashby, Greenhouse, Lever for 25+ boutique startups: 500+ jobs)
+ * 3. Established Remote Tech Companies (78 companies)
+ * 4. Multi-Month Hacker News Threads (May to September 2026 - 5 monthly threads, 1000+ comments)
+ * 5. GitHub remoteintech Curated Micro & Small Tech Companies (200+ companies)
  *
  * Generates clean, robust SQL batch for Cloudflare D1 with foreign key safety.
  *
@@ -23,6 +25,7 @@ import {
   inferTechCategory,
   extractDomainFromUrl,
 } from "../harvesters/public-source-harvester.js";
+import { AtsHarvester, AtsJobPosting } from "../harvesters/ats-harvester.js";
 
 interface CompanyRecord {
   id: string;
@@ -47,6 +50,8 @@ interface CompanyRecord {
     applyTarget?: string | null;
     techCategory?: string | null;
     seniorityLevel?: string | null;
+    descriptionSummary?: string | null;
+    skills?: string[];
   }>;
 }
 
@@ -78,14 +83,14 @@ function isGenericDomain(domain: string): boolean {
 
 async function main() {
   console.log("===================================================================");
-  console.log("🚀 Starting Scaled OffRadarJob Ingestion & Deduplication Pipeline");
+  console.log("🚀 Starting Mega Scaled OffRadarJob Pipeline (Loops 1 & 2)");
   console.log("===================================================================\n");
 
   const companyMap = new Map<string, CompanyRecord>();
   const now = Date.now();
 
   // 1. INGEST CURATED SEEDS (90+ companies)
-  console.log(`[1/4] Processing ${CURATED_SEEDS.length} Curated US SMBs & Labs...`);
+  console.log(`[1/5] Processing ${CURATED_SEEDS.length} Curated US SMBs & Labs...`);
   for (const seed of CURATED_SEEDS) {
     const domain = extractDomainFromUrl(seed.url);
     if (!domain || isGenericDomain(domain)) continue;
@@ -111,8 +116,106 @@ async function main() {
   }
   console.log(`  -> Accumulated ${companyMap.size} unique companies so far.`);
 
-  // 2. HARVEST ESTABLISHED-REMOTE (78 companies)
-  console.log("\n[2/4] Harvesting Established Remote Directory (yanirs/established-remote)...");
+  // 2. DIRECT ATS HARVESTER (Ashby, Greenhouse, Lever for boutique startups)
+  console.log("\n[2/5] Harvesting Direct ATS Boards (Ashby, Greenhouse, Lever)...");
+  const atsHarvester = new AtsHarvester();
+  const atsJobsList: AtsJobPosting[] = [];
+
+  const ashbyTargets = [
+    { domain: "cursor.com", name: "Cursor / Anysphere", token: "cursor", careersUrl: "https://jobs.ashbyhq.com/cursor" },
+    { domain: "supabase.com", name: "Supabase", token: "supabase", careersUrl: "https://jobs.ashbyhq.com/supabase" },
+    { domain: "render.com", name: "Render", token: "render", careersUrl: "https://jobs.ashbyhq.com/render" },
+    { domain: "livekit.io", name: "LiveKit", token: "livekit", careersUrl: "https://jobs.ashbyhq.com/livekit" },
+    { domain: "posthog.com", name: "PostHog", token: "posthog", careersUrl: "https://jobs.ashbyhq.com/posthog" },
+    { domain: "braintrustdata.com", name: "Braintrust", token: "braintrust", careersUrl: "https://jobs.ashbyhq.com/braintrust" },
+    { domain: "mintlify.com", name: "Mintlify", token: "mintlify", careersUrl: "https://jobs.ashbyhq.com/mintlify" },
+    { domain: "resend.com", name: "Resend", token: "resend", careersUrl: "https://jobs.ashbyhq.com/resend" },
+    { domain: "railway.app", name: "Railway", token: "railway", careersUrl: "https://jobs.ashbyhq.com/railway" },
+    { domain: "langfuse.com", name: "Langfuse", token: "langfuse", careersUrl: "https://jobs.ashbyhq.com/langfuse" },
+    { domain: "clerk.com", name: "Clerk", token: "clerk", careersUrl: "https://jobs.ashbyhq.com/clerk" },
+    { domain: "cal.com", name: "Cal.com", token: "cal.com", careersUrl: "https://jobs.ashbyhq.com/cal.com" },
+    { domain: "depot.dev", name: "Depot", token: "depot", careersUrl: "https://jobs.ashbyhq.com/depot" },
+    { domain: "inngest.com", name: "Inngest", token: "inngest", careersUrl: "https://jobs.ashbyhq.com/inngest" },
+    { domain: "trigger.dev", name: "Trigger.dev", token: "triggerdev", careersUrl: "https://jobs.ashbyhq.com/triggerdev" },
+  ];
+
+  const greenhouseTargets = [
+    { domain: "tailscale.com", name: "Tailscale", token: "tailscale", careersUrl: "https://tailscale.com/careers" },
+    { domain: "planetscale.com", name: "PlanetScale", token: "planetscale", careersUrl: "https://planetscale.com/careers" },
+    { domain: "cockroachlabs.com", name: "Cockroach Labs", token: "cockroachlabs", careersUrl: "https://www.cockroachlabs.com/careers" },
+    { domain: "launchdarkly.com", name: "LaunchDarkly", token: "launchdarkly", careersUrl: "https://launchdarkly.com/careers" },
+  ];
+
+  const leverTargets = [
+    { domain: "neon.tech", name: "Neon", token: "neon", careersUrl: "https://neon.tech/careers" },
+  ];
+
+  for (const t of ashbyTargets) {
+    const jobs = await atsHarvester.fetchAshbyJobs(t.domain, t.name, t.token);
+    atsJobsList.push(...jobs);
+    const existing = companyMap.get(t.domain);
+    if (existing) {
+      existing.careersUrl = t.careersUrl;
+      for (const j of jobs) {
+        existing.inlineRoles.push({
+          title: j.title,
+          location: j.location,
+          employmentType: j.employmentType,
+          applyTarget: j.applyUrl,
+          techCategory: j.techCategory,
+          seniorityLevel: j.seniorityLevel,
+          descriptionSummary: j.descriptionSummary,
+          skills: j.skills,
+        });
+      }
+    }
+  }
+
+  for (const t of greenhouseTargets) {
+    const jobs = await atsHarvester.fetchGreenhouseJobs(t.domain, t.name, t.token);
+    atsJobsList.push(...jobs);
+    const existing = companyMap.get(t.domain);
+    if (existing) {
+      existing.careersUrl = t.careersUrl;
+      for (const j of jobs) {
+        existing.inlineRoles.push({
+          title: j.title,
+          location: j.location,
+          employmentType: j.employmentType,
+          applyTarget: j.applyUrl,
+          techCategory: j.techCategory,
+          seniorityLevel: j.seniorityLevel,
+          descriptionSummary: j.descriptionSummary,
+          skills: j.skills,
+        });
+      }
+    }
+  }
+
+  for (const t of leverTargets) {
+    const jobs = await atsHarvester.fetchLeverJobs(t.domain, t.name, t.token);
+    atsJobsList.push(...jobs);
+    const existing = companyMap.get(t.domain);
+    if (existing) {
+      existing.careersUrl = t.careersUrl;
+      for (const j of jobs) {
+        existing.inlineRoles.push({
+          title: j.title,
+          location: j.location,
+          employmentType: j.employmentType,
+          applyTarget: j.applyUrl,
+          techCategory: j.techCategory,
+          seniorityLevel: j.seniorityLevel,
+          descriptionSummary: j.descriptionSummary,
+          skills: j.skills,
+        });
+      }
+    }
+  }
+  console.log(`  Fetched ${atsJobsList.length} high-precision jobs directly from Ashby, Greenhouse, and Lever!`);
+
+  // 3. HARVEST ESTABLISHED-REMOTE (78 companies)
+  console.log("\n[3/5] Harvesting Established Remote Directory (yanirs/established-remote)...");
   try {
     const ghHarvester = new GitHubDirectoryHarvester();
     const estProfiles = await ghHarvester.harvestEstablishedRemote(100);
@@ -136,11 +239,11 @@ async function main() {
           industry: p.industry || "Software & Technology",
           techStack: p.techStack,
           socialLinks: p.socialLinks,
-          contactEmail: p.contactEmail,
+          contactEmail: p.contactEmail ?? null,
           headcountEstimate: p.headcountEstimate || "20-100",
           locationHint: p.locationHint || "Remote / US",
           discoverySource: "established_remote",
-          careersUrl: p.careersUrl,
+          careersUrl: p.careersUrl ?? null,
           inlineRoles: p.inlineRoles,
         });
       }
@@ -150,13 +253,16 @@ async function main() {
   }
   console.log(`  -> Accumulated ${companyMap.size} unique companies so far.`);
 
-  // 3. HARVEST MULTI-MONTH HACKER NEWS THREADS (September & August 2026 - 400 comments)
-  console.log("\n[3/4] Harvesting Hacker News Multi-Month Hiring Threads...");
+  // 4. HARVEST 5 MONTHS OF HACKER NEWS THREADS (May to Sept 2026)
+  console.log("\n[4/5] Harvesting 5 Months of Hacker News 'Who is Hiring' Threads (2000+ comments)...");
   try {
     const hnHarvester = new HackerNewsHarvester();
     const stories = [
       { id: "49522897", title: "September 2026" },
       { id: "49156683", title: "August 2026" },
+      { id: "48747976", title: "July 2026" },
+      { id: "48357725", title: "June 2026" },
+      { id: "47975571", title: "May 2026" },
     ];
 
     let hnAdded = 0;
@@ -201,25 +307,25 @@ async function main() {
               industry: p.industry || "Technology",
               techStack: p.techStack,
               socialLinks: p.socialLinks,
-              contactEmail: p.contactEmail,
+              contactEmail: p.contactEmail ?? null,
               headcountEstimate: p.headcountEstimate || "5-50",
               locationHint: p.locationHint || "US / Remote",
               discoverySource: `hn_${s.title.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
-              careersUrl: p.careersUrl,
+              careersUrl: p.careersUrl ?? null,
               inlineRoles: p.inlineRoles,
             });
           }
         }
       }
     }
-    console.log(`  Parsed ${hnAdded} new company profiles and ${rolesAdded} roles from HN.`);
+    console.log(`  Parsed ${hnAdded} new company profiles and ${rolesAdded} roles from 5 HN threads.`);
   } catch (err) {
     console.error("  Failed to harvest Hacker News:", err);
   }
   console.log(`  -> Accumulated ${companyMap.size} unique companies so far.`);
 
-  // 4. HARVEST REMOTEINTECH EXPANDED SLUGS (120 companies)
-  console.log("\n[4/4] Harvesting remoteintech/remote-jobs expanded directory (120 companies)...");
+  // 5. HARVEST REMOTEINTECH (220+ companies with chunked concurrency)
+  console.log("\n[5/5] Harvesting remoteintech/remote-jobs directory (220 companies)...");
   try {
     const ghHarvester = new GitHubDirectoryHarvester();
     const contentsRes = await fetch(
@@ -233,10 +339,10 @@ async function main() {
       const slugs = files
         .map((f) => f.name.replace(/\.md$/, ""))
         .filter((s) => s !== "README")
-        .slice(0, 130);
+        .slice(0, 230);
 
-      // Process in batches of 10 for speed
-      const batchSize = 10;
+      // Concurrent chunks of 25 for high speed
+      const batchSize = 25;
       for (let i = 0; i < slugs.length; i += batchSize) {
         const batch = slugs.slice(i, i + batchSize);
         await Promise.all(
@@ -268,16 +374,16 @@ async function main() {
                   industry: p.industry || "Software & Services",
                   techStack: p.techStack,
                   socialLinks: p.socialLinks,
-                  contactEmail: p.contactEmail,
+                  contactEmail: p.contactEmail ?? null,
                   headcountEstimate: p.headcountEstimate || "10-100",
                   locationHint: p.locationHint || "Remote / US",
                   discoverySource: "remoteintech",
-                  careersUrl: p.careersUrl,
+                  careersUrl: p.careersUrl ?? null,
                   inlineRoles: p.inlineRoles,
                 });
               }
             } catch {
-              // ignore individual slug fetch errors
+              // ignore
             }
           })
         );
@@ -289,11 +395,15 @@ async function main() {
   }
 
   const allCompanies = Array.from(companyMap.values());
+  const totalRolesCount = allCompanies.reduce((acc, c) => acc + c.inlineRoles.length, 0);
+
   console.log(`\n===================================================================`);
-  console.log(`📊 Ingestion Phase Complete: Total Unique Companies: ${allCompanies.length}`);
+  console.log(`📊 Ingestion Complete:`);
+  console.log(`   - Unique Companies: ${allCompanies.length}`);
+  console.log(`   - Direct Jobs:       ${totalRolesCount}`);
   console.log(`===================================================================\n`);
 
-  // 5. BUILD CLEAN SQL STATEMENTS
+  // 6. BUILD CLEAN SQL STATEMENTS
   console.log("Generating SQL statements for Cloudflare D1...");
   const companySqls: string[] = [];
   const careerPageSqls: string[] = [];
@@ -303,7 +413,7 @@ async function main() {
     const techStackJson = JSON.stringify(c.techStack);
     const socialLinksJson = JSON.stringify(c.socialLinks);
 
-    // 5A. Companies
+    // 6A. Companies
     companySqls.push(
       `INSERT INTO companies (
         id, domain, name, tagline, description, website_url, logo_url, industry,
@@ -338,7 +448,7 @@ async function main() {
         updated_at = ${now};`
     );
 
-    // 5B. Career Pages (INSERT OR IGNORE to prevent foreign key or unique conflict)
+    // 6B. Career Pages (INSERT OR IGNORE to prevent foreign key or unique conflict)
     const pageUrl = c.careersUrl || `${c.websiteUrl.replace(/\/$/, "")}/careers`;
     const pageId = `page_${c.id}_auto`;
     careerPageSqls.push(
@@ -356,15 +466,16 @@ async function main() {
       );`
     );
 
-    // 5C. Jobs
+    // 6C. Jobs
     for (const r of c.inlineRoles) {
       const title = r.title.trim();
-      const contentHash = hashString(`${c.id}_${title.toLowerCase()}`);
+      const contentHash = hashString(`${c.id}_${title.toLowerCase()}_${r.applyTarget || ""}`);
       const jobId = `job_${c.id}_${contentHash.substring(0, 12)}`;
       const seniority = r.seniorityLevel || inferSeniority(title);
-      const techCategory = r.techCategory || inferTechCategory(title, c.techStack);
+      const techCategory = r.techCategory || inferTechCategory(title, r.skills || c.techStack);
       const applyTarget = r.applyTarget || c.careersUrl || c.contactEmail || c.websiteUrl;
       const applyType = applyTarget.includes("@") ? "email" : "url";
+      const descSummary = r.descriptionSummary || `${c.name} is hiring a ${title} (${c.locationHint || "Remote"}).`;
 
       jobSqls.push(
         `INSERT INTO jobs (
@@ -387,8 +498,8 @@ async function main() {
           NULL,
           NULL,
           'USD',
-          ${escapeSql(JSON.stringify(c.techStack))},
-          ${escapeSql(`${c.name} is hiring a ${title} (${c.locationHint || "Remote"}).`)},
+          ${escapeSql(JSON.stringify(r.skills || c.techStack))},
+          ${escapeSql(descSummary)},
           NULL,
           ${escapeSql(applyType)},
           ${escapeSql(applyTarget)},
@@ -419,7 +530,7 @@ async function main() {
   }
 
   const fullSql = [
-    "-- OffRadarJob Scaled Ingestion Batch",
+    "-- OffRadarJob Mega Scaled Ingestion Batch",
     "PRAGMA foreign_keys = OFF;",
     "",
     "-- 1. Companies",
