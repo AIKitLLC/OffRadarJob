@@ -262,8 +262,21 @@ export class JobExtractorAgent extends BaseAgent {
 
   private detectRemoteScope(text: string): string {
     const lower = text.toLowerCase();
+    if (
+      lower.includes("midwest") ||
+      lower.includes("chicago") ||
+      lower.includes("illinois") ||
+      lower.includes("minnesota") ||
+      lower.includes("michigan") ||
+      lower.includes("indiana") ||
+      lower.includes("ohio") ||
+      lower.includes("wisconsin") ||
+      lower.includes("missouri")
+    ) {
+      return "us_midwest";
+    }
     if (lower.includes("vietnam")) return "vietnam_only";
-    if (lower.includes("us only") || lower.includes("north america")) return "us_only";
+    if (lower.includes("us only") || lower.includes("united states only") || lower.includes("north america")) return "us_only";
     if (lower.includes("apac") || lower.includes("asia")) return "apac";
     if (lower.includes("eu only") || lower.includes("europe")) return "eu_only";
     return "worldwide";

@@ -242,6 +242,34 @@ export class CompanyProfilerAgent extends BaseAgent {
 
   private detectLocationHint(html: string): string {
     const lower = html.toLowerCase();
+    // US Midwest region prioritization
+    if (lower.includes("chicago") || lower.includes("illinois") || lower.includes(", il")) {
+      return "US-Midwest (Chicago, IL)";
+    }
+    if (lower.includes("minneapolis") || lower.includes("st. paul") || lower.includes("minnesota") || lower.includes(", mn")) {
+      return "US-Midwest (Minneapolis, MN)";
+    }
+    if (lower.includes("detroit") || lower.includes("ann arbor") || lower.includes("grand rapids") || lower.includes("michigan") || lower.includes(", mi")) {
+      return "US-Midwest (Ann Arbor / Detroit, MI)";
+    }
+    if (lower.includes("indianapolis") || lower.includes("carmel") || lower.includes("indiana") || lower.includes(", in")) {
+      return "US-Midwest (Indianapolis, IN)";
+    }
+    if (lower.includes("columbus") || lower.includes("cincinnati") || lower.includes("cleveland") || lower.includes("ohio") || lower.includes(", oh")) {
+      return "US-Midwest (Ohio)";
+    }
+    if (lower.includes("madison") || lower.includes("milwaukee") || lower.includes("wisconsin") || lower.includes(", wi")) {
+      return "US-Midwest (Madison / Milwaukee, WI)";
+    }
+    if (lower.includes("kansas city") || lower.includes("st. louis") || lower.includes("missouri") || lower.includes(", mo")) {
+      return "US-Midwest (Missouri)";
+    }
+    if (lower.includes("midwest") || lower.includes("mid-west")) {
+      return "US-Midwest";
+    }
+    if (lower.includes("united states") || lower.includes("usa") || lower.includes("u.s.")) {
+      return "United States (Remote/Hybrid)";
+    }
     if (lower.includes("vietnam") || lower.includes("việt nam") || lower.includes("saigon") || lower.includes("hanoi")) {
       return "Vietnam / APAC";
     }

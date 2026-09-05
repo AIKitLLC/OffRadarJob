@@ -4,7 +4,7 @@ export function renderDashboardHtml(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OffRadarJob — Micro-Company Job Gathering Platform</title>
+  <title>OffRadarJob — Micro-Company Job Gathering Platform (US-Midwest Focus)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -21,6 +21,7 @@ export function renderDashboardHtml(): string {
       --success: #10b981;
       --warning: #f59e0b;
       --danger: #ef4444;
+      --midwest: #f43f5e;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -35,7 +36,7 @@ export function renderDashboardHtml(): string {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 32px;
+      margin-bottom: 24px;
       padding-bottom: 20px;
       border-bottom: 1px solid var(--card-border);
     }
@@ -71,6 +72,32 @@ export function renderDashboardHtml(): string {
       50% { transform: scale(1.15); opacity: 1; }
       100% { transform: scale(0.95); opacity: 0.8; }
     }
+
+    .midwest-banner {
+      background: linear-gradient(135deg, rgba(244, 63, 94, 0.12), rgba(168, 85, 247, 0.12));
+      border: 1px solid rgba(244, 63, 94, 0.3);
+      border-radius: 12px;
+      padding: 14px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .midwest-banner-text { font-size: 13px; color: #fecdd3; }
+    .midwest-banner-text strong { color: #fff; }
+    .midwest-tag {
+      background: rgba(244, 63, 94, 0.2);
+      color: #fda4af;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -122,12 +149,42 @@ export function renderDashboardHtml(): string {
       transition: background 0.2s;
     }
     button:hover { background: var(--primary-hover); }
+
+    .quick-seeds {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .quick-seed-chip {
+      background: #1e293b;
+      color: #cbd5e1;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid var(--card-border);
+      transition: all 0.2s;
+    }
+    .quick-seed-chip:hover {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--primary);
+      border-color: var(--primary);
+    }
     
+    .filter-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
     .nav-tabs {
       display: flex;
       gap: 16px;
       border-bottom: 1px solid var(--card-border);
-      margin-bottom: 24px;
     }
     .tab-btn {
       background: transparent;
@@ -142,6 +199,16 @@ export function renderDashboardHtml(): string {
       color: var(--primary);
       border-bottom-color: var(--primary);
       font-weight: 600;
+    }
+
+    .region-select {
+      background: #0b1120;
+      border: 1px solid var(--card-border);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
     }
 
     .tab-content { display: none; }
@@ -170,6 +237,7 @@ export function renderDashboardHtml(): string {
       font-size: 11px;
       font-weight: 500;
     }
+    .tag-midwest { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
     .tag-remote { background: rgba(16, 185, 129, 0.1); color: var(--success); }
     .tag-salary { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
     .apply-btn {
@@ -186,7 +254,7 @@ export function renderDashboardHtml(): string {
 
     .companies-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
       gap: 16px;
     }
     .company-card {
@@ -242,9 +310,16 @@ export function renderDashboardHtml(): string {
       </div>
       <div class="status-badge">
         <span class="status-dot"></span>
-        Agents Idle / Active
+        Cloudflare Edge Active
       </div>
     </header>
+
+    <div class="midwest-banner">
+      <div class="midwest-banner-text">
+        <strong>📍 Active Focus: US-Midwest Region</strong> — Targeting boutique software studios, micro-SaaS, and indie tech teams in Chicago (IL), Indianapolis (IN), Minneapolis (MN), Madison (WI), Cincinnati (OH), and Ann Arbor (MI).
+      </div>
+      <span class="midwest-tag">Midwest Active</span>
+    </div>
 
     <div class="stats-grid">
       <div class="stat-card">
@@ -256,11 +331,11 @@ export function renderDashboardHtml(): string {
         <span class="stat-value" id="stat-jobs">0</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Remote %</span>
-        <span class="stat-value" id="stat-remote">100%</span>
+        <span class="stat-label">Midwest Focus</span>
+        <span class="stat-value" id="stat-midwest" style="color: #fb7185;">100%</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Agent Executions</span>
+        <span class="stat-label">Telemetry Events</span>
         <span class="stat-value" id="stat-logs">0</span>
       </div>
     </div>
@@ -268,15 +343,32 @@ export function renderDashboardHtml(): string {
     <div class="crawl-trigger">
       <h2>🚀 Ingest & Dispatch New Seed Domain</h2>
       <div class="input-group">
-        <input type="text" id="seed-input" placeholder="e.g. https://resend.com, https://fly.io, https://transistor.fm" />
+        <input type="text" id="seed-input" placeholder="e.g. https://sixfeetup.com, https://bendyworks.com, https://promptloop.com" />
         <button id="btn-crawl" onclick="triggerCrawl()">Dispatch to Discovery Queue</button>
+      </div>
+      <div class="quick-seeds">
+        <span>Quick Midwest Seeds:</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://promptloop.com')">PromptLoop (Chicago, IL)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://sixfeetup.com')">Six Feet Up (Carmel, IN)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://bendyworks.com')">Bendyworks (Madison, WI)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://softwareforgood.com')">Software for Good (Minneapolis, MN)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://gaslight.co')">Gaslight (Cincinnati, OH)</span>
       </div>
     </div>
 
-    <div class="nav-tabs">
-      <button class="tab-btn active" onclick="switchTab('jobs')">Gathered Jobs</button>
-      <button class="tab-btn" onclick="switchTab('companies')">Micro-Companies Directory</button>
-      <button class="tab-btn" onclick="switchTab('telemetry')">Agent Telemetry & Logs</button>
+    <div class="filter-bar">
+      <div class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('jobs')">Gathered Jobs</button>
+        <button class="tab-btn" onclick="switchTab('companies')">Micro-Companies Directory</button>
+        <button class="tab-btn" onclick="switchTab('telemetry')">Agent Telemetry & Logs</button>
+      </div>
+      <div>
+        <select id="region-filter" class="region-select" onchange="filterRegion()">
+          <option value="all">Filter: All Regions</option>
+          <option value="midwest" selected>Filter: 📍 US-Midwest Focus</option>
+          <option value="remote">Filter: 🌐 Worldwide Remote</option>
+        </select>
+      </div>
     </div>
 
     <div id="tab-jobs" class="tab-content active">
@@ -299,6 +391,9 @@ export function renderDashboardHtml(): string {
   </div>
 
   <script>
+    let allJobs = [];
+    let allCompanies = [];
+
     async function loadData() {
       try {
         const [jobsRes, compsRes, statsRes] = await Promise.all([
@@ -307,53 +402,94 @@ export function renderDashboardHtml(): string {
           fetch('/api/stats').then(r => r.json())
         ]);
 
-        document.getElementById('stat-companies').innerText = compsRes.length || 0;
-        document.getElementById('stat-jobs').innerText = jobsRes.length || 0;
+        allJobs = Array.isArray(jobsRes) ? jobsRes : [];
+        allCompanies = Array.isArray(compsRes) ? compsRes : [];
+
+        document.getElementById('stat-companies').innerText = allCompanies.length || 0;
+        document.getElementById('stat-jobs').innerText = allJobs.length || 0;
         document.getElementById('stat-logs').innerText = statsRes.logsCount || 0;
 
-        renderJobs(jobsRes);
-        renderCompanies(compsRes);
+        const midwestCount = allJobs.filter(j => 
+          (j.remoteScope && j.remoteScope.includes('midwest')) || 
+          (j.location && (j.location.includes('Midwest') || j.location.includes('IN') || j.location.includes('IL') || j.location.includes('WI') || j.location.includes('MN') || j.location.includes('OH')))
+        ).length;
+        
+        const pct = allJobs.length > 0 ? Math.round((midwestCount / allJobs.length) * 100) : 100;
+        document.getElementById('stat-midwest').innerText = pct + '%';
+
+        renderJobs();
+        renderCompanies();
         renderLogs(statsRes.recentLogs || []);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
       }
     }
 
-    function renderJobs(jobs) {
-      const container = document.getElementById('jobs-container');
-      if (!jobs || jobs.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-muted); padding: 24px; text-align: center;">No off-radar jobs gathered yet. Trigger a seed crawl above!</p>';
-        return;
-      }
-      container.innerHTML = jobs.map(j => \`
-        <div class="job-card">
-          <div class="job-main">
-            <h3>\${j.title}</h3>
-            <a class="job-company" href="/api/companies" target="_blank">🏢 Company: \${j.companyId.replace('comp_', '')}</a>
-            <p class="job-desc">\${j.descriptionSummary || 'Direct opening from micro-company career portal.'}</p>
-            <div class="job-tags">
-              <span class="tag tag-remote">📍 \${j.isRemote ? 'Remote (' + j.remoteScope + ')' : j.location}</span>
-              <span class="tag">\${j.employmentType}</span>
-              \${j.salaryMin ? \`<span class="tag tag-salary">\$\${j.salaryMin.toLocaleString()} - \$\${j.salaryMax.toLocaleString()} \${j.salaryCurrency || 'USD'}</span>\` : ''}
-              \${(j.skills || []).map(s => \`<span class="tag">\${s}</span>\`).join('')}
-            </div>
-          </div>
-          <div>
-            <a class="apply-btn" href="\${j.applyType === 'email' ? 'mailto:' + j.applyTarget : j.applyTarget}" target="_blank">
-              Apply via \${j.applyType.toUpperCase()} ↗
-            </a>
-          </div>
-        </div>
-      \`).join('');
+    function filterRegion() {
+      renderJobs();
+      renderCompanies();
     }
 
-    function renderCompanies(companies) {
-      const container = document.getElementById('companies-container');
-      if (!companies || companies.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-muted); grid-column: 1/-1; text-align: center;">No companies enriched yet.</p>';
+    function renderJobs() {
+      const container = document.getElementById('jobs-container');
+      const region = document.getElementById('region-filter').value;
+      
+      let filtered = allJobs;
+      if (region === 'midwest') {
+        filtered = allJobs.filter(j => 
+          (j.remoteScope && j.remoteScope.includes('midwest')) || 
+          (j.location && (j.location.includes('Midwest') || j.location.includes('IN') || j.location.includes('IL') || j.location.includes('WI') || j.location.includes('MN') || j.location.includes('OH')))
+        );
+      } else if (region === 'remote') {
+        filtered = allJobs.filter(j => j.isRemote);
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); padding: 24px; text-align: center;">No off-radar jobs found for selected filter. Trigger a seed crawl above!</p>';
         return;
       }
-      container.innerHTML = companies.map(c => \`
+
+      container.innerHTML = filtered.map(j => {
+        const isMidwest = (j.remoteScope && j.remoteScope.includes('midwest')) || (j.location && j.location.includes('Midwest'));
+        return \`
+          <div class="job-card">
+            <div class="job-main">
+              <h3>\${j.title}</h3>
+              <a class="job-company" href="/api/companies" target="_blank">🏢 Company: \${j.companyId.replace('comp_', '').replace(/_/g, '.')}</a>
+              <p class="job-desc">\${j.descriptionSummary || 'Direct opening from micro-company career portal.'}</p>
+              <div class="job-tags">
+                \${isMidwest ? '<span class="tag tag-midwest">📍 US-Midwest</span>' : ''}
+                <span class="tag tag-remote">🌐 \${j.isRemote ? 'Remote (' + j.remoteScope + ')' : j.location}</span>
+                <span class="tag">\${j.employmentType}</span>
+                \${j.salaryMin ? \`<span class="tag tag-salary">\$\${j.salaryMin.toLocaleString()} - \$\${j.salaryMax.toLocaleString()} \${j.salaryCurrency || 'USD'}</span>\` : ''}
+                \${(j.skills || []).map(s => \`<span class="tag">\${s}</span>\`).join('')}
+              </div>
+            </div>
+            <div>
+              <a class="apply-btn" href="\${j.applyType === 'email' ? 'mailto:' + j.applyTarget : j.applyTarget}" target="_blank">
+                Apply via \${j.applyType.toUpperCase()} ↗
+              </a>
+            </div>
+          </div>
+        \`;
+      }).join('');
+    }
+
+    function renderCompanies() {
+      const container = document.getElementById('companies-container');
+      const region = document.getElementById('region-filter').value;
+      
+      let filtered = allCompanies;
+      if (region === 'midwest') {
+        filtered = allCompanies.filter(c => c.locationHint && c.locationHint.includes('Midwest'));
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); grid-column: 1/-1; text-align: center;">No companies found matching filter.</p>';
+        return;
+      }
+
+      container.innerHTML = filtered.map(c => \`
         <div class="company-card">
           <div class="company-header">
             <a class="company-name" href="\${c.websiteUrl}" target="_blank">\${c.name} ↗</a>
@@ -361,6 +497,7 @@ export function renderDashboardHtml(): string {
           </div>
           <p class="company-desc">\${c.description || c.tagline || 'Independent tech company.'}</p>
           <div class="job-tags">
+            \${c.locationHint && c.locationHint.includes('Midwest') ? '<span class="tag tag-midwest">📍 ' + c.locationHint + '</span>' : ''}
             \${(c.techStack || []).slice(0, 5).map(s => \`<span class="tag">\${s}</span>\`).join('')}
           </div>
           <div style="font-size: 11px; color: var(--text-muted); margin-top: auto;">
@@ -387,6 +524,10 @@ export function renderDashboardHtml(): string {
           </div>
         \`;
       }).join('');
+    }
+
+    function fillSeed(url) {
+      document.getElementById('seed-input').value = url;
     }
 
     async function triggerCrawl() {

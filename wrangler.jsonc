@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "off-radar-jobs",
+  "account_id": "05130ca1f0bdabbab4d08a5d75544e92",
   "main": "src/index.ts",
   "compatibility_date": "2025-02-24",
   "compatibility_flags": ["nodejs_compat"],
@@ -8,14 +9,14 @@
     {
       "binding": "DB",
       "database_name": "off_radar_db",
-      "database_id": "local-off-radar-db",
+      "database_id": "884e70ab-0716-4303-bbfd-3e0d4d1a6571",
       "migrations_dir": "migrations"
     }
   ],
   "kv_namespaces": [
     {
       "binding": "CACHE",
-      "id": "local-cache-kv"
+      "id": "4234513ec026494da79d9e0b02542c3b"
     }
   ],
   "queues": {
