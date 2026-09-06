@@ -1491,9 +1491,10 @@ export function renderAdminDashboardHtml(): string {
             ? '<span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b;">👑 Admin</span>'
             : '<span class="badge" style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid #475569;">👤 User</span>';
           
-          var actionBtn = isAdmin
-            ? '<button class="btn btn-secondary btn-sm" onclick="toggleUserRole(\'' + escapeHtml(u.id) + '\', \'user\')">Revoke Admin</button>'
-            : '<button class="btn btn-primary btn-sm" onclick="toggleUserRole(\'' + escapeHtml(u.id) + '\', \'admin\')">Grant Admin 👑</button>';
+          var targetRole = isAdmin ? 'user' : 'admin';
+          var btnText = isAdmin ? 'Revoke Admin' : 'Grant Admin 👑';
+          var btnClass = isAdmin ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm';
+          var actionBtn = '<button class="' + btnClass + '" onclick="toggleUserRole(&quot;' + escapeHtml(u.id) + '&quot;, &quot;' + targetRole + '&quot;)">' + btnText + '</button>';
 
           var dateStr = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A';
           var tgHandle = u.username ? '@' + escapeHtml(u.username) : '<span style="color:var(--text-muted);">-</span>';

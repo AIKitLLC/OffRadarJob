@@ -8,6 +8,9 @@ import {
 } from "../src/db/repositories.js";
 import { PipelineOrchestrator } from "../src/orchestrator/dispatcher.js";
 import { MOCK_FIXTURES } from "../src/demo/mock-seed.js";
+import { renderAdminDashboardHtml } from "../src/ui/admin-dashboard.js";
+import { renderDashboardHtml } from "../src/ui/dashboard.js";
+import vm from "vm";
 import worker from "../src/index.js";
 
 describe("Admin Control Center Suite", () => {
@@ -280,6 +283,25 @@ describe("Admin Control Center Suite", () => {
       expect(pagedComps.pagination).toBeDefined();
       expect(Array.isArray(pagedComps.items)).toBe(true);
     });
+
+    it("should render client-side JavaScript without syntax errors in Admin and Public Dashboards", () => {
+      // 1. Admin Dashboard HTML Script Validation
+      const adminHtml = renderAdminDashboardHtml();
+      const adminScriptMatch = adminHtml.match(/<script>([\s\S]*?)<\/script>/);
+      expect(adminScriptMatch).toBeTruthy();
+      expect(() => {
+        new vm.Script(adminScriptMatch![1], { filename: "admin-dashboard.js" });
+      }).not.toThrow();
+
+      // 2. Public Dashboard HTML Script Validation
+      const publicHtml = renderDashboardHtml();
+      const publicScriptMatch = publicHtml.match(/<script>([\s\S]*?)<\/script>/);
+      expect(publicScriptMatch).toBeTruthy();
+      expect(() => {
+        new vm.Script(publicScriptMatch![1], { filename: "dashboard.js" });
+      }).not.toThrow();
+    });
   });
 });
+
 
