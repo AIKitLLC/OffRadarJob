@@ -733,53 +733,152 @@ export function renderAdminDashboardHtml(): string {
 
     <!-- TAB 5: Telegram Bot & Admin Configuration -->
     <div id="tab-telegram" class="tab-content" style="display: none;">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
-        <!-- Bot Status Card -->
+      
+      <!-- Quick Setup Instruction Guide -->
+      <div style="background: linear-gradient(135deg, rgba(0, 136, 204, 0.12), rgba(56, 189, 248, 0.05)); border: 1px solid rgba(0, 136, 204, 0.3); border-radius: 12px; padding: 18px 20px; margin-bottom: 24px;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+          <div style="font-size: 24px;">✈️</div>
+          <div style="font-size: 16px; font-weight: 700; color: #fff;">Hướng Dẫn Cấu Hình Telegram Bot Trực Tiếp (Không Cần Dùng Terminal)</div>
+        </div>
+        <p style="font-size: 13px; color: #bae6fd; margin-bottom: 12px; line-height: 1.5;">
+          Bạn có thể thiết lập Bot Token, Bot Username và phân quyền Admin ngay tại trang này. Dữ liệu được lưu trữ tự động vào cơ sở dữ liệu Cloudflare D1.
+        </p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; font-size: 12px; color: #e0f2fe;">
+          <div style="background: rgba(13, 20, 36, 0.6); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.15);">
+            <strong style="color: #38bdf8;">1. Tạo Bot với @BotFather</strong><br/>
+            Mở Telegram chat với <code>@BotFather</code>, gõ <code>/newbot</code> và sao chép mã <strong>HTTP API Token</strong>.
+          </div>
+          <div style="background: rgba(13, 20, 36, 0.6); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.15);">
+            <strong style="color: #38bdf8;">2. Dán Token & Lưu Cấu Hình</strong><br/>
+            Điền Bot Token & Bot Username vào form bên dưới rồi bấm <strong>💾 Lưu Cấu Hình</strong>.
+          </div>
+          <div style="background: rgba(13, 20, 36, 0.6); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.15);">
+            <strong style="color: #38bdf8;">3. Kích Hoạt Webhook</strong><br/>
+            Bấm nút <strong>🔗 Kích Hoạt Webhook</strong> để Telegram tự động gửi cập nhật tới Cloudflare Worker.
+          </div>
+          <div style="background: rgba(13, 20, 36, 0.6); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.15);">
+            <strong style="color: #38bdf8;">4. Trải Nghiệm & Quản Trị</strong><br/>
+            Chat <code>/start</code> hoặc <code>/admin</code> với bot để quản lý crawler, tra cứu job và nhận thông báo.
+          </div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 20px; margin-bottom: 24px;">
+        <!-- Card 1: Configuration Form -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">🤖 Telegram Bot Status & Webhook</div>
-            <button class="btn btn-primary btn-sm" onclick="setupTgWebhook()">🔗 Setup Webhook</button>
+            <div class="card-title">⚙️ Thiết Lập Telegram Bot & Webhook (D1 Storage)</div>
+            <button class="btn btn-secondary btn-sm" onclick="loadTelegramConfig()">🔄 Tải lại</button>
           </div>
           <div style="padding: 20px;">
+            <div class="form-group">
+              <label class="form-label" for="cfg-bot-token">
+                Telegram Bot Token (HTTP API):
+                <span id="cfg-token-status" style="margin-left: 8px; font-weight: normal; font-size: 11px; color: #38bdf8;"></span>
+              </label>
+              <div style="display: flex; gap: 8px;">
+                <input type="password" id="cfg-bot-token" class="form-input" placeholder="Dán token từ @BotFather: 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" autocomplete="off" />
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTokenVisibility('cfg-bot-token', this)">👁️</button>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                Token sẽ được bảo mật và mã hóa hiển thị dạng <code>123456...abcd</code> khi đã lưu.
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+              <div class="form-group">
+                <label class="form-label" for="cfg-bot-username">Bot Username:</label>
+                <input type="text" id="cfg-bot-username" class="form-input" placeholder="Ví dụ: OffRadarJobBot" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="cfg-admin-chat">Admin Alert Chat ID:</label>
+                <input type="text" id="cfg-admin-chat" class="form-input" placeholder="Ví dụ: 99887766 hoặc @channel" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="cfg-admin-usernames">Admin Usernames (phân cách bằng dấu phẩy):</label>
+              <input type="text" id="cfg-admin-usernames" class="form-input" placeholder="tuannx87, dev_lead, second_admin" />
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                Những username này khi chat với Bot sẽ được tự động nhận diện quyền Quản trị viên (Admin).
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="cfg-admin-token">
+                Master Admin Access Token (Web & Bot):
+                <span id="cfg-admin-token-status" style="margin-left: 8px; font-weight: normal; font-size: 11px; color: #38bdf8;"></span>
+              </label>
+              <div style="display: flex; gap: 8px;">
+                <input type="password" id="cfg-admin-token" class="form-input" placeholder="offradar-admin-2026" autocomplete="off" />
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTokenVisibility('cfg-admin-token', this)">👁️</button>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                Token bí mật dùng để đăng nhập Web Admin (<code>?token=...</code>) và xác thực lệnh <code>/admin auth &lt;token&gt;</code>.
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+              <button class="btn btn-primary" onclick="saveTelegramConfig()">💾 Lưu Cấu Hình</button>
+              <button class="btn btn-secondary" onclick="setupTgWebhook()">🔗 Kích Hoạt Webhook</button>
+              <button class="btn btn-secondary" onclick="checkWebhookInfo()">🔍 Kiểm Tra Webhook Info</button>
+            </div>
+
+            <!-- Webhook Diagnostic Status Card -->
+            <div id="webhook-info-box" style="margin-top: 18px; display: none; background: #070c18; border: 1px solid var(--card-border); border-radius: 8px; padding: 14px; font-size: 12px;">
+              <div style="font-weight: 700; color: #fff; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                <span>📡 Telegram Webhook Live Diagnostic:</span>
+                <span id="webhook-info-badge" class="badge">Checking...</span>
+              </div>
+              <div id="webhook-info-details" style="font-family: 'JetBrains Mono', monospace; line-height: 1.6; color: #cbd5e1;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Test Notification & Live Status -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🔔 Trạng Thái Kết Nối & Test Alert</div>
+          </div>
+          <div style="padding: 20px;">
+            <!-- Current Status Overview -->
             <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
-              <div style="width: 48px; height: 48px; border-radius: 50%; background: #0088cc22; border: 1px solid #0088cc; display: flex; align-items: center; justify-content: center; font-size: 24px;">✈️</div>
+              <div style="width: 52px; height: 52px; border-radius: 50%; background: #0088cc22; border: 1px solid #0088cc; display: flex; align-items: center; justify-content: center; font-size: 26px;">✈️</div>
               <div>
                 <div style="font-size: 16px; font-weight: 700; color: #fff;" id="tg-bot-handle">@OffRadarJobBot</div>
                 <div style="font-size: 13px; color: #38bdf8;" id="tg-webhook-status">Checking webhook status...</div>
               </div>
             </div>
-            <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; font-size: 13px; line-height: 1.6;">
+
+            <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; font-size: 13px; line-height: 1.6; margin-bottom: 18px;">
               <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span style="color: var(--text-muted);">Configured Admin Handles:</span>
+                <span style="color: var(--text-muted);">Admin Handles Đã Cấu Hình:</span>
                 <strong style="color: #f59e0b;" id="tg-configured-admins">@tuannx87</strong>
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span style="color: var(--text-muted);">Configured Admin IDs:</span>
+                <span style="color: var(--text-muted);">Admin IDs Đã Cấu Hình:</span>
                 <strong style="color: #a78bfa;" id="tg-configured-ids">None (Any ID with username or token)</strong>
               </div>
               <div style="display: flex; justify-content: space-between;">
                 <span style="color: var(--text-muted);">Target Alert Chat ID:</span>
-                <strong style="color: #10b981;" id="tg-alert-chat">Configured via TELEGRAM_ADMIN_CHAT_ID</strong>
+                <strong style="color: #10b981;" id="tg-alert-chat">Chưa cấu hình</strong>
               </div>
             </div>
-          </div>
-        </div>
 
-        <!-- Telegram Admin Test & Quick Actions -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">🔔 Admin Notification & Test Alert</div>
-          </div>
-          <div style="padding: 20px;">
-            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
-              Gửi tin nhắn test tới Admin Telegram Chat để đảm bảo hệ thống cảnh báo sự cố, phát hiện job mới và crawler status hoạt động thông suốt.
+            <h4 style="font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 8px;">Gửi Tin Nhắn Kiểm Tra (Test Notification)</h4>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+              Gửi trực tiếp tin nhắn qua Telegram Bot để xác nhận API Token và Chat ID hoạt động chính xác.
             </p>
-            <div style="display: flex; gap: 10px; margin-bottom: 16px;">
-              <input type="text" id="input-test-alert-msg" class="form-input" placeholder="Nhập nội dung thông báo kiểm tra..." value="🚀 [OffRadarJob Alert] Hệ thống crawler & bot hoạt động bình thường." style="flex: 1;" />
+            <div class="form-group">
+              <input type="text" id="input-test-alert-msg" class="form-input" placeholder="Nhập nội dung thông báo kiểm tra..." value="🚀 [OffRadarJob Alert] Hệ thống crawler & bot hoạt động bình thường." />
+            </div>
+            <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+              <input type="text" id="input-test-alert-chat" class="form-input" placeholder="Chat ID nhận (để trống nếu dùng Admin Chat ID mặc định)" style="font-size: 12px;" />
               <button class="btn btn-primary" onclick="sendTestAlert()">📢 Gửi Test</button>
             </div>
+
             <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 12px; font-size: 12px; color: #bae6fd;">
-              💡 <strong>Mẹo:</strong> Trong Telegram chat với bot, bạn có thể gõ <code>/admin auth &lt;token&gt;</code> để tự nâng cấp quyền Admin bất cứ lúc nào!
+              💡 <strong>Lưu ý:</strong> Để Bot có thể gửi tin nhắn cho bạn hoặc nhóm, bạn cần mở cuộc trò chuyện với bot và bấm <strong>/start</strong> trước ít nhất một lần.
             </div>
           </div>
         </div>
@@ -1214,16 +1313,156 @@ export function renderAdminDashboardHtml(): string {
       }
     }
 
+    // --- TELEGRAM BOT & SYSTEM CONFIGURATION ---
+    async function loadTelegramConfig() {
+      try {
+        const res = await apiFetch('/api/admin/telegram/config');
+        if (res.ok) {
+          const cfg = await res.json();
+          const tokenInput = document.getElementById('cfg-bot-token');
+          const tokenStatus = document.getElementById('cfg-token-status');
+          if (tokenInput && tokenStatus) {
+            if (cfg.hasBotToken) {
+              tokenInput.placeholder = 'Đã lưu: ' + cfg.botTokenMasked + ' (Nhập mới nếu muốn thay đổi)';
+              tokenStatus.textContent = '✅ Đã cấu hình (' + cfg.botTokenMasked + ')';
+              tokenStatus.style.color = '#10b981';
+            } else {
+              tokenInput.placeholder = 'Dán token từ @BotFather: 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ';
+              tokenStatus.textContent = '⚠️ Chưa cấu hình';
+              tokenStatus.style.color = '#f59e0b';
+            }
+          }
+
+          const uInput = document.getElementById('cfg-bot-username');
+          if (uInput && cfg.botUsername) uInput.value = cfg.botUsername;
+
+          const admInput = document.getElementById('cfg-admin-usernames');
+          if (admInput && cfg.adminUsernames) admInput.value = cfg.adminUsernames;
+
+          const chatInput = document.getElementById('cfg-admin-chat');
+          if (chatInput && cfg.adminChatId) chatInput.value = cfg.adminChatId;
+
+          const adminTokenInput = document.getElementById('cfg-admin-token');
+          const adminTokenStatus = document.getElementById('cfg-admin-token-status');
+          if (adminTokenInput && adminTokenStatus && cfg.adminTokenMasked) {
+            adminTokenInput.placeholder = 'Đã lưu: ' + cfg.adminTokenMasked + ' (Nhập mới nếu muốn đổi)';
+            adminTokenStatus.textContent = '✅ Đã cấu hình (' + cfg.adminTokenMasked + ')';
+            adminTokenStatus.style.color = '#10b981';
+          }
+        }
+      } catch (err) {
+        console.error("Failed loading telegram config:", err);
+      }
+    }
+
+    async function saveTelegramConfig() {
+      try {
+        const botToken = document.getElementById('cfg-bot-token').value.trim();
+        const botUsername = document.getElementById('cfg-bot-username').value.trim();
+        const adminUsernames = document.getElementById('cfg-admin-usernames').value.trim();
+        const adminChatId = document.getElementById('cfg-admin-chat').value.trim();
+        const adminTokenVal = document.getElementById('cfg-admin-token').value.trim();
+
+        showToast("Đang lưu cấu hình vào Cloudflare D1...");
+        const res = await apiFetch('/api/admin/telegram/config', {
+          method: 'POST',
+          body: {
+            botToken: botToken || undefined,
+            botUsername: botUsername || undefined,
+            adminUsernames: adminUsernames || undefined,
+            adminChatId: adminChatId || undefined,
+            adminToken: adminTokenVal || undefined,
+          }
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast("✅ Đã lưu cấu hình Telegram thành công!");
+          document.getElementById('cfg-bot-token').value = '';
+          document.getElementById('cfg-admin-token').value = '';
+          await loadTelegramConfig();
+          await loadTelegramData();
+          checkWebhookInfo();
+        } else {
+          showToast("Lỗi lưu cấu hình: " + (data.error || "Không thể cập nhật"));
+        }
+      } catch (err) {
+        showToast("Lỗi kết nối khi lưu cấu hình.");
+      }
+    }
+
+    async function checkWebhookInfo() {
+      const box = document.getElementById('webhook-info-box');
+      const badge = document.getElementById('webhook-info-badge');
+      const details = document.getElementById('webhook-info-details');
+      if (!box || !badge || !details) return;
+
+      box.style.display = 'block';
+      badge.textContent = 'Checking...';
+      badge.style.background = 'rgba(56, 189, 248, 0.2)';
+      badge.style.color = '#38bdf8';
+      details.innerHTML = 'Đang truy vấn Telegram API...';
+
+      try {
+        const res = await apiFetch('/api/telegram/webhook-info');
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          badge.textContent = 'Lỗi kết nối';
+          badge.style.background = 'rgba(239, 68, 68, 0.2)';
+          badge.style.color = '#ef4444';
+          details.innerHTML = '❌ ' + escapeHtml(data.error || data.description || 'Không thể liên lạc với Telegram Bot API. Vui lòng kiểm tra Bot Token.');
+          return;
+        }
+
+        const info = data.result || {};
+        const hasUrl = !!info.url;
+        badge.textContent = hasUrl ? 'Active' : 'Chưa gắn Webhook';
+        badge.style.background = hasUrl ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)';
+        badge.style.color = hasUrl ? '#10b981' : '#f59e0b';
+
+        let html = '';
+        html += '<div>• <strong>Webhook URL:</strong> ' + (info.url ? '<code>' + escapeHtml(info.url) + '</code>' : '<span style="color:#f59e0b;">Chưa thiết lập (Bấm nút "Kích Hoạt Webhook")</span>') + '</div>';
+        html += '<div>• <strong>Custom Certificate:</strong> ' + (info.has_custom_certificate ? 'Yes' : 'No (Cloudflare SSL)') + '</div>';
+        html += '<div>• <strong>Pending Updates:</strong> ' + (info.pending_update_count || 0) + '</div>';
+        if (info.ip_address) {
+          html += '<div>• <strong>Resolved IP:</strong> <code>' + escapeHtml(info.ip_address) + '</code></div>';
+        }
+        if (info.last_error_date) {
+          const errDate = new Date(info.last_error_date * 1000).toLocaleString();
+          html += '<div style="color: #ef4444; margin-top: 4px;">• <strong>Lỗi gần nhất:</strong> ' + escapeHtml(info.last_error_message || 'N/A') + ' (' + errDate + ')</div>';
+        } else {
+          html += '<div style="color: #10b981; margin-top: 4px;">• <strong>Trạng thái:</strong> Hoạt động bình thường, không có lỗi.</div>';
+        }
+        details.innerHTML = html;
+      } catch (err) {
+        badge.textContent = 'Error';
+        details.innerHTML = '❌ Lỗi mạng khi kiểm tra Webhook info.';
+      }
+    }
+
+    function toggleTokenVisibility(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = '🔒';
+      } else {
+        input.type = 'password';
+        btn.textContent = '👁️';
+      }
+    }
+
     // --- TELEGRAM BOT & ADMIN MANAGEMENT ---
     async function loadTelegramData() {
       try {
+        await loadTelegramConfig();
         const res = await apiFetch('/api/admin/telegram/status');
         if (res.ok) {
           const data = await res.json();
           document.getElementById('tg-bot-handle').textContent = '@' + data.botUsername;
           document.getElementById('tg-configured-admins').textContent = data.configuredAdmins.map(a => '@' + a).join(', ') || 'None';
           document.getElementById('tg-configured-ids').textContent = data.configuredAdminIds.join(', ') || 'None (Any ID with username or token)';
-          document.getElementById('tg-alert-chat').textContent = data.adminChatId || 'Not configured in env';
+          document.getElementById('tg-alert-chat').textContent = data.adminChatId || 'Chưa cấu hình';
           document.getElementById('tg-webhook-status').textContent = data.hasBotToken ? '✅ Bot Token Configured' : '⚠️ Token Not Configured';
         }
         await loadTelegramUsers();
@@ -1300,7 +1539,8 @@ export function renderAdminDashboardHtml(): string {
         const data = await res.json();
         if (res.ok && data.result?.ok) {
           showToast("✅ Telegram Webhook registered successfully!");
-          loadTelegramData();
+          await loadTelegramData();
+          checkWebhookInfo();
         } else {
           showToast("Webhook setup: " + (data.error || data.result?.description || "Failed"));
         }
@@ -1311,14 +1551,16 @@ export function renderAdminDashboardHtml(): string {
 
     async function sendTestAlert() {
       const msgInput = document.getElementById('input-test-alert-msg');
+      const chatInput = document.getElementById('input-test-alert-chat');
       const message = msgInput?.value.trim();
+      const chatId = chatInput?.value.trim() || undefined;
       if (!message) return;
 
       try {
         showToast("Sending test notification...");
         const res = await apiFetch('/api/admin/telegram/test-notify', {
           method: 'POST',
-          body: { message }
+          body: { message, chatId }
         });
         const data = await res.json();
         if (res.ok && data.success) {

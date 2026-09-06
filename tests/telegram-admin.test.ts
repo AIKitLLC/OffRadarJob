@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
-import { UserRepository, JobRepository, CompanyRepository, CrawlTaskRepository } from "../src/db/repositories.js";
+import { UserRepository, JobRepository, CompanyRepository, CrawlTaskRepository, SystemSettingsRepository } from "../src/db/repositories.js";
 import worker, { isTelegramAdmin, DEFAULT_ADMIN_TOKEN } from "../src/index.js";
 
 describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
@@ -372,6 +372,113 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
 
       const alice = await userRepo.findById("usr_alice");
       expect(alice?.role).toBe("admin");
+    });
+  });
+
+  describe("Dynamic Telegram Configuration & Webhook Engine (D1 system_settings)", () => {
+    it("should allow getting and setting configuration in SystemSettingsRepository", async () => {
+      const settingsRepo = new SystemSettingsRepository(db);
+      await settingsRepo.set("telegram_bot_token", "123456789:TEST_BOT_TOKEN_ABC");
+      await settingsRepo.set("telegram_bot_username", "CustomBotUser");
+      
+      const token = await settingsRepo.get("telegram_bot_token");
+      expect(token).toBe("123456789:TEST_BOT_TOKEN_ABC");
+
+      const all = await settingsRepo.getAll();
+      expect(all["telegram_bot_token"]).toBe("123456789:TEST_BOT_TOKEN_ABC");
+      expect(all["telegram_bot_username"]).toBe("CustomBotUser");
+
+      await settingsRepo.delete("telegram_bot_username");
+      const deleted = await settingsRepo.get("telegram_bot_username");
+      expect(deleted).toBeNull();
+    });
+
+    it("should fetch current masked configuration via GET /api/admin/telegram/config", async () => {
+      const settingsRepo = new SystemSettingsRepository(db);
+      await settingsRepo.set("telegram_bot_token", "9876543210:ABCDEFGHIJKLMN");
+      await settingsRepo.set("telegram_bot_username", "MyAwesomeBot");
+      await settingsRepo.set("telegram_admin_usernames", "master_boss, co_founder");
+      await settingsRepo.set("telegram_admin_chat_id", "-100123456789");
+
+      const res = await worker.fetch(
+        new Request("http://localhost/api/admin/telegram/config", {
+          headers: { "x-admin-token": DEFAULT_ADMIN_TOKEN },
+        }),
+        mockEnv as any,
+        mockCtx
+      );
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.hasBotToken).toBe(true);
+      expect(data.botTokenMasked).toMatch(/^987654\.\.\.KLMN$/);
+      expect(data.botUsername).toBe("MyAwesomeBot");
+      expect(data.adminUsernames).toBe("master_boss, co_founder");
+      expect(data.adminChatId).toBe("-100123456789");
+    });
+
+    it("should save configuration via POST /api/admin/telegram/config and take effect immediately", async () => {
+      const res = await worker.fetch(
+        new Request("http://localhost/api/admin/telegram/config", {
+          method: "POST",
+          headers: {
+            "x-admin-token": DEFAULT_ADMIN_TOKEN,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            botToken: "111222333:NEW_DYNAMIC_TOKEN_XYZ",
+            botUsername: "@BrandNewBot",
+            adminUsernames: "new_super_admin, tuannx87",
+            adminChatId: "998877",
+            adminToken: "secret-master-token-999",
+          }),
+        }),
+        mockEnv as any,
+        mockCtx
+      );
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.success).toBe(true);
+      expect(data.updatedKeys).toContain("telegram_bot_token");
+      expect(data.updatedKeys).toContain("telegram_bot_username");
+      expect(data.updatedKeys).toContain("admin_token");
+
+      // Verify status endpoint reflects new bot username and admins
+      const statusRes = await worker.fetch(
+        new Request("http://localhost/api/admin/telegram/status", {
+          headers: { "x-admin-token": "secret-master-token-999" }, // Authenticating with new dynamic admin token!
+        }),
+        mockEnv as any,
+        mockCtx
+      );
+      expect(statusRes.status).toBe(200);
+      const statusData = (await statusRes.json()) as any;
+      expect(statusData.botUsername).toBe("BrandNewBot"); // stripped @
+      expect(statusData.configuredAdmins).toContain("new_super_admin");
+      expect(statusData.hasBotToken).toBe(true);
+
+      // Verify original default admin token still works (no lock-out)
+      const defaultAuthRes = await worker.fetch(
+        new Request("http://localhost/api/admin/telegram/status", {
+          headers: { "x-admin-token": DEFAULT_ADMIN_TOKEN },
+        }),
+        mockEnv as any,
+        mockCtx
+      );
+      expect(defaultAuthRes.status).toBe(200);
+    });
+
+    it("should return helpful error if webhook setup is called without bot token", async () => {
+      const emptyEnv = { DB: db };
+      const res = await worker.fetch(
+        new Request("http://localhost/api/telegram/setup-webhook"),
+        emptyEnv as any,
+        mockCtx
+      );
+      expect(res.status).toBe(400);
+      const data = (await res.json()) as any;
+      expect(data.error).toContain("TELEGRAM_BOT_TOKEN not configured");
     });
   });
 });

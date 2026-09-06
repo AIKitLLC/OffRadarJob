@@ -17,6 +17,7 @@ export class InMemoryD1Database implements ID1Database {
     this.tables.set("users", new Map());
     this.tables.set("cv_versions", new Map());
     this.tables.set("auth_sessions", new Map());
+    this.tables.set("system_settings", new Map());
   }
 
   public prepare(query: string): ID1PreparedStatement {
@@ -432,6 +433,19 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: row ? [row as T] : [], success: true };
     }
 
+    // System settings queries
+    if (q.includes("FROM system_settings") && q.includes("WHERE key = ?")) {
+      const key = String(this.boundValues[0]);
+      const table = this.db.tables.get("system_settings")!;
+      const row = table.get(key);
+      return { results: row ? [row as T] : [], success: true };
+    }
+
+    if (q.includes("FROM system_settings")) {
+      const rows = Array.from(this.db.tables.get("system_settings")!.values());
+      return { results: rows as T[], success: true };
+    }
+
     return { results: [], success: true };
   }
 
@@ -781,6 +795,26 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         authenticated_at: Number(authenticatedAt),
       });
       return { success: true };
+    }
+
+    // INSERT / UPDATE system_settings
+    if (q.includes("INTO system_settings")) {
+      const [key, value, updatedAt] = this.boundValues;
+      const table = this.db.tables.get("system_settings")!;
+      table.set(String(key), {
+        key: String(key),
+        value: String(value),
+        updated_at: Number(updatedAt),
+      });
+      return { success: true };
+    }
+
+    // DELETE FROM system_settings
+    if (q.includes("DELETE FROM system_settings WHERE key = ?")) {
+      const key = String(this.boundValues[0]);
+      const table = this.db.tables.get("system_settings")!;
+      const deleted = table.delete(key);
+      return { success: true, meta: { changes: deleted ? 1 : 0 } };
     }
 
     return { success: true };

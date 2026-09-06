@@ -266,3 +266,15 @@ export const AuthSessionSchema = z.object({
   authenticatedAt: z.number().int().positive().nullable().optional(),
 });
 export type AuthSession = z.infer<typeof AuthSessionSchema>;
+
+// -----------------------------------------------------------------------------
+// System Settings Domain Models & Schemas (Dynamic Telegram & App Config)
+// -----------------------------------------------------------------------------
+
+export const SystemSettingSchema = z.object({
+  key: z.string().min(1),
+  value: z.string(),
+  updatedAt: z.number().int().positive(),
+});
+export type SystemSetting = z.infer<typeof SystemSettingSchema>;
+

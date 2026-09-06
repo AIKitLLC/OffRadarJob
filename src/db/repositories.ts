@@ -14,6 +14,7 @@ import {
   User,
   CvVersion,
   AuthSession,
+  SystemSetting,
 } from "../types/domain.js";
 
 export const MIDWEST_COMPANY_SQL_CONDITION = `(
@@ -1585,5 +1586,72 @@ export class CvRepository {
     };
   }
 }
+
+// -----------------------------------------------------------------------------
+// System Settings Repository (Dynamic Telegram Bot & App Config)
+// -----------------------------------------------------------------------------
+
+export class SystemSettingsRepository {
+  constructor(private readonly db: ID1Database) {}
+
+  public async get(key: string): Promise<string | null> {
+    const row = await this.db
+      .prepare("SELECT value FROM system_settings WHERE key = ? LIMIT 1")
+      .bind(key)
+      .first<{ value: string }>();
+    return row?.value ?? null;
+  }
+
+  public async set(key: string, value: string): Promise<void> {
+    const now = Date.now();
+    await this.db
+      .prepare(
+        `INSERT INTO system_settings (key, value, updated_at) 
+         VALUES (?, ?, ?) 
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      )
+      .bind(key, value, now)
+      .run();
+  }
+
+  public async setMany(entries: Record<string, string>): Promise<void> {
+    const now = Date.now();
+    for (const [key, value] of Object.entries(entries)) {
+      if (value !== undefined && value !== null) {
+        await this.db
+          .prepare(
+            `INSERT INTO system_settings (key, value, updated_at) 
+             VALUES (?, ?, ?) 
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+          )
+          .bind(key, String(value), now)
+          .run();
+      }
+    }
+  }
+
+  public async getAll(): Promise<Record<string, string>> {
+    const res = await this.db
+      .prepare("SELECT key, value FROM system_settings")
+      .all<{ key: string; value: string }>();
+    const map: Record<string, string> = {};
+    for (const row of res.results ?? []) {
+      if (row.key) {
+        map[row.key] = row.value;
+      }
+    }
+    return map;
+  }
+
+  public async delete(key: string): Promise<boolean> {
+    const res = await this.db
+      .prepare("DELETE FROM system_settings WHERE key = ?")
+      .bind(key)
+      .run();
+    const changes = (res.meta as { changes?: number } | undefined)?.changes;
+    return changes != null ? changes > 0 : true;
+  }
+}
+
 
 
