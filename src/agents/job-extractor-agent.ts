@@ -240,62 +240,128 @@ export class JobExtractorAgent extends BaseAgent {
   }
 
   private detectSeniorityLevel(title: string, text: string): SeniorityLevel {
-    const lower = `${title} ${text}`.toLowerCase();
+    const titleLower = title.toLowerCase();
+    const textLower = text.toLowerCase();
+
+    // 1. Internships check (in title first)
+    if (titleLower.includes("intern") || titleLower.includes("co-op") || titleLower.includes("trainee")) {
+      return "intern";
+    }
+
+    // 2. New Grad / Early Career check (in title first to avoid body text 'senior' false-positives)
+    const isNewGradTitle =
+      titleLower.includes("new grad") ||
+      titleLower.includes("new-grad") ||
+      titleLower.includes("new graduate") ||
+      titleLower.includes("recent grad") ||
+      titleLower.includes("recent graduate") ||
+      titleLower.includes("fresh grad") ||
+      titleLower.includes("fresh graduate") ||
+      titleLower.includes("entry-level") ||
+      titleLower.includes("entry level") ||
+      titleLower.includes("early career") ||
+      titleLower.includes("early-career") ||
+      titleLower.includes("college grad") ||
+      titleLower.includes("university grad") ||
+      titleLower.includes("campus") ||
+      titleLower.includes("rotational") ||
+      titleLower.includes("apprentice") ||
+      titleLower.includes("engineering resident") ||
+      titleLower.includes("class of 202") ||
+      /\b(swe|engineer|developer)\s*(1|i)\b/i.test(titleLower) ||
+      titleLower.includes("associate software engineer") ||
+      titleLower.includes("associate developer") ||
+      titleLower.includes("associate engineer") ||
+      titleLower.includes("graduate software engineer") ||
+      titleLower.includes("graduate developer") ||
+      titleLower.includes("graduate engineer");
+
+    if (isNewGradTitle) {
+      return "new_grad";
+    }
+
+    // 3. Founding / Executive in title
     if (
-      lower.includes("founding") ||
-      lower.includes("co-founder") ||
-      lower.includes("head of") ||
-      lower.includes("director of") ||
-      lower.includes("cto")
+      titleLower.includes("founding") ||
+      titleLower.includes("co-founder") ||
+      titleLower.includes("head of") ||
+      titleLower.includes("director of") ||
+      titleLower.includes("cto")
     ) {
       return "founding";
     }
+
+    // 4. Lead / Principal / Staff in title
     if (
-      lower.includes("lead") ||
-      lower.includes("principal") ||
-      lower.includes("staff") ||
-      lower.includes("architect")
+      titleLower.includes("lead") ||
+      titleLower.includes("principal") ||
+      titleLower.includes("staff") ||
+      titleLower.includes("architect")
     ) {
       return "lead";
     }
+
+    // 5. Senior in title
     if (
-      lower.includes("senior") ||
-      lower.includes("sr.") ||
-      lower.includes("sr ") ||
-      lower.includes("experienced")
+      titleLower.includes("senior") ||
+      titleLower.includes("sr.") ||
+      titleLower.includes("sr ") ||
+      titleLower.includes("experienced")
     ) {
       return "senior";
     }
+
+    // 6. Junior in title
     if (
-      lower.includes("intern") ||
-      lower.includes("internship") ||
-      lower.includes("trainee")
-    ) {
-      return "intern";
-    }
-    if (
-      lower.includes("new grad") ||
-      lower.includes("new-grad") ||
-      lower.includes("new graduate") ||
-      lower.includes("recent grad") ||
-      lower.includes("recent graduate") ||
-      lower.includes("fresh grad") ||
-      lower.includes("fresh graduate") ||
-      lower.includes("entry-level") ||
-      lower.includes("entry level") ||
-      lower.includes("college grad") ||
-      lower.includes("university grad")
-    ) {
-      return "new_grad";
-    }
-    if (
-      lower.includes("junior") ||
-      lower.includes("jr.") ||
-      lower.includes("jr ") ||
-      lower.includes("associate")
+      titleLower.includes("junior") ||
+      titleLower.includes("jr.") ||
+      titleLower.includes("jr ") ||
+      titleLower.includes("associate")
     ) {
       return "junior";
     }
+
+    // 7. Check body text for New Grad / Early Career
+    if (
+      textLower.includes("new grad") ||
+      textLower.includes("new graduate") ||
+      textLower.includes("recent graduate") ||
+      textLower.includes("entry-level") ||
+      textLower.includes("entry level") ||
+      textLower.includes("early career") ||
+      textLower.includes("university graduate") ||
+      textLower.includes("class of 202")
+    ) {
+      return "new_grad";
+    }
+
+    if (textLower.includes("internship") || textLower.includes("co-op")) {
+      return "intern";
+    }
+
+    if (
+      textLower.includes("founding") ||
+      textLower.includes("co-founder") ||
+      textLower.includes("director of")
+    ) {
+      return "founding";
+    }
+
+    if (
+      textLower.includes("principal engineer") ||
+      textLower.includes("staff engineer")
+    ) {
+      return "lead";
+    }
+
+    if (
+      textLower.includes("senior engineer") ||
+      textLower.includes("senior developer") ||
+      textLower.includes("sr. engineer")
+    ) {
+      return "senior";
+    }
+
     return "mid";
   }
 

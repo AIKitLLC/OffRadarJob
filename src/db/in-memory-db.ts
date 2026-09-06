@@ -300,7 +300,7 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         return { results: [{ total: rows.length, count: rows.length } as T], success: true };
       }
 
-      if (q.includes("is_midwest_match DESC") || q.includes("ORDER BY is_midwest")) {
+      if (q.includes("is_midwest_match DESC") || q.includes("ORDER BY is_midwest") || q.includes("THEN 1 ELSE 0 END) DESC")) {
         rows.sort((a, b) => {
           const aMid = isMidwestRow(a) ? 1 : 0;
           const bMid = isMidwestRow(b) ? 1 : 0;

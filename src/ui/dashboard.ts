@@ -348,7 +348,7 @@ export function renderDashboardHtml(): string {
     .tag-grade-senior { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
     .tag-grade-mid { background: rgba(45, 212, 191, 0.15); color: #2dd4bf; }
     .tag-grade-junior { background: rgba(52, 211, 153, 0.15); color: #34d399; }
-    .tag-grade-newgrad { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); font-weight: 600; }
+    .tag-grade-newgrad { background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(14, 165, 233, 0.2)); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.45); font-weight: 700; box-shadow: 0 0 8px rgba(16, 185, 129, 0.15); }
     .tag-cat { background: #1e1b4b; color: #a5b4fc; border: 1px solid #312e81; }
 
     .filter-controls {
@@ -759,6 +759,7 @@ export function renderDashboardHtml(): string {
       </div>
       <div class="filter-controls">
         <input type="text" id="search-input" placeholder="🔍 Search roles, tech, or companies..." class="region-select" style="min-width: 250px;" oninput="onSearchInput()" />
+        <button type="button" id="quick-newgrad-btn" class="region-select" onclick="toggleNewGradFilter()" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">🎓 New Grad 2025/2026</button>
         <select id="grade-filter" class="region-select" onchange="applyFilters()">
           <option value="all">🎓 All Grades / Seniority</option>
           <option value="founding">🚀 Founding / Principal</option>
@@ -1073,11 +1074,38 @@ export function renderDashboardHtml(): string {
       applyFilters();
     }
 
+    function toggleNewGradFilter() {
+      const gradeSelect = document.getElementById('grade-filter');
+      if (!gradeSelect) return;
+      if (gradeSelect.value === 'new_grad') {
+        gradeSelect.value = 'all';
+      } else {
+        gradeSelect.value = 'new_grad';
+      }
+      applyFilters();
+    }
+
     function applyFilters() {
       const region = document.getElementById('region-filter')?.value || 'all';
+      const grade = document.getElementById('grade-filter')?.value || 'all';
       document.querySelectorAll('.region-pill').forEach(el => el.classList.remove('active'));
       const activePill = document.getElementById('pill-' + region);
       if (activePill) activePill.classList.add('active');
+
+      const ngBtn = document.getElementById('quick-newgrad-btn');
+      if (ngBtn) {
+        if (grade === 'new_grad') {
+          ngBtn.style.background = '#10b981';
+          ngBtn.style.borderColor = '#10b981';
+          ngBtn.style.color = '#ffffff';
+          ngBtn.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.4)';
+        } else {
+          ngBtn.style.background = 'rgba(16, 185, 129, 0.15)';
+          ngBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+          ngBtn.style.color = '#34d399';
+          ngBtn.style.boxShadow = 'none';
+        }
+      }
 
       fetchJobs(1);
       if (companiesLoaded) {
@@ -1951,11 +1979,33 @@ export function renderDashboardHtml(): string {
     window.onTailorBaseCvChange = onTailorBaseCvChange;
     window.executeTailorCv = executeTailorCv;
     window.saveTailoredCv = saveTailoredCv;
+    window.toggleNewGradFilter = toggleNewGradFilter;
 
     async function loadData() {
       try {
         checkAuth();
         fetchStats();
+
+        // Handle URL parameters (e.g. ?grade=new_grad or ?region=midwest)
+        const urlParams = new URLSearchParams(window.location.search);
+        const gradeParam = urlParams.get('grade');
+        if (gradeParam) {
+          const gradeSelect = document.getElementById('grade-filter');
+          if (gradeSelect) gradeSelect.value = gradeParam;
+          const ngBtn = document.getElementById('quick-newgrad-btn');
+          if (ngBtn && gradeParam === 'new_grad') {
+            ngBtn.style.background = '#10b981';
+            ngBtn.style.borderColor = '#10b981';
+            ngBtn.style.color = '#ffffff';
+            ngBtn.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.4)';
+          }
+        }
+        const regionParam = urlParams.get('region');
+        if (regionParam) {
+          const regionSelect = document.getElementById('region-filter');
+          if (regionSelect) regionSelect.value = regionParam;
+        }
+
         await fetchJobs(1);
       } catch (err) {
         console.error('Error in loadData:', err);

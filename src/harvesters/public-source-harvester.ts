@@ -123,14 +123,54 @@ function detectTechStackFromText(text: string): string[] {
 
 export function inferSeniority(title: string): SeniorityLevel {
   const t = title.toLowerCase();
-  if (t.includes("intern") || t.includes("co-op")) return "intern";
-  if (t.includes("new grad") || t.includes("graduate") || t.includes("entry level") || t.includes("junior") || t.includes("jr.")) {
-    if (t.includes("new grad") || t.includes("graduate")) return "new_grad";
+  // 1. Internships
+  if (t.includes("intern") || t.includes("co-op") || t.includes("trainee")) return "intern";
+
+  // 2. New Grad / Early Career / Entry Level (check before senior / lead to avoid false positives)
+  if (
+    t.includes("new grad") ||
+    t.includes("new-grad") ||
+    t.includes("new graduate") ||
+    t.includes("recent grad") ||
+    t.includes("recent graduate") ||
+    t.includes("fresh grad") ||
+    t.includes("fresh graduate") ||
+    t.includes("entry-level") ||
+    t.includes("entry level") ||
+    t.includes("early career") ||
+    t.includes("early-career") ||
+    t.includes("college grad") ||
+    t.includes("university grad") ||
+    t.includes("campus") ||
+    t.includes("rotational") ||
+    t.includes("apprentice") ||
+    t.includes("engineering resident") ||
+    t.includes("class of 202") ||
+    /\b(swe|engineer|developer)\s*(1|i)\b/i.test(t) ||
+    t.includes("associate software engineer") ||
+    t.includes("associate developer") ||
+    t.includes("associate engineer") ||
+    t.includes("graduate software engineer") ||
+    t.includes("graduate developer") ||
+    t.includes("graduate engineer")
+  ) {
+    return "new_grad";
+  }
+
+  // 3. Junior
+  if (t.includes("junior") || t.includes("jr.") || t.includes("jr ") || t.includes("associate")) {
     return "junior";
   }
-  if (t.includes("founding") || t.includes("founder")) return "founding";
-  if (t.includes("staff") || t.includes("principal") || t.includes("lead") || t.includes("director") || t.includes("head")) return "lead";
-  if (t.includes("senior") || t.includes("sr.")) return "senior";
+
+  // 4. Founding / Executive
+  if (t.includes("founding") || t.includes("founder") || t.includes("head of") || t.includes("director")) return "founding";
+
+  // 5. Staff / Lead / Principal
+  if (t.includes("staff") || t.includes("principal") || t.includes("lead") || t.includes("architect")) return "lead";
+
+  // 6. Senior
+  if (t.includes("senior") || t.includes("sr.") || t.includes("sr ")) return "senior";
+
   return "mid";
 }
 

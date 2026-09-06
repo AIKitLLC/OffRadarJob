@@ -22,6 +22,7 @@ import {
 import { CrawlTaskStatus, User, CvVersion } from "./types/domain.js";
 import { CURATED_SEEDS } from "./seeds/seed-catalogue.js";
 import { PublicSourceManager } from "./harvesters/public-source-harvester.js";
+import { NewGradHarvester } from "./harvesters/newgrad-harvester.js";
 
 export interface KvNamespace {
   get(key: string, type?: "text" | "json"): Promise<any>;
@@ -583,6 +584,7 @@ export default {
                 `ℹ️ *Hướng dẫn sử dụng OffRadarJob Bot*`,
                 ``,
                 `• Để đăng nhập web: Bấm nút "Đăng nhập Telegram" trên website hoặc quét mã QR.`,
+                `• \`/newgrad\` - Tra cứu việc làm New Grad 2025/2026 mới nhất (gõ \`/newgrad midwest\` để lọc vùng Midwest)`,
                 `• \`/mcp\` - Lấy MCP Endpoint & Personal API Token`,
                 `• \`/stats\` - Xem thống kê nhanh số lượng jobs & companies`,
                 `• Quản trị viên: Gõ \`/admin auth <admin_token>\` để kích hoạt quyền quản trị.`,
@@ -607,10 +609,11 @@ export default {
             `Xin chào Admin *${from.first_name || "Admin"}* (@${from.username || tgId})!`,
             ``,
             `📋 *Các lệnh quản trị trực tiếp trên Telegram:*`,
+            `🎓 \`/newgrad [midwest|remote]\` - Tra cứu các vị trí New Grad / Entry-level`,
             `📊 \`/stats\` - Báo cáo realtime (Jobs, Companies, Tỷ lệ Midwest & các vùng US)`,
             `🕷️ \`/crawl <url>\` - Kích hoạt crawl ngay 1 career page URL`,
             `⚡ \`/sweep\` - Quét đồng loạt danh sách seed companies`,
-            `🌾 \`/harvest [hn|github|all]\` - Thu thập jobs từ nguồn mở HackerNews & GitHub`,
+            `🌾 \`/harvest [hn|github|newgrad|all]\` - Thu thập jobs từ HackerNews, GitHub, hoặc New Grad 2025/2026`,
             `👥 \`/users\` - Thống kê users & danh sách tài khoản MCP`,
             `🔗 \`/adminlink\` - Lấy link 1-click vào thẳng Web Admin Control Center`,
             `🔔 \`/testalert\` - Kiểm tra hệ thống gửi thông báo khẩn cấp`,
@@ -619,6 +622,56 @@ export default {
 
           if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, menuText);
           return Response.json({ ok: true });
+        }
+
+        // C.1 /newgrad [midwest|west|northeast|south|mountain|remote|keyword] - Query new grad roles
+        if (text.startsWith("/newgrad") && chatId) {
+          const arg = text.replace(/^\/newgrad\s*/i, "").trim().toLowerCase();
+          const region = (arg === "midwest" || arg === "west" || arg === "northeast" || arg === "south" || arg === "mountain" || arg === "remote") ? arg : undefined;
+          const search = (!region && arg.length > 1) ? arg : undefined;
+
+          const newGradJobs = await jobRepo.list({
+            grade: "new_grad",
+            region,
+            search,
+            limit: 5,
+          });
+
+          if (newGradJobs.length === 0) {
+            const noJobsMsg = [
+              `🎓 *OFFRADARJOB - VIỆC LÀM NEW GRAD / ENTRY-LEVEL*`,
+              ``,
+              `Hiện chưa tìm thấy việc làm New Grad nào phù hợp với bộ lọc: \`${arg || "tất cả"}\`.`,
+              ``,
+              `💡 *Gợi ý:* Admin có thể gõ lệnh \`/harvest newgrad\` để nạp ngay hơn 400+ vị trí New Grad 2025/2026 từ SimplifyJobs và các trung tâm công nghệ Midwest!`,
+            ].join("\n");
+            if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, noJobsMsg);
+            return Response.json({ ok: true, count: 0 });
+          }
+
+          const jobItems = newGradJobs.map((j, idx) => {
+            const locText = j.isMidwest ? "📍 *Midwest*" : `🌐 ${j.location || "US / Remote"}`;
+            const comp = j.companyName || "Tech Company";
+            const salary = j.salaryMin && j.salaryMax ? ` | 💰 $${Math.round(j.salaryMin / 1000)}k-$${Math.round(j.salaryMax / 1000)}k` : "";
+            return [
+              `*${idx + 1}. ${j.title}*`,
+              `🏢 *${comp}* | ${locText}${salary}`,
+              `🔗 [Ứng tuyển trực tiếp trên ATS](${j.applyTarget})`,
+            ].join("\n");
+          }).join("\n\n");
+
+          const responseText = [
+            `🎓 *OFFRADARJOB - VIỆC LÀM NEW GRAD 2025/2026 MỚI NHẤT*`,
+            region ? `*(Khu vực: ${region.toUpperCase()})*` : `*(Ưu tiên Midwest & US National)*`,
+            ``,
+            jobItems,
+            ``,
+            `🌐 *Xem đầy đủ danh sách & lọc chi tiết tại:*`,
+            `https://off-radar-jobs.tuannx87.workers.dev/?grade=new_grad`,
+          ].join("\n");
+
+          if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, responseText);
+          return Response.json({ ok: true, count: newGradJobs.length });
         }
 
         // D. /stats - Telemetry and region metrics
@@ -762,6 +815,39 @@ export default {
           }
 
           const sub = text.replace(/^\/harvest\s*/i, "").trim().toLowerCase();
+
+          if (sub === "newgrad") {
+            if (env.TELEGRAM_BOT_TOKEN) {
+              await sendTelegramMessage(
+                env.TELEGRAM_BOT_TOKEN,
+                chatId,
+                `🎓 *Đang thu thập và nạp hơn 400+ vị trí New Grad từ SimplifyJobs & Midwest Tech Hubs...*`
+              );
+            }
+            try {
+              const newGradHarvester = new NewGradHarvester();
+              const result = await newGradHarvester.importNewGradRoles(env.DB);
+              if (env.TELEGRAM_BOT_TOKEN) {
+                const harvestMsg = [
+                  `🎓 *Thu thập việc làm New Grad hoàn tất!*`,
+                  ``,
+                  `• *Tổng số jobs đã parse:* \`${result.totalParsed}\``,
+                  `• *Jobs đã nạp vào D1:* \`${result.importedJobs}\``,
+                  `• *Jobs thuộc vùng Midwest:* \`${result.midwestJobs}\``,
+                  ``,
+                  `👉 Gõ \`/newgrad\` để xem ngay các vị trí mới nhất!`,
+                ].join("\n");
+                await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, harvestMsg);
+              }
+              return Response.json({ ok: true, result });
+            } catch (err: any) {
+              if (env.TELEGRAM_BOT_TOKEN) {
+                await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, `❌ Lỗi khi harvest newgrad: ${err?.message}`);
+              }
+              return Response.json({ ok: false, error: err?.message });
+            }
+          }
+
           const source = (sub === "hn" || sub === "github") ? sub : "all";
 
           if (env.TELEGRAM_BOT_TOKEN) {
@@ -1614,6 +1700,31 @@ export default {
           limit,
           status: "harvest_started",
           message: `Harvesting up to ${limit} companies from Hacker News and GitHub Open Directories in the background. Check Tasks tab for progress.`,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return Response.json({ error: msg }, { status: 500 });
+      }
+    }
+
+    // 15b. Admin API: Harvest New Grad Roles (SimplifyJobs & Midwest programs)
+    if (path === "/api/admin/harvest/newgrad" && request.method === "POST") {
+      if (!isAuthorized(request, url, env)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      try {
+        const body = (await request.json().catch(() => ({}))) as { limit?: number };
+        const limit = Math.min(Math.max(body.limit ?? 350, 10), 500);
+
+        const harvester = new NewGradHarvester();
+        const result = await harvester.importNewGradRoles(env.DB, limit);
+
+        return Response.json({
+          success: true,
+          source: "new_grad_positions",
+          limit,
+          ...result,
+          message: `Successfully harvested ${result.importedJobs} New Grad positions (${result.midwestJobs} Midwest US roles).`,
         });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);

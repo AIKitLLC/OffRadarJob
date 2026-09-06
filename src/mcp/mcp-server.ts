@@ -101,6 +101,10 @@ export class McpServerHandler {
               enum: ["all", "founding", "lead", "senior", "mid", "junior", "new_grad", "intern"],
               description: "Seniority / grade filter (e.g. founding, new_grad, senior)",
             },
+            is_new_grad: {
+              type: "boolean",
+              description: "Convenience filter: Set to true to search specifically for New Grad & Early-Career roles (Class of 2025/2026)",
+            },
             tech_category: {
               type: "string",
               enum: ["all", "fullstack", "backend_systems", "frontend_ui", "ai_ml", "devops_cloud", "product_design"],
@@ -188,7 +192,8 @@ export class McpServerHandler {
     switch (name) {
       case "search_jobs": {
         const query = args.query ?? undefined;
-        const grade = args.grade ?? undefined;
+        const isNewGrad = args.is_new_grad === true || args.grade === "new_grad";
+        const grade = isNewGrad ? "new_grad" : (args.grade ?? undefined);
         const techCategory = args.tech_category ?? undefined;
         const region = args.region ?? undefined;
         const limit = Math.min(Math.max(1, args.limit ?? 10), 50);
@@ -326,18 +331,33 @@ export class McpServerHandler {
           )
         );
 
-        const tailoringSuggestions = [
-          `Target role: Emphasize '${job.title}' in the header summary.`,
-          `Highlight primary tech category: ${job.techCategory} architecture.`,
-          missingSkills.length > 0
-            ? `Incorporate key JD keywords: ${missingSkills.slice(0, 5).join(", ")}.`
-            : `All top requirements (${matchedSkills.slice(0, 4).join(", ")}) already matched!`,
-          job.isRemote
-            ? "Highlight async communication & remote team impact."
-            : `Highlight regional presence near ${job.location || "office location"}.`,
-        ];
+        const isNewGradJob = job.seniorityLevel === "new_grad";
+        const tailoringSuggestions = isNewGradJob
+          ? [
+              `Target New Grad role: Emphasize '${job.title}' with graduation timeline (Class of 2025/2026).`,
+              `Feature academic & capstone projects related to ${job.techCategory} at the top.`,
+              `Highlight core coursework, data structures & algorithms foundation, and GitHub repositories.`,
+              missingSkills.length > 0
+                ? `Incorporate key JD keywords: ${missingSkills.slice(0, 5).join(", ")}.`
+                : `Key tech stack matched: ${matchedSkills.slice(0, 4).join(", ")}.`,
+              job.isMidwest
+                ? `Highlight presence or willingness to relocate to US-Midwest tech hub.`
+                : `Highlight relocation or remote readiness for ${job.location || "US"}.`,
+            ]
+          : [
+              `Target role: Emphasize '${job.title}' in the header summary.`,
+              `Highlight primary tech category: ${job.techCategory} architecture.`,
+              missingSkills.length > 0
+                ? `Incorporate key JD keywords: ${missingSkills.slice(0, 5).join(", ")}.`
+                : `All top requirements (${matchedSkills.slice(0, 4).join(", ")}) already matched!`,
+              job.isRemote
+                ? "Highlight async communication & remote team impact."
+                : `Highlight regional presence near ${job.location || "office location"}.`,
+            ];
 
-        const tailoredSummary = `Results-driven ${job.title} specializing in ${[...matchedSkills.slice(0, 3), job.techCategory].join(", ")}. Proven track record designing scalable systems, accelerating engineering velocity, and delivering mission-critical products for high-growth tech teams.`;
+        const tailoredSummary = isNewGradJob
+          ? `High-aptitude, motivated early-career ${job.title} specializing in ${[...matchedSkills.slice(0, 3), job.techCategory].join(", ")}. Strong computer science foundation, hands-on project experience, and eager to contribute to high-impact production systems at ${job.companyName || "high-growth tech teams"}.`
+          : `Results-driven ${job.title} specializing in ${[...matchedSkills.slice(0, 3), job.techCategory].join(", ")}. Proven track record designing scalable systems, accelerating engineering velocity, and delivering mission-critical products for high-growth tech teams.`;
 
         const tailoredCvMarkdown = `# ${user.firstName} - ${job.title}\n\n## Executive Summary\n${tailoredSummary}\n\n## Matched Skills\n${[...matchedSkills, ...missingSkills].join(", ")}\n\n${baseContent}`;
 
