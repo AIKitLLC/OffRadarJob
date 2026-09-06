@@ -389,6 +389,7 @@ export function renderAdminDashboardHtml(): string {
       <button class="tab-btn" onclick="switchTab('dispatch')">🚀 Dispatch Crawlers</button>
       <button class="tab-btn" onclick="switchTab('moderation')">📋 Job Moderation (<span id="tab-jobs-count">0</span>)</button>
       <button class="tab-btn" onclick="switchTab('telemetry')">📡 Error & DLQ Logs (<span id="tab-logs-count">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('telegram')">🤖 Telegram Bot & Admins</button>
     </div>
 
     <!-- Real-time Stats Grid -->
@@ -729,6 +730,120 @@ export function renderAdminDashboardHtml(): string {
         </div>
       </div>
     </div>
+
+    <!-- TAB 5: Telegram Bot & Admin Configuration -->
+    <div id="tab-telegram" class="tab-content" style="display: none;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
+        <!-- Bot Status Card -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🤖 Telegram Bot Status & Webhook</div>
+            <button class="btn btn-primary btn-sm" onclick="setupTgWebhook()">🔗 Setup Webhook</button>
+          </div>
+          <div style="padding: 20px;">
+            <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+              <div style="width: 48px; height: 48px; border-radius: 50%; background: #0088cc22; border: 1px solid #0088cc; display: flex; align-items: center; justify-content: center; font-size: 24px;">✈️</div>
+              <div>
+                <div style="font-size: 16px; font-weight: 700; color: #fff;" id="tg-bot-handle">@OffRadarJobBot</div>
+                <div style="font-size: 13px; color: #38bdf8;" id="tg-webhook-status">Checking webhook status...</div>
+              </div>
+            </div>
+            <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; font-size: 13px; line-height: 1.6;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="color: var(--text-muted);">Configured Admin Handles:</span>
+                <strong style="color: #f59e0b;" id="tg-configured-admins">@tuannx87</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="color: var(--text-muted);">Configured Admin IDs:</span>
+                <strong style="color: #a78bfa;" id="tg-configured-ids">None (Any ID with username or token)</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted);">Target Alert Chat ID:</span>
+                <strong style="color: #10b981;" id="tg-alert-chat">Configured via TELEGRAM_ADMIN_CHAT_ID</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Telegram Admin Test & Quick Actions -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🔔 Admin Notification & Test Alert</div>
+          </div>
+          <div style="padding: 20px;">
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+              Gửi tin nhắn test tới Admin Telegram Chat để đảm bảo hệ thống cảnh báo sự cố, phát hiện job mới và crawler status hoạt động thông suốt.
+            </p>
+            <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+              <input type="text" id="input-test-alert-msg" class="form-input" placeholder="Nhập nội dung thông báo kiểm tra..." value="🚀 [OffRadarJob Alert] Hệ thống crawler & bot hoạt động bình thường." style="flex: 1;" />
+              <button class="btn btn-primary" onclick="sendTestAlert()">📢 Gửi Test</button>
+            </div>
+            <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 12px; font-size: 12px; color: #bae6fd;">
+              💡 <strong>Mẹo:</strong> Trong Telegram chat với bot, bạn có thể gõ <code>/admin auth &lt;token&gt;</code> để tự nâng cấp quyền Admin bất cứ lúc nào!
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- User Role Management Table -->
+      <div class="card" style="margin-bottom: 24px;">
+        <div class="card-header">
+          <div class="card-title">👥 User & Admin Access Management (<span id="tg-users-count">0</span>)</div>
+          <button class="btn btn-secondary btn-sm" onclick="loadTelegramUsers()">🔄 Refresh Users</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Name / First Name</th>
+                <th>Telegram Username</th>
+                <th>Telegram ID</th>
+                <th>Personal MCP Token</th>
+                <th>Joined Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tg-users-body">
+              <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Loading users...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Bot Commands Reference -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📖 Telegram Bot Commands Cheatsheet</div>
+        </div>
+        <div style="padding: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+          <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+            <div style="font-weight: 700; color: #38bdf8; font-size: 14px; margin-bottom: 6px;">📊 /stats</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Xem báo cáo realtime số lượng jobs, companies, tỷ lệ Midwest và crawl tasks gần nhất.</div>
+          </div>
+          <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+            <div style="font-weight: 700; color: #10b981; font-size: 14px; margin-bottom: 6px;">🕷️ /crawl &lt;url&gt;</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Kích hoạt crawl ngay 1 career page URL (tự động phân tích, profile & trích xuất jobs).</div>
+          </div>
+          <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+            <div style="font-weight: 700; color: #f59e0b; font-size: 14px; margin-bottom: 6px;">⚡ /sweep</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Kích hoạt quét đồng loạt top seed companies trong background queue.</div>
+          </div>
+          <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+            <div style="font-weight: 700; color: #a78bfa; font-size: 14px; margin-bottom: 6px;">🌾 /harvest [hn|github|all]</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Thu thập danh sách công ty & jobs từ Hacker News hoặc GitHub repositories.</div>
+          </div>
+          <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+            <div style="font-weight: 700; color: #ec4899; font-size: 14px; margin-bottom: 6px;">👥 /users</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Thống kê tổng số người dùng, số lượng Admins và 5 người dùng mới nhất.</div>
+          </div>
+          <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+            <div style="font-weight: 700; color: #3b82f6; font-size: 14px; margin-bottom: 6px;">🔗 /adminlink</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Tạo magic URL đăng nhập 1 chạm vào Web Admin Control Center.</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="toast" class="toast"></div>
@@ -756,6 +871,7 @@ export function renderAdminDashboardHtml(): string {
       if (tabId === 'tasks') loadTasks();
       if (tabId === 'moderation') loadModerationJobs();
       if (tabId === 'telemetry') loadTelemetry();
+      if (tabId === 'telegram') loadTelegramData();
     }
 
     async function apiFetch(endpoint, options = {}) {
@@ -774,7 +890,8 @@ export function renderAdminDashboardHtml(): string {
         loadStats(),
         loadTasks(),
         loadModerationJobs(),
-        loadTelemetry()
+        loadTelemetry(),
+        loadTelegramData()
       ]);
       showToast("Data refreshed!");
     }
@@ -1094,6 +1211,123 @@ export function renderAdminDashboardHtml(): string {
         showToast("Job deleted.");
         loadModerationJobs();
         loadStats();
+      }
+    }
+
+    // --- TELEGRAM BOT & ADMIN MANAGEMENT ---
+    async function loadTelegramData() {
+      try {
+        const res = await apiFetch('/api/admin/telegram/status');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('tg-bot-handle').textContent = '@' + data.botUsername;
+          document.getElementById('tg-configured-admins').textContent = data.configuredAdmins.map(a => '@' + a).join(', ') || 'None';
+          document.getElementById('tg-configured-ids').textContent = data.configuredAdminIds.join(', ') || 'None (Any ID with username or token)';
+          document.getElementById('tg-alert-chat').textContent = data.adminChatId || 'Not configured in env';
+          document.getElementById('tg-webhook-status').textContent = data.hasBotToken ? '✅ Bot Token Configured' : '⚠️ Token Not Configured';
+        }
+        await loadTelegramUsers();
+      } catch (err) {
+        console.error("Failed loading telegram status:", err);
+      }
+    }
+
+    async function loadTelegramUsers() {
+      const tbody = document.getElementById('tg-users-body');
+      try {
+        const res = await apiFetch('/api/admin/users');
+        if (!res.ok) return;
+        const data = await res.json();
+        const users = data.users || [];
+        document.getElementById('tg-users-count').textContent = users.length;
+
+        if (users.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No users found.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = users.map(function(u) {
+          var isAdmin = u.role === 'admin';
+          var roleBadge = isAdmin 
+            ? '<span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b;">👑 Admin</span>'
+            : '<span class="badge" style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid #475569;">👤 User</span>';
+          
+          var actionBtn = isAdmin
+            ? '<button class="btn btn-secondary btn-sm" onclick="toggleUserRole(\'' + escapeHtml(u.id) + '\', \'user\')">Revoke Admin</button>'
+            : '<button class="btn btn-primary btn-sm" onclick="toggleUserRole(\'' + escapeHtml(u.id) + '\', \'admin\')">Grant Admin 👑</button>';
+
+          var dateStr = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A';
+          var tgHandle = u.username ? '@' + escapeHtml(u.username) : '<span style="color:var(--text-muted);">-</span>';
+          var tokenDisplay = u.apiToken ? u.apiToken.slice(0, 10) + '...' : '';
+
+          return '<tr>' +
+            '<td>' + roleBadge + '</td>' +
+            '<td><strong>' + escapeHtml(u.firstName) + '</strong></td>' +
+            '<td>' + tgHandle + '</td>' +
+            '<td><code>' + escapeHtml(u.telegramId) + '</code></td>' +
+            '<td><code>' + escapeHtml(tokenDisplay) + '</code></td>' +
+            '<td style="color: var(--text-muted);">' + dateStr + '</td>' +
+            '<td>' + actionBtn + '</td>' +
+          '</tr>';
+        }).join('');
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--danger);">Failed loading users.</td></tr>';
+      }
+    }
+
+    async function toggleUserRole(userId, newRole) {
+      if (!confirm("Are you sure you want to set this user role to " + newRole.toUpperCase() + "?")) return;
+      try {
+        const res = await apiFetch('/api/admin/users/' + encodeURIComponent(userId) + '/role', {
+          method: 'POST',
+          body: { role: newRole }
+        });
+        if (res.ok) {
+          showToast("User role updated to " + newRole + "!");
+          loadTelegramUsers();
+        } else {
+          showToast("Failed updating user role.");
+        }
+      } catch (err) {
+        showToast("Error updating user role.");
+      }
+    }
+
+    async function setupTgWebhook() {
+      try {
+        showToast("Setting up Telegram webhook...");
+        const res = await fetch('/api/telegram/setup-webhook');
+        const data = await res.json();
+        if (res.ok && data.result?.ok) {
+          showToast("✅ Telegram Webhook registered successfully!");
+          loadTelegramData();
+        } else {
+          showToast("Webhook setup: " + (data.error || data.result?.description || "Failed"));
+        }
+      } catch (err) {
+        showToast("Error connecting to webhook setup endpoint.");
+      }
+    }
+
+    async function sendTestAlert() {
+      const msgInput = document.getElementById('input-test-alert-msg');
+      const message = msgInput?.value.trim();
+      if (!message) return;
+
+      try {
+        showToast("Sending test notification...");
+        const res = await apiFetch('/api/admin/telegram/test-notify', {
+          method: 'POST',
+          body: { message }
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast("📢 Test notification sent to Telegram!");
+        } else {
+          showToast("Failed to send alert: " + (data.error || "Check TELEGRAM_BOT_TOKEN"));
+        }
+      } catch (err) {
+        showToast("Error triggering test alert.");
       }
     }
 

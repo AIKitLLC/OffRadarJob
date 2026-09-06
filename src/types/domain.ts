@@ -215,6 +215,9 @@ export type CrawlTask = z.infer<typeof CrawlTaskSchema>;
 // User Domain Models & Schemas (Telegram Auth & MCP Key)
 // -----------------------------------------------------------------------------
 
+export const UserRoleEnum = z.enum(["user", "admin"]);
+export type UserRole = z.infer<typeof UserRoleEnum>;
+
 export const UserSchema = z.object({
   id: z.string().min(1),
   telegramId: z.string().min(1),
@@ -222,6 +225,7 @@ export const UserSchema = z.object({
   firstName: z.string().min(1),
   photoUrl: z.string().nullable().optional(),
   apiToken: z.string().min(1),
+  role: UserRoleEnum.default("user").optional(),
   createdAt: z.number().int().positive(),
   updatedAt: z.number().int().positive(),
 });

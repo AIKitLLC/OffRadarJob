@@ -354,6 +354,16 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
     }
 
     // Users queries
+    if (q.includes("FROM users") && q.includes("COUNT(*)")) {
+      const table = this.db.tables.get("users")!;
+      let rows = Array.from(table.values());
+      if (q.includes("WHERE role = ?")) {
+        const targetRole = String(this.boundValues[0]);
+        rows = rows.filter((r) => r["role"] === targetRole);
+      }
+      return { results: [{ count: rows.length, total: rows.length } as T], success: true };
+    }
+
     if (q.includes("FROM users") && q.includes("WHERE id = ?")) {
       const id = String(this.boundValues[0]);
       const table = this.db.tables.get("users")!;
@@ -381,6 +391,17 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         }
       }
       return { results: [], success: true };
+    }
+
+    if (q.includes("FROM users")) {
+      const table = this.db.tables.get("users")!;
+      let rows = Array.from(table.values());
+      if (q.includes("WHERE role = ?")) {
+        const targetRole = String(this.boundValues[0]);
+        rows = rows.filter((r) => r["role"] === targetRole);
+      }
+      rows.sort((a, b) => Number(b["created_at"] ?? 0) - Number(a["created_at"] ?? 0));
+      return { results: rows as T[], success: true };
     }
 
     // CV versions queries
@@ -629,8 +650,13 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
 
     // INSERT/UPDATE users
     if (q.includes("INTO users")) {
-      const [id, telegramId, username, firstName, photoUrl, apiToken, createdAt, updatedAt] =
-        this.boundValues;
+      let id, telegramId, username, firstName, photoUrl, apiToken, role, createdAt, updatedAt;
+      if (this.boundValues.length >= 9) {
+        [id, telegramId, username, firstName, photoUrl, apiToken, role, createdAt, updatedAt] = this.boundValues;
+      } else {
+        [id, telegramId, username, firstName, photoUrl, apiToken, createdAt, updatedAt] = this.boundValues;
+        role = "user";
+      }
       const record: Record<string, unknown> = {
         id: String(id),
         telegram_id: String(telegramId),
@@ -638,6 +664,7 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         first_name: String(firstName),
         photo_url: photoUrl ?? null,
         api_token: String(apiToken),
+        role: String(role || "user"),
         created_at: Number(createdAt),
         updated_at: Number(updatedAt),
       };
@@ -646,10 +673,28 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       for (const [rId, r] of table.entries()) {
         if (r["telegram_id"] === record["telegram_id"]) {
           existingId = rId;
+          if (r["role"] === "admin" && record["role"] !== "admin") {
+            record["role"] = "admin";
+          }
           break;
         }
       }
       table.set(existingId ?? String(id), record);
+      return { success: true };
+    }
+
+    // UPDATE users SET role =
+    if (q.includes("UPDATE users") && q.includes("SET role =")) {
+      const role = String(this.boundValues[0]);
+      const updatedAt = Number(this.boundValues[1]);
+      const idOrTg = String(this.boundValues[2]);
+      const table = this.db.tables.get("users")!;
+      for (const row of table.values()) {
+        if (row["id"] === idOrTg || row["telegram_id"] === idOrTg) {
+          row["role"] = role;
+          row["updated_at"] = updatedAt;
+        }
+      }
       return { success: true };
     }
 

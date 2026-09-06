@@ -1189,6 +1189,10 @@ export class CrawlTaskRepository {
     return this.mapRowToTask(row);
   }
 
+  public async findById(id: string): Promise<CrawlTask | null> {
+    return this.getById(id);
+  }
+
   public async list(options: {
     status?: CrawlTaskStatus | undefined;
     limit?: number | undefined;
@@ -1272,14 +1276,16 @@ export class UserRepository {
   constructor(private readonly db: ID1Database) {}
 
   public async upsert(user: User): Promise<void> {
+    const role = user.role || "user";
     const query = `
       INSERT INTO users (
-        id, telegram_id, username, first_name, photo_url, api_token, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, telegram_id, username, first_name, photo_url, api_token, role, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(telegram_id) DO UPDATE SET
         username = excluded.username,
         first_name = excluded.first_name,
         photo_url = excluded.photo_url,
+        role = CASE WHEN excluded.role = 'admin' THEN 'admin' ELSE COALESCE(users.role, excluded.role, 'user') END,
         updated_at = excluded.updated_at
     `;
     await this.db
@@ -1291,10 +1297,20 @@ export class UserRepository {
         user.firstName,
         user.photoUrl ?? null,
         user.apiToken,
+        role,
         user.createdAt,
         user.updatedAt
       )
       .run();
+  }
+
+  public async setRole(idOrTgId: string, role: "user" | "admin"): Promise<void> {
+    const query = `
+      UPDATE users
+      SET role = ?, updated_at = ?
+      WHERE id = ? OR telegram_id = ?
+    `;
+    await this.db.prepare(query).bind(role, Date.now(), idOrTgId, idOrTgId).run();
   }
 
   public async findById(id: string): Promise<User | null> {
@@ -1321,6 +1337,31 @@ export class UserRepository {
     return row ? this.mapRowToUser(row) : null;
   }
 
+  public async list(limit: number = 50, role?: string): Promise<User[]> {
+    let query = "SELECT * FROM users";
+    const values: unknown[] = [];
+    if (role) {
+      query += " WHERE role = ?";
+      values.push(role);
+    }
+    query += " ORDER BY created_at DESC LIMIT ?";
+    values.push(limit);
+
+    const res = await this.db.prepare(query).bind(...values).all<Record<string, unknown>>();
+    return (res.results || []).map((r) => this.mapRowToUser(r));
+  }
+
+  public async count(role?: string): Promise<number> {
+    let query = "SELECT COUNT(*) as count FROM users";
+    const values: unknown[] = [];
+    if (role) {
+      query += " WHERE role = ?";
+      values.push(role);
+    }
+    const row = await this.db.prepare(query).bind(...values).first<{ count: number }>();
+    return Number(row?.count ?? 0);
+  }
+
   private mapRowToUser(row: Record<string, unknown>): User {
     return {
       id: String(row["id"]),
@@ -1329,6 +1370,7 @@ export class UserRepository {
       firstName: String(row["first_name"]),
       photoUrl: row["photo_url"] != null ? String(row["photo_url"]) : undefined,
       apiToken: String(row["api_token"]),
+      role: (row["role"] === "admin" ? "admin" : "user") as "user" | "admin",
       createdAt: Number(row["created_at"]),
       updatedAt: Number(row["updated_at"]),
     };

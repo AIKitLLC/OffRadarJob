@@ -32,8 +32,12 @@ export interface KvNamespace {
 export interface Env {
   DB: ID1Database;
   CACHE?: KvNamespace;
+  ADMIN_TOKEN?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_BOT_USERNAME?: string;
+  TELEGRAM_ADMIN_USERNAMES?: string;
+  TELEGRAM_ADMIN_IDS?: string;
+  TELEGRAM_ADMIN_CHAT_ID?: string;
   DISCOVERY_QUEUE?: {
     send(message: unknown): Promise<void>;
   };
@@ -90,17 +94,80 @@ async function getOrSetKvCache<T>(
   return data;
 }
 
-const DEFAULT_ADMIN_TOKEN = "offradar-admin-2026";
+export const DEFAULT_ADMIN_TOKEN = "offradar-admin-2026";
 
-function isAuthorized(request: Request, url: URL): boolean {
+export function isAuthorized(request: Request, url: URL, env?: Env): boolean {
   const tokenHeader = request.headers.get("x-admin-token") || request.headers.get("Authorization")?.replace("Bearer ", "");
   const tokenQuery = url.searchParams.get("token");
   const cookieHeader = request.headers.get("Cookie") || "";
   const matchCookie = cookieHeader.match(/admin_token=([^;]+)/);
   const tokenCookie = matchCookie ? matchCookie[1] : null;
 
+  const validToken = env?.ADMIN_TOKEN || DEFAULT_ADMIN_TOKEN;
   const provided = tokenHeader || tokenQuery || tokenCookie;
-  return provided === DEFAULT_ADMIN_TOKEN;
+  return provided === validToken;
+}
+
+export function isTelegramAdmin(
+  env: Env,
+  from: { id: number | string; username?: string },
+  userRole?: string
+): boolean {
+  if (userRole === "admin") return true;
+
+  const adminIds = (env.TELEGRAM_ADMIN_IDS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (adminIds.includes(String(from.id).toLowerCase())) return true;
+
+  if (from.username) {
+    const rawUsername = from.username.replace(/^@/, "").toLowerCase().trim();
+    const adminUsernames = (env.TELEGRAM_ADMIN_USERNAMES || "tuannx87")
+      .split(",")
+      .map((s) => s.replace(/^@/, "").toLowerCase().trim())
+      .filter(Boolean);
+    if (adminUsernames.includes(rawUsername)) return true;
+  }
+
+  return false;
+}
+
+export async function sendTelegramMessage(
+  botToken: string,
+  chatId: string | number,
+  text: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
+      }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn("[Telegram Send] Error:", err);
+    return false;
+  }
+}
+
+export async function notifyTelegramAdmin(env: Env, text: string): Promise<void> {
+  if (!env.TELEGRAM_BOT_TOKEN) return;
+  const adminChatIds = [
+    env.TELEGRAM_ADMIN_CHAT_ID,
+    ...(env.TELEGRAM_ADMIN_IDS ? env.TELEGRAM_ADMIN_IDS.split(",") : []),
+  ].filter(Boolean);
+
+  for (const chatId of adminChatIds) {
+    if (chatId) {
+      await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId.trim(), text);
+    }
+  }
 }
 
 async function verifyTelegramAuth(data: Record<string, string>, botToken: string): Promise<boolean> {
@@ -378,7 +445,7 @@ export default {
       });
     }
 
-    // 6b. Telegram Bot Webhook: Handles /start login_<token> when user taps Start in Bot
+    // 6b. Telegram Bot Webhook: Handles user auth, deep-linking & Admin operations
     if (path === "/api/telegram/webhook" && request.method === "POST") {
       try {
         const update = (await request.json()) as Record<string, any>;
@@ -390,14 +457,17 @@ export default {
         const from = msg.from;
         const text = String(msg.text || "").trim();
         const chatId = msg.chat?.id;
+        const tgId = String(from.id);
+        const existingUser = await userRepo.findByTelegramId(tgId);
+        const isAdmin = isTelegramAdmin(env, from, existingUser?.role);
 
+        // A. /start command (with or without login_<token>)
         if (text.startsWith("/start")) {
           const payload = text.replace(/^\/start\s*/i, "").trim().replace(/^login_/i, "");
 
           const now = Date.now();
-          const tgId = String(from.id);
-          const existingUser = await userRepo.findByTelegramId(tgId);
           const apiToken = existingUser?.apiToken || `orp_${crypto.randomUUID().replace(/-/g, "")}`;
+          const role = isAdmin ? "admin" : (existingUser?.role || "user");
 
           const userRecord: User = {
             id: existingUser?.id || `usr_${tgId}`,
@@ -405,6 +475,7 @@ export default {
             username: from.username ? String(from.username) : undefined,
             firstName: String(from.first_name || from.username || "Telegram User"),
             apiToken,
+            role,
             createdAt: existingUser?.createdAt || now,
             updatedAt: now,
           };
@@ -436,7 +507,7 @@ export default {
 
           // Reply back to user via Telegram Bot API if configured
           if (env.TELEGRAM_BOT_TOKEN && chatId) {
-            const welcomeText = [
+            const welcomeLines = [
               `🎉 *Xin chào ${from.first_name || "bạn"}!*`,
               `Tài khoản Telegram của bạn đã được kết nối với *OffRadarJob* 🚀`,
               ``,
@@ -445,39 +516,363 @@ export default {
               ``,
               `🌐 *Trình duyệt web của bạn sẽ tự động đăng nhập ngay lập tức!*`,
               `Bạn có thể đóng cửa sổ này hoặc dùng token trên để kết nối Cursor, Claude Desktop, Antigravity qua MCP.`,
-            ].join("\n");
+            ];
 
-            try {
-              await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  chat_id: chatId,
-                  text: welcomeText,
-                  parse_mode: "Markdown",
-                }),
-              });
-            } catch (err) {
-              console.warn("[Telegram Bot] Failed sending message:", err);
+            if (isAdmin) {
+              welcomeLines.push(
+                ``,
+                `👑 *Bạn đã được xác thực với quyền Quản trị viên (Admin)!*`,
+                `Gõ \`/admin\` để mở menu điều khiển crawl, quản lý jobs và hệ thống.`
+              );
+            }
+
+            await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, welcomeLines.join("\n"));
+          }
+
+          return Response.json({ ok: true, authenticated: true, isAdmin });
+        }
+
+        // B. /admin auth <token> - Authorize and promote user to admin
+        if (text.startsWith("/admin auth") && chatId) {
+          const providedToken = text.replace(/^\/admin\s+auth\s*/i, "").trim();
+          const validToken = env.ADMIN_TOKEN || DEFAULT_ADMIN_TOKEN;
+          if (providedToken === validToken) {
+            const now = Date.now();
+            const apiToken = existingUser?.apiToken || `orp_${crypto.randomUUID().replace(/-/g, "")}`;
+            const userRecord: User = {
+              id: existingUser?.id || `usr_${tgId}`,
+              telegramId: tgId,
+              username: from.username ? String(from.username) : undefined,
+              firstName: String(from.first_name || from.username || "Telegram User"),
+              apiToken,
+              role: "admin",
+              createdAt: existingUser?.createdAt || now,
+              updatedAt: now,
+            };
+            await userRepo.upsert(userRecord);
+            await userRepo.setRole(tgId, "admin");
+
+            if (env.TELEGRAM_BOT_TOKEN) {
+              await sendTelegramMessage(
+                env.TELEGRAM_BOT_TOKEN,
+                chatId,
+                `✅ *Xác thực Admin thành công!*\n` +
+                `Chào mừng Quản trị viên *${from.first_name || "Admin"}* (@${from.username || tgId}).\n` +
+                `Tài khoản của bạn đã được cấp quyền Quản trị viên vĩnh viễn trên D1.\n\n` +
+                `👉 Gõ \`/admin\` để bắt đầu điều khiển hệ thống.`
+              );
+            }
+            return Response.json({ ok: true, adminGranted: true });
+          } else {
+            if (env.TELEGRAM_BOT_TOKEN) {
+              await sendTelegramMessage(
+                env.TELEGRAM_BOT_TOKEN,
+                chatId,
+                `❌ *Xác thực thất bại!*\nAdmin Token không chính xác. Vui lòng kiểm tra lại.`
+              );
+            }
+            return Response.json({ ok: false, error: "Invalid admin token" });
+          }
+        }
+
+        // C. /admin or /admin help or /help
+        if ((text === "/admin" || text === "/admin help" || text === "/help") && chatId) {
+          if (!isAdmin) {
+            if (text === "/help") {
+              const helpText = [
+                `ℹ️ *Hướng dẫn sử dụng OffRadarJob Bot*`,
+                ``,
+                `• Để đăng nhập web: Bấm nút "Đăng nhập Telegram" trên website hoặc quét mã QR.`,
+                `• \`/mcp\` - Lấy MCP Endpoint & Personal API Token`,
+                `• \`/stats\` - Xem thống kê nhanh số lượng jobs & companies`,
+                `• Quản trị viên: Gõ \`/admin auth <admin_token>\` để kích hoạt quyền quản trị.`,
+              ].join("\n");
+              if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, helpText);
+              return Response.json({ ok: true });
+            } else {
+              const deniedText = [
+                `⛔ *Quyền truy cập bị từ chối*`,
+                `Tài khoản Telegram của bạn (@${from.username || tgId}) chưa được cấp quyền Admin.`,
+                ``,
+                `🔑 *Nếu bạn là chủ sở hữu hệ thống:*`,
+                `Hãy dùng lệnh: \`/admin auth <admin_token>\` để xác thực quyền quản trị.`,
+              ].join("\n");
+              if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, deniedText);
+              return Response.json({ ok: true });
             }
           }
 
-          return Response.json({ ok: true, authenticated: true });
+          const menuText = [
+            `🛡️ *OFFRADAR JOB - BẢNG ĐIỀU KHIỂN QUẢN TRỊ VIÊN*`,
+            `Xin chào Admin *${from.first_name || "Admin"}* (@${from.username || tgId})!`,
+            ``,
+            `📋 *Các lệnh quản trị trực tiếp trên Telegram:*`,
+            `📊 \`/stats\` - Báo cáo realtime (Jobs, Companies, Tỷ lệ Midwest & các vùng US)`,
+            `🕷️ \`/crawl <url>\` - Kích hoạt crawl ngay 1 career page URL`,
+            `⚡ \`/sweep\` - Quét đồng loạt danh sách seed companies`,
+            `🌾 \`/harvest [hn|github|all]\` - Thu thập jobs từ nguồn mở HackerNews & GitHub`,
+            `👥 \`/users\` - Thống kê users & danh sách tài khoản MCP`,
+            `🔗 \`/adminlink\` - Lấy link 1-click vào thẳng Web Admin Control Center`,
+            `🔔 \`/testalert\` - Kiểm tra hệ thống gửi thông báo khẩn cấp`,
+            `❓ \`/admin help\` - Xem lại menu này`,
+          ].join("\n");
+
+          if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, menuText);
+          return Response.json({ ok: true });
         }
 
+        // D. /stats - Telemetry and region metrics
+        if (text === "/stats" && chatId) {
+          const [companiesCount, jobsCount, jobSummary, usersCount, adminsCount, recentTasks] = await Promise.all([
+            companyRepo.count(),
+            jobRepo.count(),
+            jobRepo.getStatsSummary(),
+            userRepo.count(),
+            userRepo.count("admin"),
+            taskRepo.list({ limit: 3 }),
+          ]);
+
+          const midwestPct = jobSummary.total > 0 ? Math.round((jobSummary.midwestCount / jobSummary.total) * 100) : 100;
+
+          const taskSnippets = recentTasks.length > 0
+            ? recentTasks.map((t) => `• \`${t.id.slice(-8)}\`: *${t.status.toUpperCase()}* (${t.jobsFound} jobs)`).join("\n")
+            : "Chưa có task nào gần đây";
+
+          const statsText = [
+            `📊 *HỆ THỐNG OFFRADARJOB - BÁO CÁO REALTIME*`,
+            ``,
+            `💼 *Tổng số Jobs:* \`${jobsCount.toLocaleString()}\``,
+            `🏢 *Tổng số Công ty:* \`${companiesCount.toLocaleString()}\``,
+            `🌽 *Midwest Focus:* \`${jobSummary.midwestCount}\` jobs (*${midwestPct}%*)`,
+            `🌲 *West Coast:* \`${jobSummary.westCount}\` jobs`,
+            `🗽 *Northeast:* \`${jobSummary.northeastCount}\` jobs`,
+            `☀️ *South:* \`${jobSummary.southCount}\` jobs`,
+            `🏔️ *Mountain:* \`${jobSummary.mountainCount}\` jobs`,
+            `👥 *Users đã kết nối:* \`${usersCount}\` (Admins: \`${adminsCount}\`)`,
+            ``,
+            `⚙️ *Crawl Tasks gần nhất:*`,
+            taskSnippets,
+            ``,
+            `🌐 *Dashboard:* https://off-radar-jobs.tuannx87.workers.dev`,
+          ].join("\n");
+
+          if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, statsText);
+          return Response.json({ ok: true });
+        }
+
+        // E. /crawl <url> - Admin trigger crawl task
+        if (text.startsWith("/crawl") && chatId) {
+          if (!isAdmin) {
+            if (env.TELEGRAM_BOT_TOKEN) {
+              await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, "⛔ Bạn cần có quyền Admin để kích hoạt lệnh /crawl.");
+            }
+            return Response.json({ ok: false, error: "Unauthorized" });
+          }
+
+          let rawUrl = text.replace(/^\/crawl\s*/i, "").trim();
+          if (!rawUrl) {
+            if (env.TELEGRAM_BOT_TOKEN) {
+              await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, "⚠️ Vui lòng nhập URL cần crawl:\nVí dụ: `/crawl https://careers.example.com`");
+            }
+            return Response.json({ ok: false });
+          }
+          if (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) {
+            rawUrl = "https://" + rawUrl;
+          }
+
+          const taskId = `tsk_tg_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+          await taskRepo.create({
+            id: taskId,
+            targetUrl: rawUrl,
+            sourceType: "telegram_admin",
+            status: "pending",
+            jobsFound: 0,
+            metadata: { triggeredBy: from.username || String(from.id) },
+            createdAt: Date.now(),
+          });
+
+          if (env.DISCOVERY_QUEUE) {
+            try {
+              await env.DISCOVERY_QUEUE.send({ taskId, url: rawUrl, depth: 0, source: "telegram_admin" });
+            } catch (err) {
+              console.warn("[Telegram Crawl Queue] Failed:", err);
+            }
+          }
+
+          if (env.TELEGRAM_BOT_TOKEN) {
+            const replyMsg = [
+              `🚀 *Đã kích hoạt Crawl Task thành công!*`,
+              ``,
+              `📋 *Task ID:* \`${taskId}\``,
+              `🔗 *Target URL:* \`${rawUrl}\``,
+              `👤 *Admin:* @${from.username || tgId}`,
+              ``,
+              `Theo dõi trạng thái tại:`,
+              `https://off-radar-jobs.tuannx87.workers.dev/admin`,
+            ].join("\n");
+            await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, replyMsg);
+          }
+
+          return Response.json({ ok: true, taskId });
+        }
+
+        // F. /sweep - Admin trigger bulk sweep across seeds
+        if (text === "/sweep" && chatId) {
+          if (!isAdmin) {
+            if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, "⛔ Bạn cần quyền Admin để dùng /sweep.");
+            return Response.json({ ok: false, error: "Unauthorized" });
+          }
+
+          const seeds = CURATED_SEEDS.slice(0, 20);
+          let count = 0;
+          for (const s of seeds) {
+            const taskId = `tsk_sw_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+            await taskRepo.create({
+              id: taskId,
+              targetUrl: s.url,
+              sourceType: "telegram_admin_sweep",
+              status: "pending",
+              jobsFound: 0,
+              metadata: { companyName: s.name, triggeredBy: from.username || String(from.id) },
+              createdAt: Date.now(),
+            });
+            if (env.DISCOVERY_QUEUE) {
+              try {
+                await env.DISCOVERY_QUEUE.send({ taskId, url: s.url, depth: 0, source: "telegram_admin_sweep" });
+              } catch {}
+            }
+            count++;
+          }
+
+          if (env.TELEGRAM_BOT_TOKEN) {
+            await sendTelegramMessage(
+              env.TELEGRAM_BOT_TOKEN,
+              chatId,
+              `⚡ *Đã kích hoạt Sweep ${count} công ty seed đồng loạt!*\nCác tasks đang chạy trong background queue. Kiểm tra tiến độ tại Web Admin.`
+            );
+          }
+          return Response.json({ ok: true, tasksCount: count });
+        }
+
+        // G. /harvest [hn|github|all] - Admin trigger public harvest
+        if (text.startsWith("/harvest") && chatId) {
+          if (!isAdmin) {
+            if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, "⛔ Bạn cần quyền Admin để dùng /harvest.");
+            return Response.json({ ok: false, error: "Unauthorized" });
+          }
+
+          const sub = text.replace(/^\/harvest\s*/i, "").trim().toLowerCase();
+          const source = (sub === "hn" || sub === "github") ? sub : "all";
+
+          if (env.TELEGRAM_BOT_TOKEN) {
+            await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, `⏳ *Đang kích hoạt thu thập từ nguồn [${source.toUpperCase()}]...*`);
+          }
+
+          try {
+            const manager = new PublicSourceManager(env.DB);
+            const orchestrator = new PipelineOrchestrator(env.DB);
+            const res = await manager.harvestAndGatherAsync(source as any, 15, orchestrator);
+
+            if (env.TELEGRAM_BOT_TOKEN) {
+              const totalJobs = res.directJobsCount + res.crawledJobsCount;
+              const harvestMsg = [
+                `🌾 *Thu thập dữ liệu nguồn mở hoàn tất!*`,
+                ``,
+                `• *Nguồn:* ${source.toUpperCase()}`,
+                `• *Công ty thu thập:* \`${res.companiesHarvested}\``,
+                `• *Jobs tìm thấy:* \`${totalJobs}\``,
+                `• *Crawl Tasks tạo:* \`${res.taskIds.length}\``,
+              ].join("\n");
+              await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, harvestMsg);
+            }
+            return Response.json({ ok: true, result: res });
+          } catch (err: any) {
+            if (env.TELEGRAM_BOT_TOKEN) {
+              await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, `❌ Lỗi khi harvest: ${err?.message}`);
+            }
+            return Response.json({ ok: false, error: err?.message });
+          }
+        }
+
+        // H. /users - Admin list users & MCP connections
+        if (text === "/users" && chatId) {
+          if (!isAdmin) {
+            if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, "⛔ Bạn cần quyền Admin để dùng /users.");
+            return Response.json({ ok: false, error: "Unauthorized" });
+          }
+
+          const [users, total, admins] = await Promise.all([
+            userRepo.list(5),
+            userRepo.count(),
+            userRepo.count("admin"),
+          ]);
+
+          const userRows = users.map((u) => `• ${u.role === "admin" ? "👑" : "👤"} *${u.firstName}* (@${u.username || u.telegramId})`).join("\n");
+
+          const reply = [
+            `👥 *QUẢN LÝ NGƯỜI DÙNG & TOKENS*`,
+            ``,
+            `• *Tổng số người dùng:* \`${total}\``,
+            `• *Quản trị viên (Admins):* \`${admins}\``,
+            ``,
+            `*5 người dùng mới nhất:*`,
+            userRows || "Chưa có người dùng nào",
+            ``,
+            `Quản lý chi tiết tại Web Admin: https://off-radar-jobs.tuannx87.workers.dev/admin`,
+          ].join("\n");
+
+          if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, reply);
+          return Response.json({ ok: true });
+        }
+
+        // I. /adminlink - Admin magic login link generator
+        if (text === "/adminlink" && chatId) {
+          if (!isAdmin) {
+            if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, "⛔ Bạn cần quyền Admin để lấy magic link.");
+            return Response.json({ ok: false, error: "Unauthorized" });
+          }
+
+          const validToken = env.ADMIN_TOKEN || DEFAULT_ADMIN_TOKEN;
+          const magicUrl = `https://off-radar-jobs.tuannx87.workers.dev/admin?token=${validToken}`;
+
+          const msg = [
+            `🔑 *Magic Link Đăng Nhập Web Admin Control Center:*`,
+            ``,
+            `🔗 [Mở Web Admin Dashboard](${magicUrl})`,
+            `\`${magicUrl}\``,
+            ``,
+            `*(Link đã bao gồm token bảo mật, có thể mở trực tiếp không cần mật khẩu)*`,
+          ].join("\n");
+
+          if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, msg);
+          return Response.json({ ok: true });
+        }
+
+        // J. /testalert - Admin test alert notification
+        if (text === "/testalert" && chatId) {
+          if (!isAdmin) {
+            if (env.TELEGRAM_BOT_TOKEN) await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, "⛔ Bạn cần quyền Admin.");
+            return Response.json({ ok: false, error: "Unauthorized" });
+          }
+
+          if (env.TELEGRAM_BOT_TOKEN) {
+            await sendTelegramMessage(
+              env.TELEGRAM_BOT_TOKEN,
+              chatId,
+              `🔔 *[TEST ALERT] OffRadarJob System Notification*\n` +
+              `Hệ thống thông báo Telegram Bot hoạt động hoàn hảo! Đã kết nối với Admin @${from.username || tgId}.`
+            );
+          }
+          return Response.json({ ok: true });
+        }
+
+        // K. /mcp - MCP Token helper
         if (text.startsWith("/mcp") && chatId && env.TELEGRAM_BOT_TOKEN) {
-          const tgId = String(from.id);
           const user = await userRepo.findByTelegramId(tgId);
           const reply = user
             ? `🔌 *MCP Endpoint:* \`https://off-radar-jobs.tuannx87.workers.dev/mcp\`\n🔑 *Token:* \`${user.apiToken}\``
             : "Vui lòng mở web OffRadarJob và đăng nhập để kích hoạt token.";
-          try {
-            await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: chatId, text: reply, parse_mode: "Markdown" }),
-            });
-          } catch {}
+          await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, reply);
           return Response.json({ ok: true });
         }
 
@@ -763,7 +1158,7 @@ export default {
 
     // 11. Admin API: Stats & Task Metrics
     if (path === "/api/admin/stats" && request.method === "GET") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const [companiesCount, jobsCount, recentLogs, tasksStats] = await Promise.all([
@@ -783,7 +1178,7 @@ export default {
 
     // 7. Admin API: List Crawl Tasks
     if (path === "/api/admin/tasks" && request.method === "GET") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const statusParam = url.searchParams.get("status");
@@ -796,7 +1191,7 @@ export default {
 
     // 8. Admin API: Dispatch Single Crawl Task
     if (path === "/api/admin/tasks/create" && request.method === "POST") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -843,7 +1238,7 @@ export default {
 
     // 9. Admin API: Dispatch Batch Crawl Tasks
     if (path === "/api/admin/tasks/batch" && request.method === "POST") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -898,7 +1293,7 @@ export default {
 
     // 10. Admin API: Trigger Preset Sweeps
     if (path === "/api/admin/tasks/preset" && request.method === "POST") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -965,7 +1360,7 @@ export default {
 
     // 11. Admin API: Bulk Heavy Seeder (Enqueues full curated catalogue into Cloudflare Queues/Runner)
     if (path === "/api/admin/tasks/bulk-seed" && request.method === "POST") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -1040,7 +1435,7 @@ export default {
 
     // 11b. Admin API: Massive Simultaneous Bulk Sweep across all tracked companies
     if (path === "/api/admin/tasks/bulk-sweep-all" && request.method === "POST") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -1109,7 +1504,7 @@ export default {
     // 12. Admin API: Moderation - Update Job Status
     const jobStatusMatch = path.match(/^\/api\/admin\/jobs\/([^/]+)\/status$/);
     if (jobStatusMatch && request.method === "PATCH") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const jobId = jobStatusMatch[1]!;
@@ -1125,7 +1520,7 @@ export default {
     // 12. Admin API: Moderation - Delete Job
     const jobDeleteMatch = path.match(/^\/api\/admin\/jobs\/([^/]+)$/);
     if (jobDeleteMatch && request.method === "DELETE") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const jobId = jobDeleteMatch[1]!;
@@ -1135,7 +1530,7 @@ export default {
 
     // 13. Admin API: Harvest from Hacker News "Who is Hiring"
     if (path === "/api/admin/harvest/hn" && request.method === "POST") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -1166,7 +1561,7 @@ export default {
 
     // 14. Admin API: Harvest from GitHub Open Directories (remoteintech & established-remote)
     if (path === "/api/admin/harvest/github" && request.method === "POST") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -1197,7 +1592,7 @@ export default {
 
     // 15. Admin API: Harvest from All Public Sources
     if (path === "/api/admin/harvest/all" && request.method === "POST") {
-      if (!isAuthorized(request, url)) {
+      if (!isAuthorized(request, url, env)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -1223,6 +1618,80 @@ export default {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         return Response.json({ error: msg }, { status: 500 });
+      }
+    }
+
+    // 15a. Admin API: Telegram Bot Status & Config
+    if (path === "/api/admin/telegram/status" && request.method === "GET") {
+      if (!isAuthorized(request, url, env)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const [totalUsers, totalAdmins] = await Promise.all([
+        userRepo.count(),
+        userRepo.count("admin"),
+      ]);
+      const configuredAdmins = (env.TELEGRAM_ADMIN_USERNAMES || "tuannx87")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const configuredAdminIds = (env.TELEGRAM_ADMIN_IDS || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      return Response.json({
+        botUsername: env.TELEGRAM_BOT_USERNAME || "OffRadarJobBot",
+        hasBotToken: !!env.TELEGRAM_BOT_TOKEN,
+        configuredAdmins,
+        configuredAdminIds,
+        adminChatId: env.TELEGRAM_ADMIN_CHAT_ID || null,
+        totalUsers,
+        totalAdmins,
+      });
+    }
+
+    // 15b. Admin API: List Users & MCP Tokens
+    if (path === "/api/admin/users" && request.method === "GET") {
+      if (!isAuthorized(request, url, env)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const role = url.searchParams.get("role") || undefined;
+      const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 100);
+      const users = await userRepo.list(limit, role);
+      return Response.json({ users });
+    }
+
+    // 15c. Admin API: Update User Role (Grant / Revoke Admin)
+    const userRoleMatch = path.match(/^\/api\/admin\/users\/([^/]+)\/role$/);
+    if (userRoleMatch && request.method === "POST") {
+      if (!isAuthorized(request, url, env)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const userId = decodeURIComponent(userRoleMatch[1]!);
+      const body = (await request.json().catch(() => ({}))) as { role?: string };
+      const newRole = body.role === "admin" ? "admin" : "user";
+      await userRepo.setRole(userId, newRole);
+      return Response.json({ success: true, userId, role: newRole });
+    }
+
+    // 15d. Admin API: Send Test Alert via Telegram Bot
+    if (path === "/api/admin/telegram/test-notify" && request.method === "POST") {
+      if (!isAuthorized(request, url, env)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      if (!env.TELEGRAM_BOT_TOKEN) {
+        return Response.json({ error: "TELEGRAM_BOT_TOKEN not configured in Worker environment" }, { status: 400 });
+      }
+      const body = (await request.json().catch(() => ({}))) as { message?: string; chatId?: string };
+      const alertMsg = body.message || "🔔 *[OffRadarJob Alert]* Test notification from Admin Control Center!";
+      const targetChatId = body.chatId || env.TELEGRAM_ADMIN_CHAT_ID;
+
+      if (targetChatId) {
+        const ok = await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, targetChatId, alertMsg);
+        return Response.json({ success: ok, targetChatId });
+      } else {
+        await notifyTelegramAdmin(env, alertMsg);
+        return Response.json({ success: true, broadcast: true });
       }
     }
 
