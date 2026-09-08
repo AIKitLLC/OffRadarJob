@@ -1002,6 +1002,41 @@ export class JobRepository {
     };
   }
 
+  public async getFreshnessMetrics(): Promise<{
+    latestLastSeen: number | null;
+    updatedLast24h: number;
+    createdLast24h: number;
+    updatedLast7d: number;
+  }> {
+    const now = Date.now();
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+    const res = await this.db
+      .prepare(`
+        SELECT 
+          MAX(last_seen_at) as latest_last_seen,
+          SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) as updated_last_24h,
+          SUM(CASE WHEN first_seen_at >= ? THEN 1 ELSE 0 END) as created_last_24h,
+          SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) as updated_last_7d
+        FROM jobs
+      `)
+      .bind(oneDayAgo, oneDayAgo, sevenDaysAgo)
+      .first<{
+        latest_last_seen: number | null;
+        updated_last_24h: number | null;
+        created_last_24h: number | null;
+        updated_last_7d: number | null;
+      }>();
+
+    return {
+      latestLastSeen: res?.latest_last_seen ? Number(res.latest_last_seen) : null,
+      updatedLast24h: Number(res?.updated_last_24h ?? 0),
+      createdLast24h: Number(res?.created_last_24h ?? 0),
+      updatedLast7d: Number(res?.updated_last_7d ?? 0),
+    };
+  }
+
   public async count(): Promise<number> {
     const res = await this.db
       .prepare("SELECT COUNT(*) as count FROM jobs")

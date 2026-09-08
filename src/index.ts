@@ -370,12 +370,13 @@ export default {
 
     // 5. API: Stats & Telemetry Logs
     if (path === "/api/stats" && request.method === "GET") {
-      const data = await getOrSetKvCache(env, "api:stats:v6", 60, async () => {
-        const [companiesCount, jobsCount, jobSummary, recentLogs] = await Promise.all([
+      const data = await getOrSetKvCache(env, "api:stats:v7", 60, async () => {
+        const [companiesCount, jobsCount, jobSummary, recentLogs, freshness] = await Promise.all([
           companyRepo.count(),
           jobRepo.count(),
           jobRepo.getStatsSummary(),
           logRepo.getRecent(30),
+          jobRepo.getFreshnessMetrics(),
         ]);
         const midwestPct = jobSummary.total > 0 ? Math.round((jobSummary.midwestCount / jobSummary.total) * 100) : 100;
         return {
@@ -389,6 +390,10 @@ export default {
             northeast: jobSummary.northeastCount,
             south: jobSummary.southCount,
             mountain: jobSummary.mountainCount,
+          },
+          freshness: {
+            ...freshness,
+            cronSchedule: "Daily 02:00 UTC & Weekly Mon 03:00 UTC",
           },
           logsCount: recentLogs.length,
           recentLogs,
@@ -723,13 +728,14 @@ export default {
 
         // D. /stats - Telemetry and region metrics
         if (text === "/stats" && chatId) {
-          const [companiesCount, jobsCount, jobSummary, usersCount, adminsCount, recentTasks] = await Promise.all([
+          const [companiesCount, jobsCount, jobSummary, usersCount, adminsCount, recentTasks, freshness] = await Promise.all([
             companyRepo.count(),
             jobRepo.count(),
             jobRepo.getStatsSummary(),
             userRepo.count(),
             userRepo.count("admin"),
             taskRepo.list({ limit: 3 }),
+            jobRepo.getFreshnessMetrics(),
           ]);
 
           const midwestPct = jobSummary.total > 0 ? Math.round((jobSummary.midwestCount / jobSummary.total) * 100) : 100;
@@ -737,6 +743,18 @@ export default {
           const taskSnippets = recentTasks.length > 0
             ? recentTasks.map((t) => `• \`${t.id.slice(-8)}\`: *${t.status.toUpperCase()}* (${t.jobsFound} jobs)`).join("\n")
             : "Chưa có task nào gần đây";
+
+          let freshnessSnippet = "• Trạng thái: Đang theo dõi";
+          if (freshness.latestLastSeen) {
+            const minsAgo = Math.max(0, Math.round((Date.now() - freshness.latestLastSeen) / 60000));
+            const timeAgoStr = minsAgo < 60 ? `${minsAgo} phút trước` : `${Math.round(minsAgo / 60)} giờ trước`;
+            const dateStr = new Date(freshness.latestLastSeen).toISOString().replace("T", " ").substring(0, 16) + " UTC";
+            freshnessSnippet = [
+              `⏱️ *Lần quét gần nhất:* ${timeAgoStr} (${dateStr})`,
+              `🔄 *Jobs cập nhật 24h:* \`${freshness.updatedLast24h}\` jobs (mới: \`${freshness.createdLast24h}\`)`,
+              `⏰ *Cron tự động:* Daily 02:00 UTC | Weekly Mon 03:00 UTC`,
+            ].join("\n");
+          }
 
           const statsText = [
             `📊 *HỆ THỐNG OFFRADARJOB - BÁO CÁO REALTIME*`,
@@ -749,6 +767,9 @@ export default {
             `☀️ *South:* \`${jobSummary.southCount}\` jobs`,
             `🏔️ *Mountain:* \`${jobSummary.mountainCount}\` jobs`,
             `👥 *Users đã kết nối:* \`${usersCount}\` (Admins: \`${adminsCount}\`)`,
+            ``,
+            `🕒 *Độ tươi mới dữ liệu & Tần suất:*`,
+            freshnessSnippet,
             ``,
             `⚙️ *Crawl Tasks gần nhất:*`,
             taskSnippets,
@@ -1298,11 +1319,12 @@ export default {
       if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
-      const [companiesCount, jobsCount, recentLogs, tasksStats] = await Promise.all([
+      const [companiesCount, jobsCount, recentLogs, tasksStats, freshness] = await Promise.all([
         companyRepo.count(),
         jobRepo.count(),
         logRepo.getRecent(30),
         taskRepo.getStats(),
+        jobRepo.getFreshnessMetrics(),
       ]);
       return Response.json({
         companiesCount,
@@ -1310,6 +1332,10 @@ export default {
         logsCount: recentLogs.length,
         recentLogs,
         tasks: tasksStats,
+        freshness: {
+          ...freshness,
+          cronSchedule: "Daily 02:00 UTC (Rotating Seeds + Public Sources) & Weekly Mon 03:00 UTC (Full Re-crawl)",
+        },
       });
     }
 

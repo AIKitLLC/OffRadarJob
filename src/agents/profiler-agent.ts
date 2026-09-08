@@ -45,7 +45,9 @@ export class CompanyProfilerAgent extends BaseAgent {
       const techStack = this.detectTechStack($, html);
       const headcountEstimate = this.estimateHeadcount($, html);
 
-      const companyId = `comp_${msg.domain.replace(/[^a-z0-9]/g, "_")}`;
+      // Reuse existing company ID if already present in DB to avoid FOREIGN KEY constraint failures
+      const existingCompany = await this.companyRepo.findByDomain(msg.domain);
+      const companyId = existingCompany?.id ?? `comp_${msg.domain.replace(/[^a-z0-9]/g, "_")}`;
       const now = Date.now();
 
       const company: Company = {

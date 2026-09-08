@@ -663,7 +663,9 @@ export class PublicSourceManager {
     const now = Date.now();
 
     for (const p of profiles) {
-      const companyId = `comp_${p.domain.replace(/[^a-z0-9]/g, "_")}`;
+      // Reuse existing company ID if already present in DB to avoid FOREIGN KEY constraint failures
+      const existingCompany = await this.companyRepo.findByDomain(p.domain);
+      const companyId = existingCompany?.id ?? `comp_${p.domain.replace(/[^a-z0-9]/g, "_")}`;
 
       const company: Company = {
         id: companyId,
@@ -695,6 +697,17 @@ export class PublicSourceManager {
           companyId,
           url: p.careersUrl,
           pageType: "custom",
+          status: "active",
+          lastCheckedAt: now,
+          createdAt: now,
+        });
+      } else if (p.inlineRoles && p.inlineRoles.length > 0) {
+        careerPageId = `page_${companyId}_direct`;
+        await this.careerPageRepo.upsert({
+          id: careerPageId,
+          companyId,
+          url: p.websiteUrl,
+          pageType: "internal_page",
           status: "active",
           lastCheckedAt: now,
           createdAt: now,

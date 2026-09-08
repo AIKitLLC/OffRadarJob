@@ -297,6 +297,36 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         };
       }
 
+      if (q.includes("MAX(last_seen_at)")) {
+        const now = Date.now();
+        const oneDayAgo = Number(this.boundValues[0] ?? (now - 86400000));
+        const sevenDaysAgo = Number(this.boundValues[2] ?? (now - 7 * 86400000));
+
+        let maxLastSeen: number | null = null;
+        let updatedLast24h = 0;
+        let createdLast24h = 0;
+        let updatedLast7d = 0;
+
+        for (const r of rows) {
+          const ls = Number(r["last_seen_at"] ?? 0);
+          const fs = Number(r["first_seen_at"] ?? 0);
+          if (ls > (maxLastSeen ?? 0)) maxLastSeen = ls;
+          if (ls >= oneDayAgo) updatedLast24h++;
+          if (fs >= oneDayAgo) createdLast24h++;
+          if (ls >= sevenDaysAgo) updatedLast7d++;
+        }
+
+        return {
+          results: [{
+            latest_last_seen: maxLastSeen,
+            updated_last_24h: updatedLast24h,
+            created_last_24h: createdLast24h,
+            updated_last_7d: updatedLast7d,
+          } as T],
+          success: true,
+        };
+      }
+
       if (q.includes("COUNT(*)")) {
         return { results: [{ total: rows.length, count: rows.length } as T], success: true };
       }

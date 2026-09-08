@@ -284,13 +284,64 @@ describe("Admin Control Center Suite", () => {
       expect(Array.isArray(pagedComps.items)).toBe(true);
     });
 
+    it("should compute and return data freshness metrics", async () => {
+      const now = Date.now();
+      await jobRepo.upsert({
+        id: "job_fresh_1",
+        companyId: "comp_test_fresh",
+        careerPageId: "page_test_fresh",
+        title: "Staff Systems Engineer",
+        seniorityLevel: "senior",
+        techCategory: "backend_systems",
+        isTechRole: true,
+        employmentType: "full-time",
+        location: "Chicago, IL",
+        isRemote: true,
+        remoteScope: "midwest",
+        skills: ["Rust", "Distributed Systems"],
+        applyType: "email",
+        applyTarget: "jobs@fresh.io",
+        status: "open",
+        contentHash: "hash_fresh_test_1",
+        firstSeenAt: now - 3600000,
+        lastSeenAt: now - 1800000,
+      });
+
+      const freshness = await jobRepo.getFreshnessMetrics();
+      expect(freshness.latestLastSeen).toBeGreaterThan(0);
+      expect(freshness.updatedLast24h).toBeGreaterThanOrEqual(1);
+      expect(freshness.createdLast24h).toBeGreaterThanOrEqual(1);
+
+      // Verify /api/admin/stats endpoint returns freshness
+      const req = new Request("http://localhost/api/admin/stats", {
+        headers: { Authorization: "Bearer offradar-admin-2026" },
+      });
+      const ctx = {
+        waitUntil: () => {},
+        passThroughOnException: () => {},
+      };
+      const res = await worker.fetch(
+        req,
+        {
+          DB: db,
+          ADMIN_TOKEN: "offradar-admin-2026",
+        } as any,
+        ctx as any
+      );
+      expect(res.status).toBe(200);
+      const data = await res.json() as any;
+      expect(data.freshness).toBeDefined();
+      expect(data.freshness.cronSchedule).toContain("Daily 02:00 UTC");
+      expect(data.freshness.updatedLast24h).toBeGreaterThanOrEqual(1);
+    });
+
     it("should render client-side JavaScript without syntax errors in Admin and Public Dashboards", () => {
       // 1. Admin Dashboard HTML Script Validation
       const adminHtml = renderAdminDashboardHtml();
       const adminScriptMatch = adminHtml.match(/<script>([\s\S]*?)<\/script>/);
       expect(adminScriptMatch).toBeTruthy();
       expect(() => {
-        new vm.Script(adminScriptMatch![1], { filename: "admin-dashboard.js" });
+        new vm.Script(adminScriptMatch![1]!, { filename: "admin-dashboard.js" });
       }).not.toThrow();
 
       // 2. Public Dashboard HTML Script Validation
@@ -298,7 +349,7 @@ describe("Admin Control Center Suite", () => {
       const publicScriptMatch = publicHtml.match(/<script>([\s\S]*?)<\/script>/);
       expect(publicScriptMatch).toBeTruthy();
       expect(() => {
-        new vm.Script(publicScriptMatch![1], { filename: "dashboard.js" });
+        new vm.Script(publicScriptMatch![1]!, { filename: "dashboard.js" });
       }).not.toThrow();
     });
   });

@@ -414,10 +414,43 @@ export function renderAdminDashboardHtml(): string {
         <div class="stat-label">Total Jobs Found</div>
         <div class="stat-value" id="stat-jobs-found">0</div>
       </div>
+      <div class="stat-card" style="border-left: 3px solid var(--primary);">
+        <div class="stat-label">⏱️ Lần quét gần nhất</div>
+        <div class="stat-value" style="font-size: 18px; font-weight: 700; color: var(--primary);" id="stat-last-crawl">--</div>
+      </div>
+      <div class="stat-card success" style="border-left: 3px solid var(--success);">
+        <div class="stat-label">🔄 Cập nhật 24h</div>
+        <div class="stat-value" id="stat-updated-24h">0</div>
+      </div>
+      <div class="stat-card accent" style="border-left: 3px solid var(--accent);">
+        <div class="stat-label">🆕 Việc mới 24h</div>
+        <div class="stat-value" id="stat-created-24h">0</div>
+      </div>
     </div>
 
     <!-- TAB 1: Crawl Tasks Monitor -->
     <div id="tab-tasks" class="tab-content">
+      <!-- Automated Cadence & Freshness Banner -->
+      <div class="card" style="margin-bottom: 20px; border-left: 4px solid var(--primary); background: linear-gradient(135deg, rgba(19, 27, 46, 0.95), rgba(15, 23, 42, 0.8));">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px;">
+              <span>⏰ Lịch cập nhật dữ liệu tự động (Cloudflare Cron Triggers)</span>
+              <span class="pill pill-completed" style="font-size: 11px;">HOẠT ĐỘNG LIÊN TỤC</span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.6;">
+              • <strong>Quét xoay vòng hàng ngày (Daily Sweep):</strong> <code>02:00 UTC</code> mỗi ngày (quét candidate seeds & harvest Hacker News/GitHub).<br>
+              • <strong>Quét toàn diện hàng tuần (Weekly Sweep):</strong> <code>03:00 UTC</code> Thứ Hai hàng tuần (re-crawl toàn bộ 940+ công ty).<br>
+              • <strong>Trạng thái dữ liệu:</strong> Tự động bổ sung công ty mới và kiểm tra trạng thái việc làm đóng/mở hàng ngày.
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button class="btn btn-sm" onclick="switchTab('dispatch')">⚡ Kích hoạt Quét thêm</button>
+            <button class="btn btn-secondary btn-sm" onclick="refreshAllData()">🔄 Refresh</button>
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-header">
           <div class="card-title">
@@ -1006,6 +1039,24 @@ export function renderAdminDashboardHtml(): string {
         document.getElementById('stat-completed-tasks').textContent = data.tasks?.completed ?? 0;
         document.getElementById('stat-failed-tasks').textContent = data.tasks?.failed ?? 0;
         document.getElementById('stat-jobs-found').textContent = data.tasks?.jobsFound ?? data.jobsCount ?? 0;
+
+        if (data.freshness) {
+          const f = data.freshness;
+          const lastEl = document.getElementById('stat-last-crawl');
+          if (lastEl) {
+            if (f.latestLastSeen) {
+              const minsAgo = Math.max(0, Math.round((Date.now() - f.latestLastSeen) / 60000));
+              lastEl.textContent = minsAgo < 60 ? minsAgo + 'm trước' : Math.round(minsAgo / 60) + 'h trước';
+              lastEl.title = new Date(f.latestLastSeen).toISOString();
+            } else {
+              lastEl.textContent = 'Chưa có';
+            }
+          }
+          const upEl = document.getElementById('stat-updated-24h');
+          if (upEl) upEl.textContent = Number(f.updatedLast24h || 0).toLocaleString();
+          const crEl = document.getElementById('stat-created-24h');
+          if (crEl) crEl.textContent = Number(f.createdLast24h || 0).toLocaleString();
+        }
 
         document.getElementById('tab-tasks-count').textContent = data.tasks?.total ?? 0;
         document.getElementById('tab-jobs-count').textContent = data.jobsCount ?? 0;
