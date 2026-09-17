@@ -50,6 +50,8 @@ export class CompanyProfilerAgent extends BaseAgent {
       const companyId = existingCompany?.id ?? `comp_${msg.domain.replace(/[^a-z0-9]/g, "_")}`;
       const now = Date.now();
 
+      const valuationInfo = this.extractFundingAndValuation(html);
+
       const company: Company = {
         id: companyId,
         domain: msg.domain,
@@ -65,6 +67,12 @@ export class CompanyProfilerAgent extends BaseAgent {
         headcountEstimate,
         locationHint: this.detectLocationHint(html),
         discoverySource: msg.discoverySource,
+        fundingStage: valuationInfo.fundingStage ?? existingCompany?.fundingStage,
+        totalFunding: valuationInfo.totalFunding ?? existingCompany?.totalFunding,
+        valuationEstimate: valuationInfo.valuationEstimate ?? existingCompany?.valuationEstimate,
+        companyTier: valuationInfo.companyTier ?? existingCompany?.companyTier,
+        primaryDepartment: existingCompany?.primaryDepartment,
+        hiringDepartments: existingCompany?.hiringDepartments,
         createdAt: now,
         updatedAt: now,
       };
@@ -317,6 +325,68 @@ export class CompanyProfilerAgent extends BaseAgent {
     });
 
     return Array.from(candidates);
+  }
+
+  private extractFundingAndValuation(html: string): {
+    fundingStage?: string | undefined;
+    totalFunding?: string | undefined;
+    valuationEstimate?: string | undefined;
+    companyTier?: string | undefined;
+  } {
+    const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    const lower = text.toLowerCase();
+
+    let fundingStage: string | undefined;
+    let totalFunding: string | undefined;
+    let valuationEstimate: string | undefined;
+    let companyTier: string | undefined;
+
+    // 1. Detect Bootstrapped / Profitable
+    if (
+      lower.includes("bootstrapped") ||
+      lower.includes("self-funded") ||
+      lower.includes("profitable") ||
+      lower.includes("cash-flow positive")
+    ) {
+      fundingStage = "Bootstrapped";
+      companyTier = "Bootstrapped SMB";
+    }
+
+    // 2. Detect Funding Stage
+    if (lower.match(/\bseries\s+c\b/i)) {
+      fundingStage = "Series C+";
+      companyTier = "Late Stage Tech";
+    } else if (lower.match(/\bseries\s+b\b/i)) {
+      fundingStage = "Series B";
+      companyTier = "Growth Stage Tech";
+    } else if (lower.match(/\bseries\s+a\b/i)) {
+      fundingStage = "Series A";
+      companyTier = "Early Growth";
+    } else if (
+      lower.match(/\b(?:seed\s+round|seed\s+funded|pre-seed|pre\s+seed)\b/i) ||
+      lower.includes("backed by y combinator")
+    ) {
+      fundingStage = "Seed";
+      companyTier = "Seed Startup";
+    }
+
+    // 3. Detect Amount Raised (e.g. raised $10M, raised $4.5 million)
+    const raisedMatch = text.match(/raised\s+(\$(?:[0-9]{1,3}(?:\.[0-9]+)?)\s*(?:million|billion|M|B|K)?)/i);
+    if (raisedMatch && raisedMatch[1]) {
+      totalFunding = raisedMatch[1].trim();
+    }
+
+    // 4. Detect Valuation (e.g. valued at $1B, $500M valuation, unicorn)
+    const valMatch =
+      text.match(/valued\s+at\s+(\$(?:[0-9]{1,3}(?:\.[0-9]+)?)\s*(?:million|billion|M|B|K)?)/i) ||
+      text.match(/(\$(?:[0-9]{1,3}(?:\.[0-9]+)?)\s*(?:million|billion|M|B|K)?)\s+valuation/i);
+    if (valMatch && valMatch[1]) {
+      valuationEstimate = valMatch[1].trim();
+    } else if (lower.includes("unicorn")) {
+      valuationEstimate = "Unicorn ($1B+)";
+    }
+
+    return { fundingStage, totalFunding, valuationEstimate, companyTier };
   }
 
   private resolveUrl(href: string, baseUrl: string): string | null {

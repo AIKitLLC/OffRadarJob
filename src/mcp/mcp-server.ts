@@ -115,6 +115,10 @@ export class McpServerHandler {
               enum: ["all", "midwest", "west", "northeast", "south", "mountain", "remote"],
               description: "Location filter across US regions ('midwest', 'west', 'northeast', 'south', 'mountain', 'remote', 'all')",
             },
+            state: {
+              type: "string",
+              description: "Filter jobs by specific 2-letter US State code (e.g. 'IL', 'IN', 'OH', 'WI', 'MN', 'TX', 'CA', 'NY', 'CO')",
+            },
             limit: { type: "number", description: "Number of jobs to return (default 10, max 50)" },
           },
         },
@@ -132,7 +136,7 @@ export class McpServerHandler {
       },
       {
         name: "list_companies",
-        description: "Browse boutique, high-conviction micro-companies and tech startups in the Off-Radar directory across US regions.",
+        description: "Browse boutique, high-conviction micro-companies and tech startups in the Off-Radar directory across US regions, with valuation, funding stage, and department hiring weights.",
         inputSchema: {
           type: "object",
           properties: {
@@ -141,6 +145,18 @@ export class McpServerHandler {
               type: "string",
               enum: ["all", "midwest", "west", "northeast", "south", "mountain"],
               description: "Filter companies by US region ('midwest', 'west', 'northeast', 'south', 'mountain', 'all')",
+            },
+            state: {
+              type: "string",
+              description: "Filter companies by specific 2-letter US State code (e.g. 'IL', 'IN', 'OH', 'WI', 'MN', 'TX', 'CA', 'NY', 'CO')",
+            },
+            funding_stage: {
+              type: "string",
+              description: "Filter by funding stage / valuation status (e.g., 'bootstrapped', 'seed', 'series_a', 'series_b', 'growth', 'acquired')",
+            },
+            primary_department: {
+              type: "string",
+              description: "Filter by dominant hiring department (e.g., 'Engineering', 'Product & Design', 'Growth & Marketing', 'Sales')",
             },
             limit: { type: "number", description: "Number of companies to return (default 15)" },
           },
@@ -196,6 +212,7 @@ export class McpServerHandler {
         const grade = isNewGrad ? "new_grad" : (args.grade ?? undefined);
         const techCategory = args.tech_category ?? undefined;
         const region = args.region ?? undefined;
+        const state = args.state ?? undefined;
         const limit = Math.min(Math.max(1, args.limit ?? 10), 50);
 
         const res = await this.jobRepo.listPaged({
@@ -205,6 +222,7 @@ export class McpServerHandler {
           grade,
           techCategory,
           region,
+          state,
           techOnly: true,
         });
 
@@ -245,8 +263,19 @@ export class McpServerHandler {
       case "list_companies": {
         const search = args.search ?? undefined;
         const region = args.region ?? undefined;
+        const state = args.state ?? undefined;
+        const fundingStage = args.funding_stage ?? undefined;
+        const primaryDepartment = args.primary_department ?? undefined;
         const limit = Math.min(Math.max(1, args.limit ?? 15), 50);
-        const res = await this.companyRepo.listPaged({ page: 1, limit, search, region });
+        const res = await this.companyRepo.listPaged({
+          page: 1,
+          limit,
+          search,
+          region,
+          state,
+          fundingStage,
+          primaryDepartment,
+        });
         return {
           total: res.pagination.total,
           companies: res.items.map((c) => ({
@@ -258,6 +287,12 @@ export class McpServerHandler {
             location: c.locationHint,
             us_region: c.usRegion || (c.isMidwest ? "midwest" : "other"),
             techStack: c.techStack,
+            funding_stage: c.fundingStage,
+            total_funding: c.totalFunding,
+            valuation_estimate: c.valuationEstimate,
+            company_tier: c.companyTier,
+            primary_department: c.primaryDepartment,
+            hiring_departments: c.hiringDepartments,
             description: c.description || c.tagline,
           })),
         };

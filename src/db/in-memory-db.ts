@@ -1,5 +1,6 @@
 import { ID1Database, ID1PreparedStatement, ID1Result, ID1Response } from "./types.js";
 import { detectUsRegion } from "./repositories.js";
+import { matchesUsState } from "../utils/us-states.js";
 
 /**
  * In-memory ID1Database mock for Node / Vitest testing & standalone simulation.
@@ -111,6 +112,30 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       } else if (wherePart.includes("LIKE '%midwest%'") || wherePart.includes("LIKE '%illinois%'") || wherePart.includes("LIKE '%, il %'")) {
         filtered = filtered.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "midwest");
       }
+      if (q.includes("LOWER(funding_stage)")) {
+        const stageVals = this.boundValues.filter((v) => typeof v === "string" && !String(v).includes("%"));
+        const stageVal = String(stageVals[0] ?? "").toLowerCase().replace(/_/g, " ");
+        if (stageVal) {
+          filtered = filtered.filter((r) => {
+            const fs = String(r["funding_stage"] ?? "").toLowerCase().replace(/_/g, " ");
+            return fs === stageVal || fs.includes(stageVal);
+          });
+        }
+      }
+      if (q.includes("LOWER(primary_department) = ?")) {
+        const deptVals = this.boundValues.filter((v) => typeof v === "string" && !String(v).includes("%"));
+        const deptVal = deptVals[deptVals.length - 1];
+        if (deptVal) {
+          filtered = filtered.filter((r) => String(r["primary_department"] ?? "").toLowerCase() === String(deptVal).toLowerCase());
+        }
+      }
+      if (q.includes("LOWER(COALESCE(location_hint, '')) LIKE '% ' || ? || ' %'")) {
+        const stateVals = this.boundValues.filter((v) => typeof v === "string" && !String(v).includes("%"));
+        const stateCode = String(stateVals[0] ?? "");
+        if (stateCode) {
+          filtered = filtered.filter((r) => matchesUsState(String(r["location_hint"] ?? ""), stateCode));
+        }
+      }
       return { results: [{ count: filtered.length, total: filtered.length } as T], success: true };
     }
 
@@ -127,6 +152,30 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         rows = rows.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "mountain");
       } else if (wherePart.includes("LIKE '%midwest%'") || wherePart.includes("LIKE '%illinois%'") || wherePart.includes("LIKE '%, il %'")) {
         rows = rows.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "midwest");
+      }
+      if (q.includes("LOWER(funding_stage)")) {
+        const stageVals = this.boundValues.filter((v) => typeof v === "string" && !String(v).includes("%"));
+        const stageVal = String(stageVals[0] ?? "").toLowerCase().replace(/_/g, " ");
+        if (stageVal) {
+          rows = rows.filter((r) => {
+            const fs = String(r["funding_stage"] ?? "").toLowerCase().replace(/_/g, " ");
+            return fs === stageVal || fs.includes(stageVal);
+          });
+        }
+      }
+      if (q.includes("LOWER(primary_department) = ?")) {
+        const deptVals = this.boundValues.filter((v) => typeof v === "string" && !String(v).includes("%"));
+        const deptVal = deptVals[deptVals.length - 1];
+        if (deptVal) {
+          rows = rows.filter((r) => String(r["primary_department"] ?? "").toLowerCase() === String(deptVal).toLowerCase());
+        }
+      }
+      if (q.includes("LOWER(COALESCE(location_hint, '')) LIKE '% ' || ? || ' %'")) {
+        const stateVals = this.boundValues.filter((v) => typeof v === "string" && !String(v).includes("%"));
+        const stateCode = String(stateVals[0] ?? "");
+        if (stateCode) {
+          rows = rows.filter((r) => matchesUsState(String(r["location_hint"] ?? ""), stateCode));
+        }
       }
 
       if (q.includes("is_midwest_priority")) {
@@ -165,7 +214,30 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: rows as T[], success: true };
     }
 
-    // Jobs queries
+    if (q.includes("DISTINCT company_id FROM jobs")) {
+      const table = this.db.tables.get("jobs")!;
+      const ids = Array.from(new Set(Array.from(table.values()).map((r) => String(r["company_id"]))));
+      return { results: ids.map((id) => ({ company_id: id })) as T[], success: true };
+    }
+
+    if (q.includes("FROM jobs") && q.includes("WHERE company_id = ?") && (q.includes("GROUP BY dept") || q.includes("GROUP BY department"))) {
+      const companyId = String(this.boundValues[0]);
+      const table = this.db.tables.get("jobs")!;
+      const deptCounts = new Map<string, number>();
+      for (const r of table.values()) {
+        if (r["company_id"] === companyId && r["status"] === "open") {
+          const d = String(r["department"] || "General").trim() || "General";
+          deptCounts.set(d, (deptCounts.get(d) || 0) + 1);
+        }
+      }
+      const results: Array<{ dept: string; cnt: number }> = [];
+      for (const [dept, cnt] of deptCounts.entries()) {
+        results.push({ dept, cnt });
+      }
+      results.sort((a, b) => b.cnt - a.cnt);
+      return { results: results as T[], success: true };
+    }
+
     if (q.includes("FROM jobs") && q.includes("WHERE content_hash = ?")) {
       const hash = String(this.boundValues[0]);
       const table = this.db.tables.get("jobs")!;
@@ -257,6 +329,13 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       }
       if (wherePart.includes("j.is_remote = 1")) {
         rows = rows.filter((r) => Number(r["is_remote"] ?? 0) === 1);
+      }
+      if (q.includes("COALESCE(j.location, c.location_hint)")) {
+        const stateVals = this.boundValues.filter((v) => typeof v === "string" && !String(v).includes("%"));
+        const stateCode = String(stateVals[0] ?? "");
+        if (stateCode) {
+          rows = rows.filter((r) => matchesUsState(`${r["location"] ?? ""} ${r["location_hint"] ?? ""}`, stateCode));
+        }
       }
 
       if (q.includes("COUNT(*)") && q.includes("midwest_count")) {
@@ -484,12 +563,30 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
 
     // INSERT/UPDATE companies
     if (q.includes("INTO companies")) {
-      const [
-        id, domain, name, tagline, description, websiteUrl,
-        logoUrl, industry, techStack, socialLinks,
-        contactEmail, headcountEstimate, locationHint, discoverySource,
-        createdAt, updatedAt
-      ] = this.boundValues;
+      let id: unknown, domain: unknown, name: unknown, tagline: unknown, description: unknown, websiteUrl: unknown,
+          logoUrl: unknown, industry: unknown, techStack: unknown, socialLinks: unknown,
+          contactEmail: unknown, headcountEstimate: unknown, locationHint: unknown, discoverySource: unknown,
+          fundingStage: unknown, totalFunding: unknown, valuationEstimate: unknown, companyTier: unknown,
+          primaryDepartment: unknown, hiringDepartmentsJson: unknown,
+          createdAt: unknown, updatedAt: unknown;
+
+      if (this.boundValues.length >= 22) {
+        [
+          id, domain, name, tagline, description, websiteUrl,
+          logoUrl, industry, techStack, socialLinks,
+          contactEmail, headcountEstimate, locationHint, discoverySource,
+          fundingStage, totalFunding, valuationEstimate, companyTier,
+          primaryDepartment, hiringDepartmentsJson,
+          createdAt, updatedAt
+        ] = this.boundValues;
+      } else {
+        [
+          id, domain, name, tagline, description, websiteUrl,
+          logoUrl, industry, techStack, socialLinks,
+          contactEmail, headcountEstimate, locationHint, discoverySource,
+          createdAt, updatedAt
+        ] = this.boundValues;
+      }
 
       const record: Record<string, unknown> = {
         id: String(id),
@@ -506,6 +603,12 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         headcount_estimate: headcountEstimate ?? null,
         location_hint: locationHint ?? null,
         discovery_source: String(discoverySource),
+        funding_stage: fundingStage ?? null,
+        total_funding: totalFunding ?? null,
+        valuation_estimate: valuationEstimate ?? null,
+        company_tier: companyTier ?? null,
+        primary_department: primaryDepartment ?? null,
+        hiring_departments_json: hiringDepartmentsJson ?? "{}",
         created_at: Number(createdAt),
         updated_at: Number(updatedAt),
       };
@@ -519,6 +622,19 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         }
       }
       table.set(existingId ?? String(id), record);
+      return { success: true };
+    }
+
+    // UPDATE companies (department weights)
+    if (q.includes("UPDATE companies") && q.includes("primary_department = ?")) {
+      const [primaryDept, hiringDeptsJson, updatedAt, companyId] = this.boundValues;
+      const table = this.db.tables.get("companies")!;
+      const row = table.get(String(companyId));
+      if (row) {
+        row["primary_department"] = primaryDept;
+        row["hiring_departments_json"] = hiringDeptsJson;
+        row["updated_at"] = updatedAt;
+      }
       return { success: true };
     }
 
@@ -590,7 +706,16 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       const table = this.db.tables.get("jobs")!;
       let existingId: string | null = null;
       for (const [rowId, row] of table.entries()) {
-        if (row["content_hash"] === record["content_hash"]) {
+        if (row["id"] === record["id"]) {
+          existingId = rowId;
+          break;
+        }
+        if (
+          record["content_hash"] &&
+          record["content_hash"] !== "undefined" &&
+          record["content_hash"] !== "null" &&
+          row["content_hash"] === record["content_hash"]
+        ) {
           existingId = rowId;
           break;
         }

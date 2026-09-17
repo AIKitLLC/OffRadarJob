@@ -778,6 +778,25 @@ export function renderDashboardHtml(): string {
           <option value="devops_cloud">☁️ Cloud & DevOps (AWS/Cloudflare)</option>
           <option value="product_design">📐 Product Design & Systems</option>
         </select>
+        <select id="stage-filter" class="region-select" onchange="applyFilters()">
+          <option value="all">💰 All Valuation / Funding</option>
+          <option value="bootstrapped">🪙 Bootstrapped / Profitable</option>
+          <option value="seed">🌱 Pre-Seed / Seed</option>
+          <option value="series_a">🚀 Series A</option>
+          <option value="series_b">📈 Series B</option>
+          <option value="growth">🦄 Growth / Series C+</option>
+          <option value="acquired">🏛️ Acquired / Public</option>
+        </select>
+        <select id="dept-filter" class="region-select" onchange="applyFilters()">
+          <option value="all">🏢 All Hiring Departments</option>
+          <option value="Engineering">💻 Engineering & Tech</option>
+          <option value="Product & Design">🎨 Product & Design</option>
+          <option value="Growth & Marketing">📈 Growth & Marketing</option>
+          <option value="Sales">💼 Sales & BD</option>
+          <option value="Operations & Support">⚙️ Operations & Support</option>
+          <option value="Finance & Legal">⚖️ Finance & Legal</option>
+          <option value="People & HR">👥 People & HR</option>
+        </select>
         <select id="region-filter" class="region-select" onchange="applyFilters()">
           <option value="all" selected>🌐 Toàn bộ US & Remote (Tất cả 5 vùng)</option>
           <option value="midwest">📍 US-Midwest (IL, IN, WI, MN, OH...)</option>
@@ -786,6 +805,48 @@ export function renderDashboardHtml(): string {
           <option value="south">☀️ US-South (TX, FL, GA, NC, VA...)</option>
           <option value="mountain">🏔️ US-Mountain (CO, UT, AZ, ID...)</option>
           <option value="remote">🏠 100% Remote US</option>
+        </select>
+        <select id="state-filter" class="region-select" onchange="applyFilters()">
+          <option value="all">🇺🇸 All States (50 Bang & DC)</option>
+          <optgroup label="📍 US-Midwest">
+            <option value="IL">Illinois (IL - Chicago)</option>
+            <option value="IN">Indiana (IN - Indianapolis, Carmel)</option>
+            <option value="WI">Wisconsin (WI - Madison, Milwaukee)</option>
+            <option value="MN">Minnesota (MN - Minneapolis)</option>
+            <option value="OH">Ohio (OH - Columbus, Cincinnati)</option>
+            <option value="MI">Michigan (MI - Detroit, Ann Arbor)</option>
+            <option value="MO">Missouri (MO - St. Louis, Kansas City)</option>
+            <option value="IA">Iowa (IA - Des Moines)</option>
+            <option value="KS">Kansas (KS)</option>
+            <option value="NE">Nebraska (NE - Omaha)</option>
+          </optgroup>
+          <optgroup label="🌲 US-West">
+            <option value="CA">California (CA - SF Bay, Silicon Valley, LA)</option>
+            <option value="WA">Washington (WA - Seattle, Bellevue)</option>
+            <option value="OR">Oregon (OR - Portland)</option>
+            <option value="NV">Nevada (NV - Las Vegas)</option>
+            <option value="CO">Colorado (CO - Denver, Boulder)</option>
+          </optgroup>
+          <optgroup label="🗽 US-Northeast">
+            <option value="NY">New York (NY - NYC, Brooklyn)</option>
+            <option value="MA">Massachusetts (MA - Boston, Cambridge)</option>
+            <option value="PA">Pennsylvania (PA - Philadelphia, Pittsburgh)</option>
+            <option value="NJ">New Jersey (NJ)</option>
+            <option value="CT">Connecticut (CT)</option>
+          </optgroup>
+          <optgroup label="☀️ US-South">
+            <option value="TX">Texas (TX - Austin, Dallas, Houston)</option>
+            <option value="FL">Florida (FL - Miami, Tampa, Orlando)</option>
+            <option value="GA">Georgia (GA - Atlanta)</option>
+            <option value="NC">North Carolina (NC - Raleigh, Charlotte)</option>
+            <option value="VA">Virginia (VA - Arlington, Richmond)</option>
+            <option value="TN">Tennessee (TN - Nashville)</option>
+          </optgroup>
+          <optgroup label="🏔️ US-Mountain">
+            <option value="UT">Utah (UT - Salt Lake City, Lehi)</option>
+            <option value="AZ">Arizona (AZ - Phoenix, Scottsdale)</option>
+            <option value="ID">Idaho (ID - Boise)</option>
+          </optgroup>
         </select>
       </div>
     </div>
@@ -1063,6 +1124,9 @@ export function renderDashboardHtml(): string {
       clearTimeout(searchDebounceTimer);
       searchDebounceTimer = setTimeout(() => {
         fetchJobs(1);
+        if (companiesLoaded) {
+          fetchCompanies(1);
+        }
       }, 300);
     }
 
@@ -1132,6 +1196,8 @@ export function renderDashboardHtml(): string {
         if (grade !== 'all') params.set('grade', grade);
         if (tech !== 'all') params.set('tech_category', tech);
         if (region !== 'all') params.set('region', region);
+        const state = document.getElementById('state-filter')?.value;
+        if (state && state !== 'all') params.set('state', state);
         if (search) params.set('search', search);
 
         const res = await fetch('/api/jobs?' + params.toString());
@@ -1217,8 +1283,17 @@ export function renderDashboardHtml(): string {
 
       try {
         const region = document.getElementById('region-filter')?.value;
+        const state = document.getElementById('state-filter')?.value;
+        const stage = document.getElementById('stage-filter')?.value;
+        const dept = document.getElementById('dept-filter')?.value;
+        const search = (document.getElementById('search-input')?.value || '').trim();
+
         let compUrl = '/api/companies?page=' + page + '&limit=30&paged=true';
         if (region && region !== 'all') compUrl += '&region=' + encodeURIComponent(region);
+        if (state && state !== 'all') compUrl += '&state=' + encodeURIComponent(state);
+        if (stage && stage !== 'all') compUrl += '&funding_stage=' + encodeURIComponent(stage);
+        if (dept && dept !== 'all') compUrl += '&primary_department=' + encodeURIComponent(dept);
+        if (search) compUrl += '&search=' + encodeURIComponent(search);
 
         const res = await fetch(compUrl);
         const data = await res.json();
@@ -1242,6 +1317,93 @@ export function renderDashboardHtml(): string {
     function changeCompsPage(page) {
       fetchCompanies(page);
       window.scrollTo({ top: 350, behavior: 'smooth' });
+    }
+
+    function getCompanyFundingBadge(c) {
+      const stage = c.fundingStage;
+      const funding = c.totalFunding;
+      const val = c.valuationEstimate;
+      if (!stage && !funding && !val) return '';
+
+      let label = '';
+      let style = 'background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3);';
+
+      if (stage === 'bootstrapped') {
+        label = '🪙 Bootstrapped';
+        style = 'background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3);';
+      } else if (stage === 'seed') {
+        label = '🌱 Seed' + (funding ? ' (' + funding + ')' : '');
+        style = 'background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.3);';
+      } else if (stage === 'series_a') {
+        label = '🚀 Series A' + (funding ? ' (' + funding + ')' : '');
+        style = 'background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3);';
+      } else if (stage === 'series_b') {
+        label = '📈 Series B' + (funding ? ' (' + funding + ')' : '');
+        style = 'background: rgba(244, 63, 94, 0.15); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.3);';
+      } else if (stage === 'growth') {
+        label = '🦄 Growth' + (val ? ' (' + val + ')' : (funding ? ' (' + funding + ')' : ''));
+        style = 'background: rgba(245, 158, 11, 0.15); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.3);';
+      } else if (stage === 'acquired' || stage === 'public') {
+        label = '🏛️ ' + (stage === 'acquired' ? 'Acquired' : 'Public');
+        style = 'background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3);';
+      } else if (funding || val) {
+        label = '💰 ' + (val || funding);
+      }
+
+      return label ? '<span class="tag" style="' + style + '; font-weight: 600;">' + label + '</span>' : '';
+    }
+
+    function renderDepartmentWeightsBar(c) {
+      let depts = c.hiringDepartments;
+      if (!depts && c.hiringDepartmentsJson) {
+        try {
+          depts = JSON.parse(c.hiringDepartmentsJson);
+        } catch (_) {}
+      }
+      if (!depts || Object.keys(depts).length === 0) {
+        if (c.primaryDepartment) {
+          return '<div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">🏢 Dominant Hiring: <strong style="color: #38bdf8;">' + c.primaryDepartment + '</strong></div>';
+        }
+        return '';
+      }
+
+      const deptColors = {
+        'Engineering': '#38bdf8',
+        'Product & Design': '#a855f7',
+        'Growth & Marketing': '#f59e0b',
+        'Sales': '#10b981',
+        'Operations & Support': '#64748b',
+        'Finance & Legal': '#ec4899',
+        'People & HR': '#06b6d4',
+        'General': '#94a3b8'
+      };
+
+      const entries = Object.entries(depts).sort((a, b) => b[1].percentage - a[1].percentage);
+      const segments = entries.map(([dept, m]) => {
+        const color = deptColors[dept] || '#38bdf8';
+        return '<div style="width: ' + m.percentage + '%; background-color: ' + color + '; height: 6px;" title="' + dept + ': ' + m.percentage + '% (' + m.count + ' roles)"></div>';
+      }).join('');
+
+      const badges = entries.slice(0, 3).map(([dept, m]) => {
+        const color = deptColors[dept] || '#38bdf8';
+        return '<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #cbd5e1;">' +
+          '<span style="width: 6px; height: 6px; border-radius: 50%; background-color: ' + color + ';"></span>' +
+          dept + ': <strong style="color: #fff;">' + m.percentage + '%</strong> (' + m.count + ')' +
+        '</span>';
+      }).join('');
+
+      return '<div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06);">' +
+        '<div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px; display: flex; justify-content: space-between;">' +
+        '<span>Hiring Distribution</span>' +
+        (c.primaryDepartment ? '<span style="color: #38bdf8; font-weight: 600;">Main: ' + c.primaryDepartment + '</span>' : '') +
+        '</div>' +
+        '<div style="display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: #1e293b; margin-bottom: 6px;">' +
+        segments +
+        '</div>' +
+        '<div style="display: flex; flex-wrap: wrap; gap: 8px;">' +
+        badges +
+        '</div>' +
+        '</div>';
     }
 
     function getCompanyRegionBadge(c) {
@@ -1271,18 +1433,26 @@ export function renderDashboardHtml(): string {
 
       container.innerHTML = comps.map(c => {
         const isMidwestComp = c.isMidwest || c.usRegion === 'midwest' || (c.locationHint && /\b(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Midwest)\b/i.test(c.locationHint));
+        const fundingBadge = getCompanyFundingBadge(c);
+        const deptWeightsHtml = renderDepartmentWeightsBar(c);
+
         return \`
         <div class="company-card \${isMidwestComp ? 'company-card-midwest' : ''}">
           <div class="company-header">
             <a class="company-name" href="\${c.websiteUrl}" target="_blank">\${c.name} ↗</a>
-            <span class="company-badge">\${c.headcountEstimate || '1-20'} team</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              \${c.companyTier === 'tier_1' ? '<span class="company-badge" style="background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.3);">⭐ Tier 1</span>' : ''}
+              <span class="company-badge">\${c.headcountEstimate || '1-20'} team</span>
+            </div>
           </div>
           <p class="company-desc">\${c.description || c.tagline || 'Independent tech company.'}</p>
           <div class="job-tags">
+            \${fundingBadge}
             \${getCompanyRegionBadge(c)}
-            \${(c.techStack || []).slice(0, 5).map(s => \`<span class="tag">\${s}</span>\`).join('')}
+            \${(c.techStack || []).slice(0, 4).map(s => \`<span class="tag">\${s}</span>\`).join('')}
           </div>
-          <div style="font-size: 11px; color: var(--text-muted); margin-top: auto;">
+          \${deptWeightsHtml}
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: auto; padding-top: 6px;">
             \${c.contactEmail ? '📧 ' + c.contactEmail : ''} \${c.locationHint ? '• 🌐 ' + c.locationHint : ''}
           </div>
         </div>

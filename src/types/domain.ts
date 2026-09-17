@@ -40,6 +40,28 @@ export const UsRegionEnum = z.enum([
 ]);
 export type UsRegion = z.infer<typeof UsRegionEnum>;
 
+export const FundingStageEnum = z.enum([
+  "bootstrapped",
+  "seed",
+  "series_a",
+  "series_b",
+  "series_c_plus",
+  "public",
+  "other",
+]);
+export type FundingStage = z.infer<typeof FundingStageEnum>;
+
+export interface DepartmentWeight {
+  count: number;
+  percentage: number;
+}
+
+export interface HiringDepartmentMetrics {
+  totalOpenJobs: number;
+  primaryDepartment?: string;
+  breakdown: Record<string, DepartmentWeight>;
+}
+
 export const CompanySchema = z.object({
   id: z.string().min(1),
   domain: z.string().min(1),
@@ -57,6 +79,12 @@ export const CompanySchema = z.object({
   discoverySource: z.string().default("seed"),
   isMidwest: z.boolean().optional(),
   usRegion: UsRegionEnum.optional(),
+  fundingStage: z.string().nullable().optional(),
+  totalFunding: z.string().nullable().optional(),
+  valuationEstimate: z.string().nullable().optional(),
+  companyTier: z.string().nullable().optional(),
+  primaryDepartment: z.string().nullable().optional(),
+  hiringDepartments: z.record(z.object({ count: z.number(), percentage: z.number() })).optional(),
   createdAt: z.number().int().positive(),
   updatedAt: z.number().int().positive(),
 });

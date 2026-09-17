@@ -11,7 +11,7 @@ import {
   TechCategory,
 } from "../types/domain.js";
 import { ExtractMessage } from "../types/queues.js";
-import { JobRepository, LogRepository } from "../db/repositories.js";
+import { JobRepository, LogRepository, CompanyRepository } from "../db/repositories.js";
 
 const TECH_SKILLS = [
   "TypeScript", "JavaScript", "Python", "Rust", "Go", "Golang", "C++",
@@ -26,7 +26,8 @@ export class JobExtractorAgent extends BaseAgent {
 
   constructor(
     private readonly jobRepo: JobRepository,
-    logRepo?: LogRepository
+    logRepo?: LogRepository,
+    private readonly companyRepo?: CompanyRepository
   ) {
     super(logRepo);
   }
@@ -90,6 +91,14 @@ export class JobExtractorAgent extends BaseAgent {
 
         await this.jobRepo.upsert(job);
         jobs.push(job);
+      }
+
+      if (this.companyRepo && jobs.length > 0) {
+        try {
+          await this.companyRepo.recalculateDepartmentWeights(msg.companyId);
+        } catch (recalcErr) {
+          console.warn(`[JobExtractorAgent] Failed to recalculate department weights for ${msg.companyId}:`, recalcErr);
+        }
       }
 
       await this.recordLog(
@@ -559,14 +568,87 @@ export class JobExtractorAgent extends BaseAgent {
 
   private inferDepartment(title: string): string {
     const lower = title.toLowerCase();
-    if (lower.includes("engineer") || lower.includes("developer") || lower.includes("architect")) {
+    if (
+      lower.includes("engineer") ||
+      lower.includes("developer") ||
+      lower.includes("architect") ||
+      lower.includes("backend") ||
+      lower.includes("frontend") ||
+      lower.includes("fullstack") ||
+      lower.includes("full stack") ||
+      lower.includes("devops") ||
+      lower.includes("sre") ||
+      lower.includes("infrastructure") ||
+      lower.includes("data engineer") ||
+      lower.includes("machine learning") ||
+      lower.includes("ml engineer") ||
+      lower.includes("ai ") ||
+      lower.includes("security") ||
+      lower.includes("firmware") ||
+      lower.includes("qa") ||
+      lower.includes("quality assurance") ||
+      lower.includes("test")
+    ) {
       return "Engineering";
     }
-    if (lower.includes("designer") || lower.includes("ui") || lower.includes("ux")) {
+    if (
+      lower.includes("designer") ||
+      lower.includes("design") ||
+      lower.includes("ui") ||
+      lower.includes("ux") ||
+      lower.includes("product manager") ||
+      lower.includes("product lead") ||
+      lower.includes("product owner")
+    ) {
       return "Product & Design";
     }
-    if (lower.includes("marketing") || lower.includes("growth") || lower.includes("sales")) {
+    if (
+      lower.includes("marketing") ||
+      lower.includes("growth") ||
+      lower.includes("seo") ||
+      lower.includes("content") ||
+      lower.includes("brand") ||
+      lower.includes("social media")
+    ) {
       return "Growth & Marketing";
+    }
+    if (
+      lower.includes("sales") ||
+      lower.includes("account executive") ||
+      lower.includes("bdr") ||
+      lower.includes("sdr") ||
+      lower.includes("business development") ||
+      lower.includes("partnership")
+    ) {
+      return "Sales";
+    }
+    if (
+      lower.includes("operation") ||
+      lower.includes("support") ||
+      lower.includes("customer success") ||
+      lower.includes("customer service") ||
+      lower.includes("logistics") ||
+      lower.includes("supply chain")
+    ) {
+      return "Operations & Support";
+    }
+    if (
+      lower.includes("finance") ||
+      lower.includes("accounting") ||
+      lower.includes("legal") ||
+      lower.includes("compliance") ||
+      lower.includes("controller")
+    ) {
+      return "Finance & Legal";
+    }
+    if (
+      lower.includes("recruiter") ||
+      lower.includes("talent") ||
+      lower.includes("people ops") ||
+      lower.includes("human resources") ||
+      lower.includes("hr ")
+    ) {
+      return "People & HR";
     }
     return "General";
   }

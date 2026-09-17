@@ -542,6 +542,24 @@ export function renderAdminDashboardHtml(): string {
               <button class="btn btn-sm" style="background: #a855f7; color: #fff;" onclick="triggerHarvest('all')">🚀 Harvest All Sources</button>
             </div>
           </div>
+
+          <!-- Cross-Industry US SMB Harvester & Auto-Scheduler -->
+          <div style="background: rgba(13, 20, 36, 0.6); padding: 16px; border-radius: 10px; border: 1px solid #10b98144;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <div style="font-size: 14px; font-weight: 700; color: #10b981;">
+                🏢 Cross-Industry US SMBs (9 Sectors)
+              </div>
+              <span style="font-size: 10px; background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 8px; border-radius: 9999px; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 600;">
+                ⏱ Auto-Scheduled
+              </span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+              Quét tự động 41 doanh nghiệp vừa & nhỏ (2,800+ jobs) thuộc 9 ngành: Y tế/Biotech, Năng lượng sạch, Robotics/Phần cứng, Fintech, Logistics, E-commerce, FoodTech, EdTech, HRTech.
+            </p>
+            <div class="form-row" style="margin-bottom: 0;">
+              <button class="btn btn-sm" style="background: #10b981; color: #fff; width: 100%;" onclick="triggerHarvest('smb')">⚡ Harvest 41 Cross-Industry SMBs Now</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -684,6 +702,22 @@ export function renderAdminDashboardHtml(): string {
             <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
               Quét liên tục trong 3 giờ với giãn cách 15s giữa mỗi wave.
             </div>
+          </div>
+
+          <!-- Card 4: Weekly Continuous Scan & Freshness Sweep -->
+          <div style="background: rgba(13, 20, 36, 0.6); padding: 16px; border-radius: 10px; border: 1px solid rgba(56, 189, 248, 0.4);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <div style="font-size: 14px; font-weight: 700; color: #38bdf8;">
+                📅 Weekly Scan & Freshness Sweep
+              </div>
+              <span style="font-size: 10px; background: rgba(56, 189, 248, 0.15); color: #7dd3fc; padding: 2px 8px; border-radius: 9999px; border: 1px solid rgba(56, 189, 248, 0.3); font-weight: 600;">
+                🔁 Mon 03:00 UTC
+              </span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+              Quét lại toàn bộ các công ty và direct ATS boards hàng tuần (Cloudflare Cron <code>0 3 * * 1</code> + 1/7 rolling partition). Tự động cập nhật jobs mới và giữ dữ liệu tươi mới.
+            </p>
+            <button class="btn btn-sm" style="background: #0284c7; color: #fff; width: 100%;" onclick="triggerWeeklySweep()">🔄 Run Weekly Continuous Scan Now</button>
           </div>
         </div>
       </div>
@@ -1298,7 +1332,39 @@ export function renderAdminDashboardHtml(): string {
       }
     }
 
+    async function triggerWeeklySweep() {
+      showToast("Dispatching weekly continuous scan across companies and ATS boards...");
+      const res = await apiFetch('/api/admin/tasks/weekly-sweep', {
+        method: 'POST',
+        body: { limit: 350 }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(data.message || "Weekly sweep dispatched successfully!");
+        switchTab('tasks');
+        loadStats();
+      } else {
+        const err = await res.json();
+        alert("Error: " + (err.error || "Failed to trigger weekly sweep"));
+      }
+    }
+
     async function triggerHarvest(source) {
+      if (source === 'smb') {
+        showToast("Triggering Cross-Industry US SMB Gatherer (41 targets across 9 sectors)...");
+        const res = await apiFetch('/api/admin/harvest/smb', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          showToast(data.message || "SMB sweep dispatched in background!");
+          switchTab('tasks');
+          loadStats();
+        } else {
+          const err = await res.json();
+          alert("Error: " + (err.error || "Failed to trigger SMB harvest"));
+        }
+        return;
+      }
+
       let limit = 20;
       if (source === 'hn') {
         limit = parseInt(document.getElementById('hn-harvest-limit').value, 10) || 20;

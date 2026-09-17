@@ -53,7 +53,7 @@ export class PipelineOrchestrator {
     this.discoveryAgent = new DiscoveryAgent(this.logRepo);
     this.profilerAgent = new CompanyProfilerAgent(this.companyRepo, this.logRepo);
     this.hunterAgent = new CareerHunterAgent(this.careerPageRepo, this.logRepo);
-    this.extractorAgent = new JobExtractorAgent(this.jobRepo, this.logRepo);
+    this.extractorAgent = new JobExtractorAgent(this.jobRepo, this.logRepo, this.companyRepo);
   }
 
   /**

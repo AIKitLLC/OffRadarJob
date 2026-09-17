@@ -36,6 +36,10 @@ export interface HarvestedCompanyProfile {
   headcountEstimate?: string | null;
   locationHint?: string | null;
   discoverySource: string;
+  fundingStage?: string | null | undefined;
+  totalFunding?: string | null | undefined;
+  valuationEstimate?: string | null | undefined;
+  companyTier?: string | null | undefined;
   inlineRoles: InlineJobRole[];
 }
 
@@ -373,6 +377,36 @@ export class HackerNewsHarvester {
       });
     }
 
+    // 8. Extract Funding & Valuation
+    let fundingStage: string | null = null;
+    let totalFunding: string | null = null;
+    let valuationEstimate: string | null = null;
+    let companyTier: string | null = null;
+    const lowerDecoded = decoded.toLowerCase();
+
+    if (lowerDecoded.includes("bootstrapped") || lowerDecoded.includes("profitable") || lowerDecoded.includes("self-funded")) {
+      fundingStage = "Bootstrapped";
+      companyTier = "Bootstrapped SMB";
+    } else if (lowerDecoded.match(/\bseries\s+c\b/i)) {
+      fundingStage = "Series C+";
+      companyTier = "Late Stage Tech";
+    } else if (lowerDecoded.match(/\bseries\s+b\b/i)) {
+      fundingStage = "Series B";
+      companyTier = "Growth Stage Tech";
+    } else if (lowerDecoded.match(/\bseries\s+a\b/i)) {
+      fundingStage = "Series A";
+      companyTier = "Early Growth";
+    } else if (lowerDecoded.match(/\b(?:seed\s+round|seed\s+funded|pre-seed)\b/i) || lowerDecoded.includes("yc ")) {
+      fundingStage = "Seed";
+      companyTier = "Seed Startup";
+    }
+
+    const raisedM = decoded.match(/raised\s+(\$(?:[0-9]{1,3}(?:\.[0-9]+)?)\s*(?:million|billion|M|B|K)?)/i);
+    if (raisedM && raisedM[1]) totalFunding = raisedM[1].trim();
+
+    const valM = decoded.match(/valued\s+at\s+(\$(?:[0-9]{1,3}(?:\.[0-9]+)?)\s*(?:million|billion|M|B|K)?)/i);
+    if (valM && valM[1]) valuationEstimate = valM[1].trim();
+
     return {
       name: rawCompanyName,
       domain,
@@ -387,6 +421,10 @@ export class HackerNewsHarvester {
       headcountEstimate: "1-25",
       locationHint: rawLocation,
       discoverySource: "hn_whoishiring",
+      fundingStage,
+      totalFunding,
+      valuationEstimate,
+      companyTier,
       inlineRoles,
     };
   }
@@ -584,12 +622,74 @@ export class GitHubDirectoryHarvester {
 }
 
 // -----------------------------------------------------------------------------
-// 3. Public Source Manager (Orchestrates Harvesting, Ingest & Pipeline Dispatch)
+// 3. Y Combinator Active Startups Harvester
+// -----------------------------------------------------------------------------
+
+export class YcHarvester {
+  public async harvestYcStartups(limit = 20): Promise<HarvestedCompanyProfile[]> {
+    try {
+      const res = await fetch("https://yc-oss.github.io/api/companies/all.json", {
+        headers: { "User-Agent": "OffRadarJob-Expander/1.0" },
+      });
+      if (!res.ok) return [];
+
+      const list = (await res.json()) as any[];
+      const activeList = list.filter((c) => c.status === "Active" && c.website);
+      const dayOfMonth = new Date().getUTCDate();
+      const startIndex = (dayOfMonth * limit) % Math.max(1, activeList.length - limit);
+      const slice = activeList.slice(startIndex, startIndex + limit);
+
+      const profiles: HarvestedCompanyProfile[] = [];
+      for (const c of slice) {
+        const domain = extractDomainFromUrl(c.website);
+        if (!domain) continue;
+
+        let fundingStage = "Seed";
+        let companyTier = "Seed Startup";
+        if (c.stage === "Growth") {
+          fundingStage = "Series B";
+          companyTier = "Growth Stage Tech";
+        } else if (c.stage === "Early") {
+          fundingStage = "Series A";
+          companyTier = "Early Growth";
+        }
+
+        profiles.push({
+          name: c.name || domain,
+          domain,
+          websiteUrl: c.website.startsWith("http") ? c.website : `https://${c.website}`,
+          tagline: c.one_liner || null,
+          description: c.long_description || c.one_liner || null,
+          industry: c.industries && c.industries[0] ? c.industries[0] : "Technology",
+          techStack: Array.isArray(c.tags) ? c.tags.slice(0, 10) : [],
+          socialLinks: {},
+          contactEmail: null,
+          headcountEstimate: c.team_size ? `${c.team_size}-${c.team_size}` : "1-20",
+          locationHint: c.regions && c.regions[0] ? c.regions[0] : "Remote",
+          discoverySource: "yc_directory",
+          fundingStage,
+          companyTier,
+          valuationEstimate: c.isHiring ? "Active Hiring" : undefined,
+          inlineRoles: [],
+        });
+      }
+
+      return profiles;
+    } catch (err) {
+      console.error("[YcHarvester] Failed fetching YC companies:", err);
+      return [];
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 4. Public Source Manager (Orchestrates Harvesting, Ingest & Pipeline Dispatch)
 // -----------------------------------------------------------------------------
 
 export class PublicSourceManager {
   private readonly hnHarvester: HackerNewsHarvester;
   private readonly ghHarvester: GitHubDirectoryHarvester;
+  private readonly ycHarvester: YcHarvester;
 
   public readonly companyRepo: CompanyRepository;
   public readonly careerPageRepo: CareerPageRepository;
@@ -606,13 +706,14 @@ export class PublicSourceManager {
 
     this.hnHarvester = new HackerNewsHarvester();
     this.ghHarvester = new GitHubDirectoryHarvester();
+    this.ycHarvester = new YcHarvester();
   }
 
   /**
    * Harvest profiles from chosen public source
    */
   public async harvestProfiles(
-    source: "hn" | "github" | "all" = "all",
+    source: "hn" | "github" | "yc" | "all" = "all",
     limit = 20
   ): Promise<HarvestedCompanyProfile[]> {
     const profiles: HarvestedCompanyProfile[] = [];
@@ -620,19 +721,25 @@ export class PublicSourceManager {
     if (source === "hn" || source === "all") {
       const story = await this.hnHarvester.fetchLatestHiringStory();
       if (story) {
-        const hnLimit = source === "all" ? Math.floor(limit / 2) : limit;
+        const hnLimit = source === "all" ? Math.floor(limit / 3) : limit;
         const hnProfiles = await this.hnHarvester.harvestStoryComments(story.id, hnLimit);
         profiles.push(...hnProfiles);
       }
     }
 
     if (source === "github" || source === "all") {
-      const ghLimit = source === "all" ? Math.ceil(limit / 2) : limit;
+      const ghLimit = source === "all" ? Math.ceil(limit / 3) : limit;
       const [estProfiles, ritProfiles] = await Promise.all([
         this.ghHarvester.harvestEstablishedRemote(Math.ceil(ghLimit / 2)),
         this.ghHarvester.harvestRemoteInTech(Math.floor(ghLimit / 2)),
       ]);
       profiles.push(...estProfiles, ...ritProfiles);
+    }
+
+    if (source === "yc" || source === "all") {
+      const ycLimit = source === "all" ? Math.max(5, Math.floor(limit / 3)) : limit;
+      const ycProfiles = await this.ycHarvester.harvestYcStartups(ycLimit);
+      profiles.push(...ycProfiles);
     }
 
     // Deduplicate by domain
@@ -681,6 +788,12 @@ export class PublicSourceManager {
         headcountEstimate: p.headcountEstimate ?? undefined,
         locationHint: p.locationHint ?? undefined,
         discoverySource: p.discoverySource,
+        fundingStage: p.fundingStage ?? existingCompany?.fundingStage,
+        totalFunding: p.totalFunding ?? existingCompany?.totalFunding,
+        valuationEstimate: p.valuationEstimate ?? existingCompany?.valuationEstimate,
+        companyTier: p.companyTier ?? existingCompany?.companyTier,
+        primaryDepartment: existingCompany?.primaryDepartment,
+        hiringDepartments: existingCompany?.hiringDepartments,
         createdAt: now,
         updatedAt: now,
       };
@@ -725,6 +838,7 @@ export class PublicSourceManager {
           companyId,
           careerPageId: careerPageId ?? `page_${companyId}_direct`,
           title,
+          department: role.techCategory ? (role.techCategory.includes("design") ? "Product & Design" : "Engineering") : "Engineering",
           seniorityLevel: role.seniorityLevel ?? inferSeniority(title),
           techCategory: role.techCategory ?? inferTechCategory(title, p.techStack),
           isTechRole: true,
@@ -746,6 +860,12 @@ export class PublicSourceManager {
         directJobsCount++;
       }
 
+      if (p.inlineRoles && p.inlineRoles.length > 0) {
+        try {
+          await this.companyRepo.recalculateDepartmentWeights(companyId);
+        } catch {}
+      }
+
       targetsToCrawl.push({
         companyId,
         url: p.careersUrl || p.websiteUrl,
@@ -764,7 +884,7 @@ export class PublicSourceManager {
    * End-to-end: Harvest from public source, ingest companies & feed direct websites to PipelineOrchestrator
    */
   public async harvestAndGatherAsync(
-    source: "hn" | "github" | "all" = "all",
+    source: "hn" | "github" | "yc" | "all" = "all",
     limit = 20,
     orchestrator?: PipelineOrchestrator
   ): Promise<{

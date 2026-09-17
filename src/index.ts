@@ -24,6 +24,7 @@ import { CrawlTaskStatus, User, CvVersion } from "./types/domain.js";
 import { CURATED_SEEDS } from "./seeds/seed-catalogue.js";
 import { PublicSourceManager } from "./harvesters/public-source-harvester.js";
 import { NewGradHarvester } from "./harvesters/newgrad-harvester.js";
+import { SmbHarvester, SMB_CATALOGUE } from "./harvesters/smb-harvester.js";
 
 export interface KvNamespace {
   get(key: string, type?: "text" | "json"): Promise<any>;
@@ -308,11 +309,12 @@ export default {
       const grade = url.searchParams.get("grade") ?? url.searchParams.get("seniority") ?? undefined;
       const techCategory = url.searchParams.get("tech_category") ?? undefined;
       const region = url.searchParams.get("region") ?? undefined;
+      const state = url.searchParams.get("state") ?? undefined;
       const search = url.searchParams.get("search") ?? url.searchParams.get("q") ?? undefined;
       const techOnlyParam = url.searchParams.get("tech_only");
       const techOnly = techOnlyParam === "false" ? false : true;
 
-      const cacheKey = `api:jobs:v5:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
+      const cacheKey = `api:jobs:v6:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:st${state || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
 
       const data = await getOrSetKvCache(env, cacheKey, 120, async () => {
         if (paged) {
@@ -322,6 +324,7 @@ export default {
             grade,
             techCategory,
             region,
+            state,
             techOnly,
             search,
           });
@@ -343,7 +346,7 @@ export default {
       });
     }
 
-    // 4. API: List Micro-Companies (Supports Paging & KV Caching)
+    // 4. API: List Micro-Companies (Supports Paging & Stage/Department/State Filters & KV Caching)
     if (path === "/api/companies" && request.method === "GET") {
       const pageParam = url.searchParams.get("page");
       const paged = pageParam !== null || url.searchParams.get("paged") === "true";
@@ -351,12 +354,15 @@ export default {
       const limit = Math.min(parseInt(url.searchParams.get("limit") ?? (paged ? "30" : "50"), 10), 100);
       const search = url.searchParams.get("search") ?? url.searchParams.get("q") ?? undefined;
       const region = url.searchParams.get("region") ?? undefined;
+      const state = url.searchParams.get("state") ?? undefined;
+      const fundingStage = url.searchParams.get("funding_stage") ?? url.searchParams.get("stage") ?? undefined;
+      const primaryDepartment = url.searchParams.get("primary_department") ?? url.searchParams.get("department") ?? undefined;
 
-      const cacheKey = `api:companies:v6:p${page}:l${limit}:r${region || "all"}:s${search || ""}:paged${paged ? 1 : 0}`;
+      const cacheKey = `api:companies:v9:p${page}:l${limit}:r${region || "all"}:st${state || "all"}:fs${fundingStage || "all"}:pd${primaryDepartment || "all"}:s${search || ""}:paged${paged ? 1 : 0}`;
 
       const data = await getOrSetKvCache(env, cacheKey, 300, async () => {
         if (paged) {
-          return await companyRepo.listPaged({ page, limit, search, region });
+          return await companyRepo.listPaged({ page, limit, search, region, state, fundingStage, primaryDepartment });
         }
         return await companyRepo.list(limit, region);
       });
@@ -1664,6 +1670,115 @@ export default {
       }
     }
 
+    // 11c. Admin API: Weekly Continuous Sweep across tracked companies & ATS boards
+    if (path === "/api/admin/tasks/weekly-sweep" && request.method === "POST") {
+      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      try {
+        const body = (await request.json().catch(() => ({}))) as { limit?: number };
+        const limit = Math.min(Math.max(body.limit ?? 250, 10), 1000);
+
+        const allCompanies = await companyRepo.list(limit);
+        const taskIds: string[] = [];
+
+        for (const comp of allCompanies) {
+          const taskId = `task_weekly_manual_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          taskIds.push(taskId);
+
+          await taskRepo.create({
+            id: taskId,
+            targetUrl: comp.websiteUrl,
+            sourceType: "weekly_scheduled_manual",
+            status: "pending",
+            companyId: comp.id,
+            jobsFound: 0,
+            metadata: { companyName: comp.name, domain: comp.domain },
+            createdAt: Date.now(),
+          });
+
+          if (env.DISCOVERY_QUEUE) {
+            await env.DISCOVERY_QUEUE.send({
+              type: "DISCOVER_SEED",
+              traceId: taskId,
+              source: "weekly_scheduled_manual",
+              sourceUrl: comp.websiteUrl,
+              timestamp: Date.now(),
+              retryCount: 0,
+            });
+          }
+        }
+
+        // Also sweep direct ATS boards in background
+        const smbHarvester = new SmbHarvester();
+        ctx.waitUntil(
+          smbHarvester.syncWithDatabase(env.DB).then(async (res) => {
+            await logRepo.log({
+              id: `log_weekly_sweep_${Date.now()}`,
+              agentName: "weekly_sweep_orchestrator",
+              targetUrl: "cron://weekly-sweep-manual",
+              status: "success",
+              durationMs: 0,
+              message: `Weekly sweep successfully synchronized ${res.jobsAdded} jobs and dispatched ${taskIds.length} company re-crawls.`,
+              metadata: { dispatched: taskIds.length, jobsAdded: res.jobsAdded },
+              createdAt: Date.now(),
+            });
+          }).catch((err) => {
+            console.error("[WeeklySweep] Direct ATS sweep error:", err);
+          })
+        );
+
+        return Response.json({
+          success: true,
+          totalCompanies: allCompanies.length,
+          dispatchedTasks: taskIds.length,
+          atsBoardsCount: SMB_CATALOGUE.length,
+          schedule: "0 3 * * 1 (Mondays 03:00 UTC) + Daily 1/7th partition",
+          message: `Dispatched weekly sweep across ${allCompanies.length} tracked companies and ${SMB_CATALOGUE.length} direct ATS boards.`,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return Response.json({ error: msg }, { status: 500 });
+      }
+    }
+
+    // 11d. Admin API: Backfill Department Hiring Weights & Primary Departments
+    if (path === "/api/admin/companies/backfill-weights" && request.method === "POST") {
+      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      try {
+        const result = await companyRepo.backfillAllDepartmentWeights();
+        return Response.json({
+          success: true,
+          message: `Successfully recalculated hiring department weights for ${result.updatedCount} companies.`,
+          updatedCount: result.updatedCount,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return Response.json({ error: msg }, { status: 500 });
+      }
+    }
+
+    // 11e. Admin API: Weekly Schedule Status
+    if (path === "/api/admin/weekly-schedule/status" && request.method === "GET") {
+      const now = new Date();
+      const currentDay = now.getUTCDay(); // 0=Sunday, 1=Monday
+      const daysUntilMonday = (8 - currentDay) % 7 || 7;
+      const nextMonday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysUntilMonday, 3, 0, 0));
+      const totalCount = await companyRepo.count();
+
+      return Response.json({
+        cronSchedule: "0 3 * * 1 (Every Monday at 03:00 UTC)",
+        nextScheduledRunUtc: nextMonday.toISOString(),
+        currentDayOfWeek: currentDay,
+        trackedCompanies: totalCount,
+        rollingPartitionDailyLimit: Math.ceil(totalCount / 7),
+        rollingCoverageStrategy: "1/7th partition swept daily (100% refreshed every 7 days) + Monday Full Priority Sweep",
+        supportedDirectAtsBoards: SMB_CATALOGUE.length,
+      });
+    }
+
     // 12. Admin API: Moderation - Update Job Status
     const jobStatusMatch = path.match(/^\/api\/admin\/jobs\/([^/]+)\/status$/);
     if (jobStatusMatch && request.method === "PATCH") {
@@ -1802,6 +1917,47 @@ export default {
           limit,
           ...result,
           message: `Successfully harvested ${result.importedJobs} New Grad positions (${result.midwestJobs} Midwest US roles).`,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return Response.json({ error: msg }, { status: 500 });
+      }
+    }
+
+    // 15c. Admin API: Harvest Cross-Industry US SMBs
+    if (path === "/api/admin/harvest/smb" && request.method === "POST") {
+      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      try {
+        const body = (await request.json().catch(() => ({}))) as { targetsCount?: number };
+        const count = Math.min(Math.max(body.targetsCount ?? SMB_CATALOGUE.length, 1), SMB_CATALOGUE.length);
+        const selectedTargets = SMB_CATALOGUE.slice(0, count);
+
+        const smbHarvester = new SmbHarvester();
+        ctx.waitUntil(
+          smbHarvester.syncWithDatabase(env.DB, selectedTargets).then(async (res) => {
+            await logRepo.log({
+              id: `log_admin_smb_${Date.now()}`,
+              agentName: "admin_smb_gatherer",
+              targetUrl: "admin://harvest-smb",
+              status: "success",
+              durationMs: 0,
+              message: `Admin triggered SMB harvest synchronized ${res.jobsAdded} positions across ${selectedTargets.length} US companies.`,
+              metadata: { targetsCount: selectedTargets.length, jobsAdded: res.jobsAdded },
+              createdAt: Date.now(),
+            });
+          }).catch((err) => {
+            console.error("[AdminHarvestSmb] Background harvest failed:", err);
+          })
+        );
+
+        return Response.json({
+          success: true,
+          source: "smb_cross_industry",
+          targetsCount: selectedTargets.length,
+          status: "harvest_started",
+          message: `Dispatched scheduled gather for ${selectedTargets.length} US SMBs across 9 industries in background.`,
         });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -2212,11 +2368,60 @@ export default {
           }
         }
 
-        // Harvest new companies daily from public sources (HN + GitHub)
+        // Harvest new companies daily from public sources (HN + GitHub + YC)
         const harvestManager = new PublicSourceManager(env.DB);
-        await harvestManager.harvestAndGatherAsync("all", 5, orchestrator).catch((err) => {
+        await harvestManager.harvestAndGatherAsync("all", 15, orchestrator).catch((err) => {
           console.error(`[DailyCronTrigger] Public source daily harvest failed:`, err);
         });
+
+        // Cross-Industry US SMB Harvester Sweep (Healthcare, CleanTech, Robotics, FinTech, etc.)
+        try {
+          const smbHarvester = new SmbHarvester();
+          const smbBatchSize = 8;
+          const smbStartIndex = (dayOfMonth * smbBatchSize) % SMB_CATALOGUE.length;
+          const dailySmbTargets = SMB_CATALOGUE.slice(smbStartIndex, smbStartIndex + smbBatchSize);
+          const smbSyncResult = await smbHarvester.syncWithDatabase(env.DB, dailySmbTargets);
+
+          await logRepo.log({
+            id: `log_smb_cron_${Date.now()}`,
+            agentName: "smb_cron_scheduler",
+            targetUrl: "cron://smb-sweep",
+            status: "success",
+            durationMs: 0,
+            message: `Daily SMB sweep gathered ${smbSyncResult.jobsAdded} open positions across ${dailySmbTargets.length} cross-industry businesses.`,
+            metadata: { targets: dailySmbTargets.map((t) => t.name), jobsAdded: smbSyncResult.jobsAdded },
+            createdAt: Date.now(),
+          });
+        } catch (smbErr) {
+          console.error("[DailyCronTrigger] SMB cross-industry harvest failed:", smbErr);
+        }
+
+        // 2b. Daily 1/7th Rolling Cohort Sweep (Weekly Continuous Scan across all companies)
+        // Ensures 100% of tracked companies are refreshed every 7 days without CPU spikes
+        const dayOfWeek = new Date().getUTCDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+        try {
+          const partitionQuery = `SELECT id, name, domain, website_url FROM companies WHERE (rowid % 7) = ? LIMIT 600`;
+          const partitionResult = await env.DB.prepare(partitionQuery).bind(dayOfWeek).all<{ id: string; name: string; domain: string; website_url: string }>();
+          const partitionCompanies = partitionResult.results || [];
+
+          for (const comp of partitionCompanies) {
+            const taskId = `task_weekly_cohort_${dayOfWeek}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            if (env.DISCOVERY_QUEUE) {
+              await env.DISCOVERY_QUEUE.send({
+                type: "DISCOVER_SEED",
+                traceId: taskId,
+                source: "weekly_rolling_cohort",
+                sourceUrl: comp.website_url,
+                timestamp: Date.now(),
+                retryCount: 0,
+              });
+            }
+          }
+
+          console.log(`[RollingWeeklyTrigger] Dispatched ${partitionCompanies.length} companies for weekly cohort day ${dayOfWeek}/7`);
+        } catch (rollingErr) {
+          console.error("[RollingWeeklyTrigger] Rolling weekly cohort sweep failed:", rollingErr);
+        }
 
         await logRepo.log({
           id: `log_daily_cron_${Date.now()}`,
@@ -2224,8 +2429,8 @@ export default {
           targetUrl: "cron://daily-sweep",
           status: "success",
           durationMs: 0,
-          message: `Daily scheduled sweep successfully initiated ${dailySeeds.length} candidate scans and public sources sweep. Tracking ${count} companies.`,
-          metadata: { dayOfMonth, seeds: dailySeeds.map((s) => s.name) },
+          message: `Daily scheduled sweep successfully initiated ${dailySeeds.length} candidate scans, public sources, and weekly cohort day ${dayOfWeek}/7. Tracking ${count} companies.`,
+          metadata: { dayOfMonth, dayOfWeek, seeds: dailySeeds.map((s) => s.name) },
           createdAt: Date.now(),
         });
       })()

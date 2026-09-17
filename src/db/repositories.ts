@@ -16,6 +16,7 @@ import {
   AuthSession,
   SystemSetting,
 } from "../types/domain.js";
+import { buildStateSqlCondition, getUsState } from "../utils/us-states.js";
 
 export const MIDWEST_COMPANY_SQL_CONDITION = `(
   COALESCE(location_hint, '') LIKE '%midwest%' 
@@ -257,8 +258,10 @@ export class CompanyRepository {
         id, domain, name, tagline, description, website_url,
         logo_url, industry, tech_stack, social_links,
         contact_email, headcount_estimate, location_hint, discovery_source,
+        funding_stage, total_funding, valuation_estimate, company_tier,
+        primary_department, hiring_departments_json,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(domain) DO UPDATE SET
         name = excluded.name,
         tagline = COALESCE(excluded.tagline, companies.tagline),
@@ -271,6 +274,12 @@ export class CompanyRepository {
         contact_email = COALESCE(excluded.contact_email, companies.contact_email),
         headcount_estimate = COALESCE(excluded.headcount_estimate, companies.headcount_estimate),
         location_hint = COALESCE(excluded.location_hint, companies.location_hint),
+        funding_stage = COALESCE(excluded.funding_stage, companies.funding_stage),
+        total_funding = COALESCE(excluded.total_funding, companies.total_funding),
+        valuation_estimate = COALESCE(excluded.valuation_estimate, companies.valuation_estimate),
+        company_tier = COALESCE(excluded.company_tier, companies.company_tier),
+        primary_department = COALESCE(excluded.primary_department, companies.primary_department),
+        hiring_departments_json = CASE WHEN excluded.hiring_departments_json != '{}' THEN excluded.hiring_departments_json ELSE companies.hiring_departments_json END,
         updated_at = excluded.updated_at
     `;
 
@@ -291,6 +300,12 @@ export class CompanyRepository {
         company.headcountEstimate ?? null,
         company.locationHint ?? null,
         company.discoverySource,
+        company.fundingStage ?? null,
+        company.totalFunding ?? null,
+        company.valuationEstimate ?? null,
+        company.companyTier ?? null,
+        company.primaryDepartment ?? null,
+        company.hiringDepartments ? JSON.stringify(company.hiringDepartments) : "{}",
         company.createdAt,
         company.updatedAt
       )
@@ -348,6 +363,9 @@ export class CompanyRepository {
     limit?: number | undefined;
     search?: string | undefined;
     region?: string | undefined;
+    state?: string | undefined;
+    fundingStage?: string | undefined;
+    primaryDepartment?: string | undefined;
   } = {}): Promise<{
     items: Company[];
     pagination: {
@@ -369,8 +387,8 @@ export class CompanyRepository {
     const bindings: unknown[] = [];
 
     if (search) {
-      whereClause += " AND (LOWER(name) LIKE ? OR LOWER(domain) LIKE ? OR LOWER(COALESCE(industry, '')) LIKE ? OR LOWER(tech_stack) LIKE ?)";
-      bindings.push(search, search, search, search);
+      whereClause += " AND (LOWER(name) LIKE ? OR LOWER(domain) LIKE ? OR LOWER(COALESCE(industry, '')) LIKE ? OR LOWER(tech_stack) LIKE ? OR LOWER(COALESCE(location_hint, '')) LIKE ?)";
+      bindings.push(search, search, search, search, search);
     }
     if (region === "midwest") {
       whereClause += ` AND ${MIDWEST_COMPANY_SQL_CONDITION}`;
@@ -382,6 +400,25 @@ export class CompanyRepository {
       whereClause += ` AND NOT ${MIDWEST_COMPANY_SQL_CONDITION} AND ${SOUTH_COMPANY_SQL_CONDITION}`;
     } else if (region === "mountain") {
       whereClause += ` AND NOT ${MIDWEST_COMPANY_SQL_CONDITION} AND ${MOUNTAIN_COMPANY_SQL_CONDITION}`;
+    }
+
+    if (options.state && options.state !== "all") {
+      const stateCond = buildStateSqlCondition(options.state, "location_hint");
+      whereClause += ` AND ${stateCond.sql}`;
+      bindings.push(...stateCond.bindings);
+    }
+
+    if (options.fundingStage && options.fundingStage !== "all") {
+      const normStage = options.fundingStage.toLowerCase().trim();
+      const spaceStage = normStage.replace(/_/g, " ");
+      const underscoreStage = normStage.replace(/\s+/g, "_");
+      whereClause += " AND (LOWER(funding_stage) = ? OR LOWER(funding_stage) = ? OR REPLACE(LOWER(funding_stage), ' ', '_') = ?)";
+      bindings.push(normStage, spaceStage, underscoreStage);
+    }
+
+    if (options.primaryDepartment && options.primaryDepartment !== "all") {
+      whereClause += " AND LOWER(primary_department) = ?";
+      bindings.push(options.primaryDepartment.toLowerCase().trim());
     }
 
     const countSql = `SELECT COUNT(*) as total FROM companies ${whereClause}`;
@@ -426,6 +463,77 @@ export class CompanyRepository {
     return res?.count ?? 0;
   }
 
+  /**
+   * Recalculates department hiring distribution and primary department for a company.
+   */
+  public async recalculateDepartmentWeights(companyId: string): Promise<{
+    totalOpenJobs: number;
+    primaryDepartment: string;
+    breakdown: Record<string, { count: number; percentage: number }>;
+  } | null> {
+    const query = `
+      SELECT 
+        COALESCE(NULLIF(TRIM(department), ''), 'General') as dept,
+        COUNT(*) as cnt
+      FROM jobs
+      WHERE company_id = ? AND status = 'open'
+      GROUP BY dept
+      ORDER BY cnt DESC
+    `;
+    const res = await this.db.prepare(query).bind(companyId).all<{ dept: string; cnt: number }>();
+    const rows = res.results || [];
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const totalOpenJobs = rows.reduce((sum, r) => sum + Number(r.cnt), 0);
+    const breakdown: Record<string, { count: number; percentage: number }> = {};
+    const primaryDepartment = rows[0]?.dept || "General";
+
+    for (const r of rows) {
+      const count = Number(r.cnt);
+      const percentage = totalOpenJobs > 0 ? Math.round((count / totalOpenJobs) * 1000) / 10 : 0;
+      breakdown[r.dept] = { count, percentage };
+    }
+
+    const updateQuery = `
+      UPDATE companies 
+      SET primary_department = ?,
+          hiring_departments_json = ?,
+          updated_at = ?
+      WHERE id = ?
+    `;
+    await this.db.prepare(updateQuery).bind(
+      primaryDepartment,
+      JSON.stringify(breakdown),
+      Date.now(),
+      companyId
+    ).run();
+
+    return {
+      totalOpenJobs,
+      primaryDepartment,
+      breakdown,
+    };
+  }
+
+  /**
+   * Backfills department weights across all companies with active jobs.
+   */
+  public async backfillAllDepartmentWeights(): Promise<{ updatedCount: number }> {
+    const compRes = await this.db.prepare(
+      "SELECT DISTINCT company_id FROM jobs WHERE status = 'open'"
+    ).all<{ company_id: string }>();
+    const companyIds = (compRes.results || []).map((r) => r.company_id);
+
+    let updatedCount = 0;
+    for (const cid of companyIds) {
+      const metrics = await this.recalculateDepartmentWeights(cid);
+      if (metrics) updatedCount++;
+    }
+    return { updatedCount };
+  }
+
   private mapRowToCompany(row: Record<string, unknown>): Company {
     let techStack: string[] = [];
     try {
@@ -439,6 +547,13 @@ export class CompanyRepository {
     const locHint = row["location_hint"] != null ? String(row["location_hint"]) : null;
     const detectedRegion = detectUsRegion(null, locHint, null, false);
     const isMidwestMatch = Number(row["is_midwest_priority"] ?? 0) === 1 || detectedRegion === "midwest";
+
+    let hiringDepartments: Record<string, { count: number; percentage: number }> | undefined = undefined;
+    if (typeof row["hiring_departments_json"] === "string" && row["hiring_departments_json"] !== "{}") {
+      try {
+        hiringDepartments = JSON.parse(row["hiring_departments_json"] as string);
+      } catch {}
+    }
 
     return {
       id: String(row["id"]),
@@ -457,6 +572,12 @@ export class CompanyRepository {
       discoverySource: String(row["discovery_source"] ?? "seed"),
       isMidwest: isMidwestMatch,
       usRegion: detectedRegion,
+      fundingStage: row["funding_stage"] != null ? String(row["funding_stage"]) : undefined,
+      totalFunding: row["total_funding"] != null ? String(row["total_funding"]) : undefined,
+      valuationEstimate: row["valuation_estimate"] != null ? String(row["valuation_estimate"]) : undefined,
+      companyTier: row["company_tier"] != null ? String(row["company_tier"]) : undefined,
+      primaryDepartment: row["primary_department"] != null ? String(row["primary_department"]) : undefined,
+      hiringDepartments,
       createdAt: Number(row["created_at"]),
       updatedAt: Number(row["updated_at"]),
     };
@@ -826,6 +947,7 @@ export class JobRepository {
     grade?: string | undefined;
     techCategory?: string | undefined;
     region?: string | undefined;
+    state?: string | undefined;
     techOnly?: boolean | undefined;
     search?: string | undefined;
   } = {}): Promise<{
@@ -875,6 +997,11 @@ export class JobRepository {
       whereClause += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${MOUNTAIN_SQL_CONDITION}`;
     } else if (region === "remote") {
       whereClause += " AND j.is_remote = 1";
+    }
+    if (options.state && options.state !== "all") {
+      const stateCond = buildStateSqlCondition(options.state, "COALESCE(j.location, c.location_hint)");
+      whereClause += ` AND ${stateCond.sql}`;
+      bindings.push(...stateCond.bindings);
     }
     if (search) {
       whereClause += " AND (LOWER(j.title) LIKE ? OR LOWER(COALESCE(c.name, '')) LIKE ? OR LOWER(j.skills) LIKE ? OR LOWER(COALESCE(j.location, '')) LIKE ? OR LOWER(COALESCE(j.department, '')) LIKE ?)";
