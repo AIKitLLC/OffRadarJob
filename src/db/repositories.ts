@@ -20,6 +20,8 @@ import {
   FeedbackType,
   FeedbackSentiment,
   FeedbackStatus,
+  UserSubscription,
+  SubscriptionFrequency,
 } from "../types/domain.js";
 import { buildStateSqlCondition, getUsState } from "../utils/us-states.js";
 
@@ -2062,3 +2064,175 @@ export class LlmFeedbackRepository {
     };
   }
 }
+
+export class UserSubscriptionRepository {
+  constructor(private readonly db: ID1Database) {}
+
+  public async upsert(sub: {
+    id?: string | undefined;
+    userId: string;
+    telegramId: string;
+    isActive?: boolean | undefined;
+    frequency?: SubscriptionFrequency | undefined;
+    targetRoles?: string[] | undefined;
+    techCategories?: string[] | undefined;
+    regions?: string[] | undefined;
+    minSalary?: number | null | undefined;
+    lastNotifiedAt?: number | null | undefined;
+    createdAt?: number | undefined;
+    updatedAt?: number | undefined;
+  }): Promise<UserSubscription> {
+    const id = sub.id || `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const now = Date.now();
+    const createdAt = sub.createdAt || now;
+    const updatedAt = sub.updatedAt || now;
+    const isActive = sub.isActive !== undefined ? (sub.isActive ? 1 : 0) : 1;
+    const frequency = sub.frequency || "daily";
+    const targetRolesStr = JSON.stringify(sub.targetRoles ?? []);
+    const techCategoriesStr = JSON.stringify(sub.techCategories ?? []);
+    const regionsStr = JSON.stringify(sub.regions ?? ["midwest", "remote"]);
+    const minSalary = sub.minSalary ?? null;
+    const lastNotifiedAt = sub.lastNotifiedAt ?? null;
+
+    const query = `
+      INSERT INTO user_subscriptions (
+        id, user_id, telegram_id, is_active, frequency,
+        target_roles, tech_categories, regions, min_salary,
+        last_notified_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        telegram_id = excluded.telegram_id,
+        is_active = excluded.is_active,
+        frequency = excluded.frequency,
+        target_roles = excluded.target_roles,
+        tech_categories = excluded.tech_categories,
+        regions = excluded.regions,
+        min_salary = excluded.min_salary,
+        last_notified_at = COALESCE(excluded.last_notified_at, user_subscriptions.last_notified_at),
+        updated_at = excluded.updated_at
+    `;
+
+    await this.db
+      .prepare(query)
+      .bind(
+        id,
+        sub.userId,
+        sub.telegramId,
+        isActive,
+        frequency,
+        targetRolesStr,
+        techCategoriesStr,
+        regionsStr,
+        minSalary,
+        lastNotifiedAt,
+        createdAt,
+        updatedAt
+      )
+      .run();
+
+    return {
+      id,
+      userId: sub.userId,
+      telegramId: sub.telegramId,
+      isActive: isActive === 1,
+      frequency,
+      targetRoles: sub.targetRoles ?? [],
+      techCategories: sub.techCategories ?? [],
+      regions: sub.regions ?? ["midwest", "remote"],
+      minSalary: sub.minSalary,
+      lastNotifiedAt: sub.lastNotifiedAt,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  public async getByUserId(userId: string): Promise<UserSubscription | null> {
+    const query = `SELECT * FROM user_subscriptions WHERE user_id = ? LIMIT 1`;
+    const row = await this.db.prepare(query).bind(userId).first<Record<string, unknown>>();
+    return row ? this.mapRowToSubscription(row) : null;
+  }
+
+  public async getByTelegramId(telegramId: string): Promise<UserSubscription | null> {
+    const query = `SELECT * FROM user_subscriptions WHERE telegram_id = ? LIMIT 1`;
+    const row = await this.db.prepare(query).bind(telegramId).first<Record<string, unknown>>();
+    return row ? this.mapRowToSubscription(row) : null;
+  }
+
+  public async listActive(frequency?: string): Promise<UserSubscription[]> {
+    let query = `SELECT * FROM user_subscriptions WHERE is_active = 1`;
+    const bindings: unknown[] = [];
+    if (frequency) {
+      query += ` AND frequency = ?`;
+      bindings.push(frequency);
+    }
+    query += ` ORDER BY created_at ASC`;
+    const res = await this.db.prepare(query).bind(...bindings).all<Record<string, unknown>>();
+    return (res.results || []).map((r) => this.mapRowToSubscription(r));
+  }
+
+  public async toggleActive(userId: string, isActive: boolean): Promise<boolean> {
+    const query = `UPDATE user_subscriptions SET is_active = ?, updated_at = ? WHERE user_id = ?`;
+    const res = await this.db.prepare(query).bind(isActive ? 1 : 0, Date.now(), userId).run();
+    const changes = (res.meta as { changes?: number } | undefined)?.changes;
+    return changes != null ? changes > 0 : true;
+  }
+
+  public async updateLastNotified(id: string, timestamp: number): Promise<void> {
+    const query = `UPDATE user_subscriptions SET last_notified_at = ?, updated_at = ? WHERE id = ?`;
+    await this.db.prepare(query).bind(timestamp, Date.now(), id).run();
+  }
+
+  public async countSubscribers(): Promise<{ total: number; active: number }> {
+    const query = `
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active
+      FROM user_subscriptions
+    `;
+    const row = await this.db.prepare(query).first<Record<string, unknown>>();
+    return {
+      total: Number(row?.["total"] ?? 0),
+      active: Number(row?.["active"] ?? 0),
+    };
+  }
+
+  private mapRowToSubscription(row: Record<string, unknown>): UserSubscription {
+    let targetRoles: string[] = [];
+    let techCategories: string[] = [];
+    let regions: string[] = ["midwest", "remote"];
+
+    try {
+      if (typeof row["target_roles"] === "string") {
+        targetRoles = JSON.parse(row["target_roles"]);
+      }
+    } catch {}
+
+    try {
+      if (typeof row["tech_categories"] === "string") {
+        techCategories = JSON.parse(row["tech_categories"]);
+      }
+    } catch {}
+
+    try {
+      if (typeof row["regions"] === "string") {
+        regions = JSON.parse(row["regions"]);
+      }
+    } catch {}
+
+    return {
+      id: String(row["id"]),
+      userId: String(row["user_id"]),
+      telegramId: String(row["telegram_id"]),
+      isActive: Number(row["is_active"] ?? 1) === 1,
+      frequency: (row["frequency"] ? String(row["frequency"]) : "daily") as SubscriptionFrequency,
+      targetRoles,
+      techCategories,
+      regions,
+      minSalary: row["min_salary"] != null ? Number(row["min_salary"]) : undefined,
+      lastNotifiedAt: row["last_notified_at"] != null ? Number(row["last_notified_at"]) : undefined,
+      createdAt: Number(row["created_at"] || 0),
+      updatedAt: Number(row["updated_at"] || 0),
+    };
+  }
+}
+

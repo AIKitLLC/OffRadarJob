@@ -427,6 +427,10 @@ export function renderAdminDashboardHtml(): string {
         <div class="stat-label">🆕 Việc mới 24h</div>
         <div class="stat-value" id="stat-created-24h">0</div>
       </div>
+      <div class="stat-card" style="border-left: 3px solid #38bdf8;">
+        <div class="stat-label">🔔 Subscribers nhận tin</div>
+        <div class="stat-value" style="font-size: 19px; font-weight: 700; color: #38bdf8;" id="stat-subscribers">0 active</div>
+      </div>
     </div>
 
     <!-- TAB 1: Crawl Tasks Monitor -->
@@ -1188,6 +1192,11 @@ export function renderAdminDashboardHtml(): string {
           if (upEl) upEl.textContent = Number(f.updatedLast24h || 0).toLocaleString();
           const crEl = document.getElementById('stat-created-24h');
           if (crEl) crEl.textContent = Number(f.createdLast24h || 0).toLocaleString();
+        }
+
+        if (data.subscribers) {
+          const subEl = document.getElementById('stat-subscribers');
+          if (subEl) subEl.textContent = (data.subscribers.active || 0) + ' active (' + (data.subscribers.total || 0) + ' tổng)';
         }
 
         document.getElementById('tab-tasks-count').textContent = data.tasks?.total ?? 0;

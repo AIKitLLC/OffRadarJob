@@ -3,6 +3,7 @@ import {
   CompanyRepository,
   CvRepository,
   LlmFeedbackRepository,
+  UserSubscriptionRepository,
 } from "../db/repositories.js";
 import {
   User,
@@ -10,6 +11,7 @@ import {
   LlmFeedback,
   FeedbackType,
   FeedbackSentiment,
+  UserSubscription,
 } from "../types/domain.js";
 
 /**
@@ -20,9 +22,10 @@ export class McpServerHandler {
   constructor(
     private readonly jobRepo: JobRepository,
     private readonly companyRepo: CompanyRepository,
-    private readonly cvRepo: CvRepository,
+    private readonly cvRepo?: CvRepository,
     private readonly feedbackRepo?: LlmFeedbackRepository,
-    private readonly onFeedbackCreated?: (feedback: LlmFeedback, user: User) => Promise<void>
+    private readonly onFeedbackCreated?: (feedback: LlmFeedback, user: User) => Promise<void>,
+    private readonly subscriptionRepo?: UserSubscriptionRepository
   ) {}
 
   public async handleJsonRpc(requestBody: any, user: User): Promise<any> {
@@ -296,6 +299,66 @@ export class McpServerHandler {
             },
           },
           required: ["feedback_type", "comment"],
+        },
+      },
+      {
+        name: "get_daily_digest",
+        description: "Retrieve today's curated daily briefing of unlisted, high-conviction tech opportunities tailored to candidate preferences. Prioritizes US-Midwest boutique tech hubs and remote-first micro-companies. AI agents SHOULD call this tool proactively every day (or at the start of daily sessions) to brief the candidate on new hidden opportunities.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target_roles: {
+              type: "array",
+              items: { type: "string" },
+              description: "Optional target roles or keywords (e.g. ['Backend Engineer', 'Rust', 'Founding Engineer']). If omitted, uses user subscription preferences.",
+            },
+            region: {
+              type: "string",
+              description: "Target US region filter ('midwest', 'west', 'northeast', 'south', 'mountain', 'remote', or 'all'). Default 'midwest'.",
+            },
+            tech_category: {
+              type: "string",
+              description: "Filter by technology category (e.g. 'backend_systems', 'ai_ml', 'frontend_ui', 'devops_cloud', 'fullstack').",
+            },
+            limit: {
+              type: "number",
+              description: "Number of top opportunities to return (default 5, max 15).",
+            },
+          },
+        },
+      },
+      {
+        name: "manage_job_subscription",
+        description: "Inspect or configure the candidate's automatic daily job alert subscription. Enables receiving daily digests via Telegram bot, customizing target stacks, and setting regional preferences (Midwest & Remote focus).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["get", "update", "toggle"],
+              description: "Action to perform: 'get' (view current preferences), 'update' (save new preferences), 'toggle' (enable/disable active alerts).",
+            },
+            is_active: {
+              type: "boolean",
+              description: "Enable (true) or pause (false) daily Telegram alerts.",
+            },
+            frequency: {
+              type: "string",
+              enum: ["daily", "weekly", "instant"],
+              description: "Notification cadence (default 'daily').",
+            },
+            target_roles: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of desired roles or stack keywords.",
+            },
+            regions: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of preferred US regions (e.g. ['midwest', 'remote']).",
+            },
+          },
+          required: ["action"],
         },
       },
     ];
@@ -604,13 +667,153 @@ export class McpServerHandler {
           }
         }
 
-        return {
+          return {
           success: true,
           feedback_id: id,
           feedback_type: feedbackType,
           status: "recorded",
           message: "Feedback proactively recorded. Thank you for helping keep OffRadarJob listings accurate and intelligent!",
         };
+      }
+
+      case "get_daily_digest": {
+        let preferredRegion = args.region || "midwest";
+        let targetRoles = Array.isArray(args.target_roles) ? args.target_roles : [];
+        let techCategory = args.tech_category ?? undefined;
+        const limit = Math.min(Math.max(1, args.limit ?? 5), 15);
+
+        // Enrich with saved subscription preferences if available and omitted in args
+        if (this.subscriptionRepo && (!args.target_roles || !args.region)) {
+          try {
+            const savedSub = await this.subscriptionRepo.getByUserId(user.id);
+            if (savedSub) {
+              if (!args.region && savedSub.regions.length > 0) {
+                preferredRegion = savedSub.regions[0] || "midwest";
+              }
+              if (!args.target_roles && savedSub.targetRoles.length > 0) {
+                targetRoles = savedSub.targetRoles;
+              }
+              if (!args.tech_category && savedSub.techCategories.length > 0) {
+                techCategory = savedSub.techCategories[0];
+              }
+            }
+          } catch {}
+        }
+
+        const searchQuery = targetRoles.length > 0 ? targetRoles.join(" ") : undefined;
+        const res = await this.jobRepo.listPaged({
+          page: 1,
+          limit,
+          region: preferredRegion === "all" ? undefined : preferredRegion,
+          techCategory,
+          search: searchQuery,
+          techOnly: true,
+        });
+
+        const digestDate = new Date().toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+
+        const jobItems = res.items.map((j) => {
+          const isMidwest = j.isMidwest || j.usRegion === "midwest";
+          const location = isMidwest ? "📍 US-Midwest" : (j.isRemote ? `🌐 Remote (${j.remoteScope || "US"})` : `🏢 ${j.location || "US"}`);
+          const salary = j.salaryMin ? `$${j.salaryMin.toLocaleString()} - $${j.salaryMax?.toLocaleString()} ${j.salaryCurrency || "USD"}` : "Competitive / Unlisted";
+          return {
+            id: j.id,
+            title: j.title,
+            company: j.companyName || j.companyId,
+            website: j.companyWebsite,
+            location,
+            salary,
+            tech_category: j.techCategory,
+            seniority: j.seniorityLevel,
+            skills: j.skills,
+            summary: j.descriptionSummary,
+            apply_type: j.applyType,
+            apply_target: j.applyTarget,
+            is_midwest_priority: isMidwest,
+          };
+        });
+
+        return {
+          success: true,
+          briefing_date: digestDate,
+          candidate: user.firstName,
+          preferred_region: preferredRegion,
+          total_matching_openings: res.pagination.total,
+          returned: jobItems.length,
+          daily_digest: jobItems,
+          guidance_for_ai: "Deliver a crisp morning career briefing to the user highlighting these high-conviction unlisted opportunities. Offer to tailor their CV for any target opening using 'tailor_cv_for_job'.",
+        };
+      }
+
+      case "manage_job_subscription": {
+        if (!this.subscriptionRepo) {
+          return {
+            success: false,
+            message: "User subscription repository not initialized on this MCP server instance.",
+          };
+        }
+
+        const action = String(args.action || "get").toLowerCase();
+
+        if (action === "get") {
+          const sub = await this.subscriptionRepo.getByUserId(user.id);
+          return {
+            success: true,
+            has_subscription: !!sub,
+            subscription: sub || {
+              userId: user.id,
+              telegramId: user.telegramId,
+              isActive: false,
+              frequency: "daily",
+              targetRoles: [],
+              techCategories: [],
+              regions: ["midwest", "remote"],
+              message: "No active alert subscription found. Call action='update' with is_active=true to subscribe.",
+            },
+          };
+        }
+
+        if (action === "toggle") {
+          const existing = await this.subscriptionRepo.getByUserId(user.id);
+          const newStatus = args.is_active !== undefined ? !!args.is_active : !(existing?.isActive ?? false);
+          if (existing) {
+            await this.subscriptionRepo.toggleActive(user.id, newStatus);
+          } else {
+            await this.subscriptionRepo.upsert({
+              userId: user.id,
+              telegramId: user.telegramId,
+              isActive: newStatus,
+            });
+          }
+          return {
+            success: true,
+            is_active: newStatus,
+            message: newStatus ? "Daily Telegram alert subscription activated." : "Daily alerts paused.",
+          };
+        }
+
+        if (action === "update") {
+          const sub = await this.subscriptionRepo.upsert({
+            userId: user.id,
+            telegramId: user.telegramId,
+            isActive: args.is_active !== undefined ? !!args.is_active : true,
+            frequency: args.frequency || "daily",
+            targetRoles: Array.isArray(args.target_roles) ? args.target_roles : undefined,
+            regions: Array.isArray(args.regions) ? args.regions : undefined,
+          });
+          return {
+            success: true,
+            message: "Subscription preferences updated successfully.",
+            subscription: sub,
+          };
+        }
+
+        throw new Error(`Invalid action '${action}' for manage_job_subscription. Must be 'get', 'update', or 'toggle'.`);
       }
 
       default:
@@ -647,6 +850,22 @@ export class McpServerHandler {
           },
         ],
       },
+      {
+        name: "daily_job_briefing",
+        description: "Morning workflow prompt to generate a crisp daily briefing of newly discovered off-radar opportunities, highlight hidden gems, and suggest CV tailoring actions.",
+        arguments: [
+          {
+            name: "target_role",
+            description: "Target job title, stack or level",
+            required: false,
+          },
+          {
+            name: "preferred_region",
+            description: "Target US region or remote preference (default 'midwest')",
+            required: false,
+          },
+        ],
+      },
     ];
   }
 
@@ -656,7 +875,7 @@ export class McpServerHandler {
         const targetRole = args.target_role || "Software Engineer / Tech Professional";
         const region = args.preferred_region || "US-Midwest & Remote";
 
-        const text = `# OffRadarJob AI Assistant & Proactive Feedback Protocol
+        const text = `# OffRadarJob AI Assistant & Proactive Protocols
 
 You are an expert AI Career Advisor empowered with direct access to OffRadarJob's verified directory of unlisted tech startups, micro-companies, and direct-to-founder career portals.
 Target Role Context: ${targetRole}
@@ -666,7 +885,13 @@ Authenticated User: ${user.firstName} (@${user.username || user.id})
 ## Your Mission:
 1. Help the candidate discover high-conviction unlisted tech roles that never appear on noisy aggregators. Prioritize Midwest tech hubs (Chicago, Indianapolis, Minneapolis, Madison, etc.) and remote-first boutique startups.
 2. Tailor CVs directly against real job JDs using 'tailor_cv_for_job' and save optimized versions via 'save_cv_version'.
-3. **PROACTIVE FEEDBACK PROTOCOL (MANDATORY)**:
+
+3. **PROACTIVE DAILY BRIEFING & SUBSCRIPTION PROTOCOL (MANDATORY)**:
+   - At the beginning of each day, or upon initiating a session with the candidate, you SHOULD PROACTIVELY invoke 'get_daily_digest' to deliver a crisp morning briefing of high-conviction opportunities.
+   - If the candidate has not yet subscribed to daily alerts, proactively suggest they enable daily Telegram notifications using 'manage_job_subscription' or via Telegram bot command '/subscribe'.
+   - If operating in an agent environment with scheduling capabilities (e.g. /schedule 0 9 * * * or cron), recommend scheduling a standing daily check-in.
+
+4. **PROACTIVE FEEDBACK PROTOCOL (MANDATORY)**:
    You have a special role as a data-quality sentinel. Whenever you or the user encounter any of the following during the conversation, you MUST PROACTIVELY invoke the 'submit_llm_feedback' tool:
    - **Broken Links / Expired JDs**: The apply target or link is 404, invalid, or position is filled (feedback_type: 'broken_link', sentiment: 'critical').
    - **Unmet User Demand**: The user repeatedly seeks a specific tech stack, role, or regional presence that returned few or zero results (feedback_type: 'user_preference', sentiment: 'neutral' or 'positive'). Example: "User looking for Elixir/OTP roles in Chicago; candidate is willing to relocate."
@@ -677,7 +902,33 @@ Authenticated User: ${user.firstName} (@${user.username || user.id})
 Always be helpful, precise, and proactive in keeping the OffRadarJob ecosystem top-tier!`;
 
         return {
-          description: "Comprehensive system prompt for OffRadarJob with proactive feedback protocol.",
+          description: "Comprehensive system prompt for OffRadarJob with proactive feedback and daily briefing protocols.",
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text,
+              },
+            },
+          ],
+        };
+      }
+
+      case "daily_job_briefing": {
+        const targetRole = args.target_role || "Software Engineer";
+        const region = args.preferred_region || "US-Midwest & Remote";
+
+        const text = `Good morning ${user.firstName}!
+Please run 'get_daily_digest' with region: "${region}" and target_role: "${targetRole}" now.
+Review the newly discovered micro-company tech openings and present:
+1. Top 3-5 high-conviction unlisted openings today.
+2. Direct apply links and compensation insights.
+3. Recommend 1-2 roles to tailor their CV for using 'tailor_cv_for_job'.
+4. Remind the candidate that they can receive this digest automatically every morning via Telegram by running '/subscribe'.`;
+
+        return {
+          description: "Morning workflow prompt to generate a crisp daily briefing of newly discovered off-radar opportunities.",
           messages: [
             {
               role: "user",

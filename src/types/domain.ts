@@ -349,3 +349,27 @@ export const LlmFeedbackSchema = z.object({
 });
 export type LlmFeedback = z.infer<typeof LlmFeedbackSchema>;
 
+// -----------------------------------------------------------------------------
+// User Notification Subscriptions & Daily Digests
+// -----------------------------------------------------------------------------
+
+export const SubscriptionFrequencyEnum = z.enum(["daily", "weekly", "instant"]);
+export type SubscriptionFrequency = z.infer<typeof SubscriptionFrequencyEnum>;
+
+export const UserSubscriptionSchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  telegramId: z.string().min(1),
+  isActive: z.boolean().default(true),
+  frequency: SubscriptionFrequencyEnum.default("daily"),
+  targetRoles: z.array(z.string()).default([]),
+  techCategories: z.array(z.string()).default([]),
+  regions: z.array(z.string()).default(["midwest", "remote"]),
+  minSalary: z.number().nullable().optional(),
+  lastNotifiedAt: z.number().nullable().optional(),
+  createdAt: z.number().int().positive(),
+  updatedAt: z.number().int().positive(),
+});
+export type UserSubscription = z.infer<typeof UserSubscriptionSchema>;
+
+

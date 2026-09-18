@@ -20,6 +20,7 @@ export class InMemoryD1Database implements ID1Database {
     this.tables.set("auth_sessions", new Map());
     this.tables.set("system_settings", new Map());
     this.tables.set("llm_feedbacks", new Map());
+    this.tables.set("user_subscriptions", new Map());
   }
 
   public prepare(query: string): ID1PreparedStatement {
@@ -674,6 +675,47 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: filtered as T[], success: true };
     }
 
+    // User Subscriptions queries
+    if (q.includes("FROM user_subscriptions")) {
+      const table = this.db.tables.get("user_subscriptions")!;
+      const rows = Array.from(table.values());
+
+      if (q.includes("COUNT(*) as total") && q.includes("SUM(CASE WHEN is_active = 1")) {
+        let active = 0;
+        for (const r of rows) {
+          if (Number(r["is_active"] ?? 1) === 1) active++;
+        }
+        return {
+          results: [{ total: rows.length, active } as T],
+          success: true,
+        };
+      }
+
+      if (q.includes("WHERE user_id = ?")) {
+        const uid = String(this.boundValues[0]);
+        const matched = rows.find((r) => r["user_id"] === uid);
+        return { results: matched ? [matched as T] : [], success: true };
+      }
+
+      if (q.includes("WHERE telegram_id = ?")) {
+        const tgid = String(this.boundValues[0]);
+        const matched = rows.find((r) => r["telegram_id"] === tgid);
+        return { results: matched ? [matched as T] : [], success: true };
+      }
+
+      let filtered = rows;
+      if (q.includes("WHERE is_active = 1")) {
+        filtered = filtered.filter((r) => Number(r["is_active"] ?? 1) === 1);
+        if (q.includes("AND frequency = ?")) {
+          const freq = String(this.boundValues[0]);
+          filtered = filtered.filter((r) => r["frequency"] === freq);
+        }
+      }
+
+      filtered.sort((a, b) => Number(a["created_at"] ?? 0) - Number(b["created_at"] ?? 0));
+      return { results: filtered as T[], success: true };
+    }
+
     return { results: [], success: true };
   }
 
@@ -1138,6 +1180,71 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       const table = this.db.tables.get("llm_feedbacks")!;
       const deleted = table.delete(id);
       return { success: true, meta: { changes: deleted ? 1 : 0 } };
+    }
+
+    // INSERT INTO user_subscriptions
+    if (q.includes("INTO user_subscriptions")) {
+      const [
+        id, userId, telegramId, isActive, frequency,
+        targetRoles, techCategories, regions, minSalary,
+        lastNotifiedAt, createdAt, updatedAt
+      ] = this.boundValues;
+
+      const table = this.db.tables.get("user_subscriptions")!;
+      let existingId = String(id);
+      for (const [key, val] of table.entries()) {
+        if (val["user_id"] === String(userId)) {
+          existingId = key;
+          break;
+        }
+      }
+
+      const existingRecord = table.get(existingId);
+      const record = {
+        id: existingId,
+        user_id: String(userId),
+        telegram_id: String(telegramId),
+        is_active: Number(isActive),
+        frequency: String(frequency),
+        target_roles: String(targetRoles),
+        tech_categories: String(techCategories),
+        regions: String(regions),
+        min_salary: minSalary != null ? Number(minSalary) : null,
+        last_notified_at: lastNotifiedAt != null ? Number(lastNotifiedAt) : (existingRecord ? existingRecord["last_notified_at"] : null),
+        created_at: existingRecord ? existingRecord["created_at"] : Number(createdAt),
+        updated_at: Number(updatedAt),
+      };
+
+      table.set(existingId, record);
+      return { success: true, meta: { changes: 1 } };
+    }
+
+    // UPDATE user_subscriptions SET is_active = ?, updated_at = ? WHERE user_id = ?
+    if (q.includes("UPDATE user_subscriptions SET is_active =")) {
+      const [isActive, updatedAt, userId] = this.boundValues;
+      const table = this.db.tables.get("user_subscriptions")!;
+      let changes = 0;
+      for (const [_, v] of table.entries()) {
+        if (v["user_id"] === String(userId)) {
+          v["is_active"] = Number(isActive);
+          v["updated_at"] = Number(updatedAt);
+          changes++;
+        }
+      }
+      return { success: true, meta: { changes } };
+    }
+
+    // UPDATE user_subscriptions SET last_notified_at = ?, updated_at = ? WHERE id = ?
+    if (q.includes("UPDATE user_subscriptions SET last_notified_at =")) {
+      const [lastNotifiedAt, updatedAt, id] = this.boundValues;
+      const table = this.db.tables.get("user_subscriptions")!;
+      const record = table.get(String(id));
+      if (record) {
+        record["last_notified_at"] = Number(lastNotifiedAt);
+        record["updated_at"] = Number(updatedAt);
+        return { success: true, meta: { changes: 1 } };
+      }
+      return { success: true, meta: { changes: 0 } };
     }
 
     return { success: true };

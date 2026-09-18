@@ -470,6 +470,77 @@ export function renderDashboardHtml(): string {
     }
     .user-pill strong { color: var(--primary); }
 
+    /* Subscription Banner */
+    .subscription-banner {
+      background: linear-gradient(90deg, rgba(56, 189, 248, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .sub-banner-content {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex: 1;
+      min-width: 260px;
+    }
+    .sub-banner-icon {
+      font-size: 24px;
+      background: rgba(56, 189, 248, 0.15);
+      border-radius: 10px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .sub-banner-text strong {
+      font-size: 14.5px;
+      color: #f8fafc;
+      display: block;
+      margin-bottom: 3px;
+    }
+    .sub-banner-text p {
+      font-size: 12.5px;
+      color: #94a3b8;
+      margin: 0;
+      line-height: 1.4;
+    }
+    .sub-banner-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn-sub-action {
+      background: var(--primary);
+      color: #0b1120;
+      border: none;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .btn-sub-action:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+    .btn-sub-action.active {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .btn-sub-action.active:hover {
+      background: rgba(239, 68, 68, 0.25);
+    }
+
     /* Modals */
     .modal-backdrop {
       display: none;
@@ -852,6 +923,20 @@ export function renderDashboardHtml(): string {
     </div>
 
     <div id="tab-jobs" class="tab-content active">
+      <!-- Candidate Proactive Notification Banner -->
+      <div id="subscription-banner" class="subscription-banner">
+        <div class="sub-banner-content">
+          <div class="sub-banner-icon">🔔</div>
+          <div class="sub-banner-text">
+            <strong>Bản Tin Việc Làm Tuyển Thẳng Mỗi Sáng</strong>
+            <p id="sub-banner-desc">Nhận 5 jobs unlisted phù hợp nhất gửi tự động qua Telegram hoặc gọi từ AI Agent của bạn mỗi ngày.</p>
+          </div>
+        </div>
+        <div class="sub-banner-actions" id="sub-banner-actions">
+          <button class="btn-sub-action" onclick="toggleDashboardSubscription()">⚡ Đăng Ký Nhận Tin Telegram</button>
+        </div>
+      </div>
+
       <div id="jobs-container" class="job-list">
         <p style="color: var(--text-muted); padding: 32px; text-align: center;">Loading gathered tech jobs...</p>
       </div>
@@ -973,7 +1058,7 @@ export function renderDashboardHtml(): string {
       </div>
 
       <div style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; padding: 12px; font-size: 12px; color: #d8b4fe; line-height: 1.6;">
-        <strong>7 Enabled AI Tools</strong>: <code>search_jobs</code>, <code>get_job_details</code>, <code>list_companies</code>, <code>list_user_cvs</code>, <code>tailor_cv_for_job</code>, <code>save_cv_version</code>, and <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 2px 6px; border-radius: 4px; font-weight: 700;">✨ submit_llm_feedback</span>.
+        <strong>9 Enabled AI Tools & Daily Briefing Prompts</strong>: <code>search_jobs</code>, <code>get_job_details</code>, <code>list_companies</code>, <code>list_user_cvs</code>, <code>tailor_cv_for_job</code>, <code>save_cv_version</code>, <code>submit_llm_feedback</code>, <span style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-weight: 700;">🌅 get_daily_digest</span>, and <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 2px 6px; border-radius: 4px; font-weight: 700;">🔔 manage_job_subscription</span>.
       </div>
 
       <!-- AI System Prompt & Proactive Feedback Protocol -->
@@ -1658,6 +1743,7 @@ export function renderDashboardHtml(): string {
           currentUser = data.user;
           renderAuthHeader();
           fetchUserCvs();
+          loadUserSubscription();
           return;
         }
       } catch (err) {
@@ -1665,6 +1751,7 @@ export function renderDashboardHtml(): string {
       }
       currentUser = null;
       renderAuthHeader();
+      renderSubscriptionBanner();
     }
 
     function renderAuthHeader() {
@@ -1771,6 +1858,7 @@ export function renderDashboardHtml(): string {
               closeModal('modal-login');
               renderAuthHeader();
               fetchUserCvs();
+              loadUserSubscription();
               openMcpModal();
             }, 600);
           }
@@ -1805,6 +1893,7 @@ export function renderDashboardHtml(): string {
           closeModal('modal-login');
           renderAuthHeader();
           await fetchUserCvs();
+          await loadUserSubscription();
           openMcpModal();
         } else {
           alert('Demo login failed: ' + (data.error || 'Unknown error'));
@@ -1830,7 +1919,74 @@ export function renderDashboardHtml(): string {
       setAuthToken(null);
       currentUser = null;
       userCvsList = [];
+      currentUserSubscription = null;
       renderAuthHeader();
+      renderSubscriptionBanner();
+    }
+
+    let currentUserSubscription = null;
+
+    async function loadUserSubscription() {
+      if (!currentUser) {
+        renderSubscriptionBanner();
+        return;
+      }
+      try {
+        const res = await fetch('/api/user/subscription', { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          currentUserSubscription = data.subscription;
+        }
+      } catch (err) {
+        console.warn('Load subscription error:', err);
+      }
+      renderSubscriptionBanner();
+    }
+
+    function renderSubscriptionBanner() {
+      const banner = document.getElementById('subscription-banner');
+      if (!banner) return;
+      const desc = document.getElementById('sub-banner-desc');
+      const actions = document.getElementById('sub-banner-actions');
+      if (!actions) return;
+
+      if (!currentUser) {
+        if (desc) desc.innerText = 'Nhận 5 jobs unlisted phù hợp nhất gửi tự động qua Telegram hoặc gọi từ AI Agent của bạn mỗi ngày.';
+        actions.innerHTML = '<button class="btn-sub-action" onclick="openLoginModal()">✈️ Đăng Ký Nhận Tin Telegram</button>';
+        return;
+      }
+
+      if (currentUserSubscription && currentUserSubscription.isActive) {
+        const role = currentUserSubscription.targetRoles && currentUserSubscription.targetRoles.length > 0 ? currentUserSubscription.targetRoles[0] : 'All Roles';
+        const region = currentUserSubscription.regions && currentUserSubscription.regions.length > 0 ? currentUserSubscription.regions[0].toUpperCase() : 'MIDWEST';
+        if (desc) desc.innerHTML = 'Đang kích hoạt: Nhận bản tin tự động <strong>02:00 UTC</strong> qua Telegram Bot (' + escapeHtml(role) + ' / ' + escapeHtml(region) + ').';
+        actions.innerHTML = '<button class="btn-sub-action active" onclick="toggleDashboardSubscription()">⏸ Tạm Dừng Nhận Tin</button>';
+      } else {
+        if (desc) desc.innerText = 'Đăng ký nhận top 5 việc làm chất lượng cao từ công ty unlisted mỗi ngày gửi thẳng về Telegram của bạn.';
+        actions.innerHTML = '<button class="btn-sub-action" onclick="toggleDashboardSubscription()">⚡ Bật Nhận Bản Tin Hàng Ngày</button>';
+      }
+    }
+
+    async function toggleDashboardSubscription() {
+      if (!currentUser) {
+        openLoginModal();
+        return;
+      }
+      const newActive = !(currentUserSubscription && currentUserSubscription.isActive);
+      try {
+        const res = await fetch('/api/user/subscription', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ is_active: newActive })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          currentUserSubscription = data.subscription;
+          renderSubscriptionBanner();
+        }
+      } catch (err) {
+        alert('Lỗi cập nhật đăng ký: ' + err.message);
+      }
     }
 
     function openMcpModal() {
@@ -1869,10 +2025,14 @@ export function renderDashboardHtml(): string {
       document.getElementById('claude-json-val').innerText = JSON.stringify(claudeConfig, null, 2);
 
       const systemPrompt = [
-        "# OffRadarJob AI Career Sentinel & Feedback Instructions",
+        "# OffRadarJob AI Career Sentinel & Proactive Protocol",
         "",
-        "You have access to OffRadarJob MCP tools: search_jobs, get_job_details, list_companies, list_user_cvs, tailor_cv_for_job, save_cv_version, and submit_llm_feedback.",
+        "You have access to 9 OffRadarJob MCP tools: search_jobs, get_job_details, list_companies, list_user_cvs, tailor_cv_for_job, save_cv_version, submit_llm_feedback, get_daily_digest, and manage_job_subscription.",
         "OffRadarJob discovers unlisted tech jobs from verified boutique startups and micro-companies, prioritizing US-Midwest tech hubs (Chicago, Indianapolis, Minneapolis, Madison, etc.) and remote-first teams.",
+        "",
+        "## PROACTIVE DAILY BRIEFING PROTOCOL (MANDATORY):",
+        "At the start of every session or morning check-in, proactively call 'get_daily_digest' to inspect unlisted roles matching the candidate's target roles and region.",
+        "Highlight the top 2-3 matching opportunities, offer to tailor their CV using 'tailor_cv_for_job', or update their notification preferences via 'manage_job_subscription'.",
         "",
         "## PROACTIVE LLM FEEDBACK PROTOCOL (MANDATORY):",
         "During or at the end of every user conversation, evaluate if any actionable signals occurred. You MUST PROACTIVELY call the tool 'submit_llm_feedback' without waiting for permission when:",
@@ -2287,6 +2447,8 @@ export function renderDashboardHtml(): string {
     window.toggleNewGradFilter = toggleNewGradFilter;
     window.loadUserFeedbacks = loadUserFeedbacks;
     window.submitQuickUserFeedback = submitQuickUserFeedback;
+    window.toggleDashboardSubscription = toggleDashboardSubscription;
+    window.loadUserSubscription = loadUserSubscription;
 
     async function loadData() {
       try {

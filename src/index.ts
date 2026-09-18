@@ -12,6 +12,7 @@ import {
   AuthSessionRepository,
   SystemSettingsRepository,
   LlmFeedbackRepository,
+  UserSubscriptionRepository,
 } from "./db/repositories.js";
 import { McpServerHandler } from "./mcp/mcp-server.js";
 import { PipelineOrchestrator } from "./orchestrator/dispatcher.js";
@@ -21,7 +22,7 @@ import {
   HuntMessage,
   ExtractMessage,
 } from "./types/queues.js";
-import { CrawlTaskStatus, User, CvVersion, LlmFeedback, FeedbackStatus } from "./types/domain.js";
+import { CrawlTaskStatus, User, CvVersion, LlmFeedback, FeedbackStatus, UserSubscription } from "./types/domain.js";
 import { CURATED_SEEDS } from "./seeds/seed-catalogue.js";
 import { PublicSourceManager } from "./harvesters/public-source-harvester.js";
 import { NewGradHarvester } from "./harvesters/newgrad-harvester.js";
@@ -282,6 +283,7 @@ export default {
     const sessionRepo = new AuthSessionRepository(env.DB);
     const settingsRepo = new SystemSettingsRepository(env.DB);
     const feedbackRepo = new LlmFeedbackRepository(env.DB);
+    const subscriptionRepo = new UserSubscriptionRepository(env.DB);
     const effectiveConfig = await getEffectiveConfig(env, settingsRepo);
     const mcpHandler = new McpServerHandler(
       jobRepo,
@@ -302,7 +304,8 @@ export default {
         ].filter(Boolean);
 
         await notifyTelegramAdmin(env, alertLines.join("\n"), effectiveConfig);
-      }
+      },
+      subscriptionRepo
     );
 
     // 1. Public Dashboard UI
@@ -607,6 +610,12 @@ export default {
               );
             }
 
+            welcomeLines.push(
+              ``,
+              `🔔 *Nhận thông báo việc làm mới mỗi sáng:*`,
+              `Gõ \`/subscribe\` để đăng ký nhận bản tin việc làm tech boutique tự động qua Telegram!`
+            );
+
             await sendTelegramMessage(botToken, chatId, welcomeLines.join("\n"));
           }
 
@@ -665,6 +674,9 @@ export default {
                 ``,
                 `• Để đăng nhập web: Bấm nút "Đăng nhập Telegram" trên website hoặc quét mã QR.`,
                 `• \`/newgrad\` - Tra cứu việc làm New Grad 2025/2026 mới nhất (gõ \`/newgrad midwest\` để lọc vùng Midwest)`,
+                `• \`/subscribe [midwest|remote|all]\` - Đăng ký nhận bản tin việc làm mới mỗi sáng qua Telegram`,
+                `• \`/unsubscribe\` - Tạm dừng nhận bản tin hàng ngày`,
+                `• \`/digest\` - Xem ngay bản tin việc làm tuyển chọn hôm nay`,
                 `• \`/mcp\` - Lấy MCP Endpoint & Personal API Token`,
                 `• \`/stats\` - Xem thống kê nhanh số lượng jobs & companies`,
                 `• Quản trị viên: Gõ \`/admin auth <admin_token>\` để kích hoạt quyền quản trị.`,
@@ -690,6 +702,9 @@ export default {
             ``,
             `📋 *Các lệnh quản trị trực tiếp trên Telegram:*`,
             `🎓 \`/newgrad [midwest|remote]\` - Tra cứu các vị trí New Grad / Entry-level`,
+            `🌅 \`/digest\` - Xem nhanh bản tin việc làm hôm nay`,
+            `🔔 \`/subscribe [midwest|remote|all]\` - Đăng ký nhận Daily Job Digest tự động`,
+            `🔕 \`/unsubscribe\` - Tạm dừng nhận Daily Digest`,
             `📊 \`/stats\` - Báo cáo realtime (Jobs, Companies, Tỷ lệ Midwest & các vùng US)`,
             `🕷️ \`/crawl <url>\` - Kích hoạt crawl ngay 1 career page URL`,
             `⚡ \`/sweep\` - Quét đồng loạt danh sách seed companies`,
@@ -725,6 +740,8 @@ export default {
               `Hiện chưa tìm thấy việc làm New Grad nào phù hợp với bộ lọc: \`${arg || "tất cả"}\`.`,
               ``,
               `💡 *Gợi ý:* Admin có thể gõ lệnh \`/harvest newgrad\` để nạp ngay hơn 400+ vị trí New Grad 2025/2026 từ SimplifyJobs và các trung tâm công nghệ Midwest!`,
+              ``,
+              `🔔 Gõ \`/subscribe\` để nhận thông báo việc làm mới mỗi sáng!`,
             ].join("\n");
             if (botToken) await sendTelegramMessage(botToken, chatId, noJobsMsg);
             return Response.json({ ok: true, count: 0 });
@@ -749,15 +766,122 @@ export default {
             ``,
             `🌐 *Xem đầy đủ danh sách & lọc chi tiết tại:*`,
             `https://off-radar-jobs.tuannx87.workers.dev/?grade=new_grad`,
+            ``,
+            `🔔 *Nhận thông báo việc làm mới mỗi sáng:* Gõ \`/subscribe\`!`,
           ].join("\n");
 
           if (botToken) await sendTelegramMessage(botToken, chatId, responseText);
           return Response.json({ ok: true, count: newGradJobs.length });
         }
 
+        // C.2 /subscribe [midwest|remote|all|keyword] - Activate daily alerts
+        if (text.startsWith("/subscribe") && chatId) {
+          const arg = text.replace(/^\/subscribe\s*/i, "").trim().toLowerCase();
+          const region = (arg === "midwest" || arg === "west" || arg === "northeast" || arg === "south" || arg === "mountain" || arg === "remote" || arg === "all")
+            ? arg
+            : "midwest";
+          const targetRoles = (!["midwest", "west", "northeast", "south", "mountain", "remote", "all", ""].includes(arg))
+            ? [arg]
+            : [];
+
+          const userId = existingUser?.id || `usr_${tgId}`;
+          const sub = await subscriptionRepo.upsert({
+            userId,
+            telegramId: tgId,
+            isActive: true,
+            frequency: "daily",
+            regions: region === "all" ? ["midwest", "remote", "west", "northeast", "south"] : [region, "remote"],
+            targetRoles,
+          });
+
+          const subConfirmLines = [
+            `🔔 *ĐĂNG KÝ BẢN TIN VIỆC LÀM HÀNG NGÀY THÀNH CÔNG!*`,
+            ``,
+            `Xin chào *${from.first_name || "bạn"}*! Bạn sẽ tự động nhận danh sách các việc làm tech boutique mới nhất mỗi sáng qua Telegram.`,
+            ``,
+            `📋 *Thiết lập của bạn:*`,
+            `• Trạng thái: 🟢 *Đang kích hoạt*`,
+            `• Tần suất: *Hàng ngày (Mỗi sáng)*`,
+            `• Khu vực ưu tiên: *${sub.regions.map((r) => r.toUpperCase()).join(", ")}*`,
+            targetRoles.length > 0 ? `• Vị trí mong muốn: *${targetRoles.join(", ")}*` : `• Lĩnh vực: *Tất cả vị trí Tech (Đã lọc bỏ tin rác)*`,
+            ``,
+            `👉 Gõ \`/digest\` để nhận ngay bản tin việc làm hôm nay.`,
+            `👉 Gõ \`/unsubscribe\` bất kỳ lúc nào để tạm dừng nhận thông báo.`,
+          ];
+
+          if (botToken) await sendTelegramMessage(botToken, chatId, subConfirmLines.join("\n"));
+          return Response.json({ ok: true, subscribed: true, subscription: sub });
+        }
+
+        // C.3 /unsubscribe - Pause daily alerts
+        if (text.startsWith("/unsubscribe") && chatId) {
+          const userId = existingUser?.id || `usr_${tgId}`;
+          await subscriptionRepo.toggleActive(userId, false);
+
+          const unsubLines = [
+            `🔕 *ĐÃ TẠM DỪNG THÔNG BÁO HÀNG NGÀY*`,
+            ``,
+            `Tài khoản của bạn đã được chuyển sang chế độ tạm dừng nhận Daily Digest.`,
+            `Bạn vẫn có thể truy cập dashboard hoặc dùng MCP bất cứ lúc nào.`,
+            ``,
+            `💡 Để kích hoạt lại, bạn chỉ cần gõ: \`/subscribe\`.`,
+          ];
+
+          if (botToken) await sendTelegramMessage(botToken, chatId, unsubLines.join("\n"));
+          return Response.json({ ok: true, unsubscribed: true });
+        }
+
+        // C.4 /digest - Manually trigger daily digest briefing immediately
+        if (text.startsWith("/digest") && chatId) {
+          const userId = existingUser?.id || `usr_${tgId}`;
+          const sub = await subscriptionRepo.getByUserId(userId);
+          const region = sub && sub.regions.length > 0 ? sub.regions[0] : "midwest";
+          const targetRole = sub && sub.targetRoles.length > 0 ? sub.targetRoles[0] : undefined;
+
+          const digestJobs = await jobRepo.listPaged({
+            page: 1,
+            limit: 5,
+            region: region === "all" ? undefined : region,
+            search: targetRole,
+            techOnly: true,
+          });
+
+          if (digestJobs.items.length === 0) {
+            const emptyMsg = `🌅 *OFFRADARJOB - BẢN TIN HÔM NAY*\n\nHiện chưa có vị trí mới nào khớp với tiêu chí của bạn. Hãy thử xem toàn bộ danh sách tại: https://off-radar-jobs.tuannx87.workers.dev`;
+            if (botToken) await sendTelegramMessage(botToken, chatId, emptyMsg);
+            return Response.json({ ok: true, count: 0 });
+          }
+
+          const jobItems = digestJobs.items.map((j, idx) => {
+            const locText = j.isMidwest ? "📍 *Midwest*" : `🌐 ${j.location || "Remote"}`;
+            const comp = j.companyName || "Tech Boutique";
+            const salary = j.salaryMin && j.salaryMax ? ` | 💰 $${Math.round(j.salaryMin / 1000)}k-$${Math.round(j.salaryMax / 1000)}k` : "";
+            return [
+              `*${idx + 1}. ${j.title}*`,
+              `🏢 *${comp}* | ${locText}${salary}`,
+              `🔗 [Ứng tuyển trực tiếp trên ATS](${j.applyTarget})`,
+            ].join("\n");
+          }).join("\n\n");
+
+          const digestText = [
+            `🌅 *OFFRADARJOB - BẢN TIN VIỆC LÀM HÔM NAY*`,
+            `Dành cho *${from.first_name || "bạn"}* (Ưu tiên: ${(region || "midwest").toUpperCase()}):`,
+            ``,
+            jobItems,
+            ``,
+            `🌐 *Xem đầy đủ cơ hội & Tối ưu CV:*`,
+            `https://off-radar-jobs.tuannx87.workers.dev`,
+            ``,
+            `💡 Để nhận tự động mỗi sáng, gõ: \`/subscribe\``,
+          ].join("\n");
+
+          if (botToken) await sendTelegramMessage(botToken, chatId, digestText);
+          return Response.json({ ok: true, count: digestJobs.items.length });
+        }
+
         // D. /stats - Telemetry and region metrics
         if (text === "/stats" && chatId) {
-          const [companiesCount, jobsCount, jobSummary, usersCount, adminsCount, recentTasks, freshness] = await Promise.all([
+          const [companiesCount, jobsCount, jobSummary, usersCount, adminsCount, recentTasks, freshness, subscriberStats] = await Promise.all([
             companyRepo.count(),
             jobRepo.count(),
             jobRepo.getStatsSummary(),
@@ -765,6 +889,7 @@ export default {
             userRepo.count("admin"),
             taskRepo.list({ limit: 3 }),
             jobRepo.getFreshnessMetrics(),
+            subscriptionRepo.countSubscribers(),
           ]);
 
           const midwestPct = jobSummary.total > 0 ? Math.round((jobSummary.midwestCount / jobSummary.total) * 100) : 100;
@@ -796,6 +921,7 @@ export default {
             `☀️ *South:* \`${jobSummary.southCount}\` jobs`,
             `🏔️ *Mountain:* \`${jobSummary.mountainCount}\` jobs`,
             `👥 *Users đã kết nối:* \`${usersCount}\` (Admins: \`${adminsCount}\`)`,
+            `🔔 *Subscribers nhận tin:* \`${subscriberStats.active}\` active (\`${subscriberStats.total}\` tổng)`,
             ``,
             `🕒 *Độ tươi mới dữ liệu & Tần suất:*`,
             freshnessSnippet,
@@ -1399,6 +1525,46 @@ export default {
       return Response.json({ success: true, feedback: feedbackRecord });
     }
 
+    // 9c. Candidate Job Alert Subscription API (Get and Update user subscriptions)
+    if (path === "/api/user/subscription" && request.method === "GET") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const sub = await subscriptionRepo.getByUserId(user.id);
+      return Response.json({ success: true, subscription: sub || null });
+    }
+
+    if (path === "/api/user/subscription" && request.method === "POST") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+      const body = (await request.json().catch(() => ({}))) as Record<string, any>;
+      const existing = await subscriptionRepo.getByUserId(user.id);
+
+      const targetRole = body.target_role !== undefined ? body.target_role : (body.targetRole !== undefined ? body.targetRole : undefined);
+      const targetRoles = Array.isArray(body.target_roles)
+        ? (body.target_roles as string[])
+        : (targetRole ? [String(targetRole).trim()] : (existing?.targetRoles ?? []));
+
+      const targetRegion = body.target_region !== undefined ? body.target_region : (body.targetRegion !== undefined ? body.targetRegion : undefined);
+      const regions = Array.isArray(body.regions)
+        ? (body.regions as string[])
+        : (targetRegion ? [String(targetRegion).trim()] : (existing?.regions ?? ["midwest", "remote"]));
+
+      const frequency = body.frequency || existing?.frequency || "daily";
+      const isActive = body.is_active !== undefined ? Boolean(body.is_active) : (body.isActive !== undefined ? Boolean(body.isActive) : (existing ? existing.isActive : true));
+
+      const updatedSub = await subscriptionRepo.upsert({
+        userId: user.id,
+        telegramId: user.telegramId || (existing?.telegramId ?? ""),
+        targetRoles,
+        regions,
+        frequency: frequency as any,
+        isActive,
+      });
+
+      return Response.json({ success: true, subscription: updatedSub });
+    }
+
     // 10. MCP (Model Context Protocol) Endpoints for AI Agents (Cursor, Claude Desktop, Antigravity)
     if (path === "/mcp" && request.method === "POST") {
       const user = await getAuthenticatedUser(request, userRepo);
@@ -1442,12 +1608,13 @@ export default {
       if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
-      const [companiesCount, jobsCount, recentLogs, tasksStats, freshness] = await Promise.all([
+      const [companiesCount, jobsCount, recentLogs, tasksStats, freshness, subscriberStats] = await Promise.all([
         companyRepo.count(),
         jobRepo.count(),
         logRepo.getRecent(30),
         taskRepo.getStats(),
         jobRepo.getFreshnessMetrics(),
+        subscriptionRepo.countSubscribers(),
       ]);
       return Response.json({
         companiesCount,
@@ -1455,6 +1622,7 @@ export default {
         logsCount: recentLogs.length,
         recentLogs,
         tasks: tasksStats,
+        subscribers: subscriberStats,
         freshness: {
           ...freshness,
           cronSchedule: "Daily 02:00 UTC (Rotating Seeds + Public Sources) & Weekly Mon 03:00 UTC (Full Re-crawl)",
@@ -2446,6 +2614,9 @@ export default {
     const companyRepo = new CompanyRepository(env.DB);
     const taskRepo = new CrawlTaskRepository(env.DB);
     const logRepo = new LogRepository(env.DB);
+    const jobRepo = new JobRepository(env.DB);
+    const subscriptionRepo = new UserSubscriptionRepository(env.DB);
+    const settingsRepo = new SystemSettingsRepository(env.DB);
     const orchestrator = new PipelineOrchestrator(env.DB);
 
     ctx.waitUntil(
@@ -2590,6 +2761,68 @@ export default {
           console.log(`[RollingWeeklyTrigger] Dispatched ${partitionCompanies.length} companies for weekly cohort day ${dayOfWeek}/7`);
         } catch (rollingErr) {
           console.error("[RollingWeeklyTrigger] Rolling weekly cohort sweep failed:", rollingErr);
+        }
+
+        // 2c. Daily Job Alert Dispatch to Active Telegram Subscribers
+        try {
+          const effectiveConfig = await getEffectiveConfig(env, settingsRepo);
+          const botToken = effectiveConfig.telegramBotToken;
+          if (botToken) {
+            const activeSubscribers = await subscriptionRepo.listActive("daily");
+            let sentCount = 0;
+            for (const sub of activeSubscribers) {
+              if (!sub.telegramId) continue;
+
+              const region = sub.regions.length > 0 && sub.regions[0] !== "all" ? sub.regions[0] : undefined;
+              const targetRole = sub.targetRoles.length > 0 ? sub.targetRoles[0] : undefined;
+
+              const digestJobs = await jobRepo.listPaged({
+                page: 1,
+                limit: 5,
+                region,
+                search: targetRole,
+                techOnly: true,
+              });
+
+              if (digestJobs.items.length === 0) continue;
+
+              const jobItems = digestJobs.items.map((j, idx) => {
+                const locText = j.isMidwest ? "📍 *Midwest*" : `🌐 ${j.location || "Remote"}`;
+                const comp = j.companyName || "Off-Radar Employer";
+                const salary = (j.salaryMin && j.salaryMax) ? ` | 💰 $${Math.round(j.salaryMin / 1000)}k-$${Math.round(j.salaryMax / 1000)}k` : "";
+                return [
+                  `*${idx + 1}. ${j.title}*`,
+                  `🏢 *${comp}* | ${locText}${salary}`,
+                  `🔗 [Ứng tuyển trực tiếp trên ATS](${j.applyTarget})`,
+                ].join("\n");
+              }).join("\n\n");
+
+              const targetDisplay = [targetRole || "All Roles", (region || "All Regions").toUpperCase()].join(" / ");
+              const digestMsg = [
+                `🌅 *OFFRADARJOB - BẢN TIN VIỆC LÀM HÀNG NGÀY*`,
+                `Kính gửi bạn, đây là top ${digestJobs.items.length} việc làm mới khớp nguyện vọng (${targetDisplay}):`,
+                ``,
+                jobItems,
+                ``,
+                `🌐 *Xem đầy đủ cơ hội & Tối ưu CV:*`,
+                `https://off-radar-jobs.tuannx87.workers.dev`,
+                ``,
+                `⚙️ Đổi tuỳ chọn: \`/subscribe <role>\` | Dừng nhận tin: \`/unsubscribe\``,
+              ].join("\n");
+
+              await sendTelegramMessage(botToken, sub.telegramId, digestMsg);
+              await subscriptionRepo.updateLastNotified(sub.id, Date.now());
+              sentCount++;
+              // Sleep 100ms between telegram dispatches to respect Telegram rate limits
+              await new Promise((r) => setTimeout(r, 100));
+            }
+
+            if (sentCount > 0) {
+              console.log(`[DailyCronTrigger] Successfully dispatched job digest to ${sentCount} subscribers.`);
+            }
+          }
+        } catch (notifyErr) {
+          console.error("[DailyCronTrigger] Daily subscriber notification dispatch failed:", notifyErr);
         }
 
         await logRepo.log({
