@@ -306,3 +306,46 @@ export const SystemSettingSchema = z.object({
 });
 export type SystemSetting = z.infer<typeof SystemSettingSchema>;
 
+// -----------------------------------------------------------------------------
+// LLM Feedback Domain Models & Schemas (MCP & Proactive Feedback Protocol)
+// -----------------------------------------------------------------------------
+
+export const FeedbackTypeEnum = z.enum([
+  "job_relevance",
+  "broken_link",
+  "missing_data",
+  "cv_tailoring",
+  "user_preference",
+  "general_suggestion",
+]);
+export type FeedbackType = z.infer<typeof FeedbackTypeEnum>;
+
+export const FeedbackSentimentEnum = z.enum(["positive", "neutral", "negative", "critical"]);
+export type FeedbackSentiment = z.infer<typeof FeedbackSentimentEnum>;
+
+export const FeedbackStatusEnum = z.enum(["new", "reviewed", "actioned", "dismissed"]);
+export type FeedbackStatus = z.infer<typeof FeedbackStatusEnum>;
+
+export const LlmFeedbackSchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  feedbackType: FeedbackTypeEnum,
+  sentiment: FeedbackSentimentEnum.default("neutral"),
+  rating: z.number().int().min(1).max(5).nullable().optional(),
+  comment: z.string().min(1),
+  jobId: z.string().nullable().optional(),
+  companyId: z.string().nullable().optional(),
+  contextSummary: z.string().nullable().optional(),
+  suggestedAction: z.string().nullable().optional(),
+  metadata: z.record(z.unknown()).default({}),
+  status: FeedbackStatusEnum.default("new"),
+  createdAt: z.number().int().positive(),
+  updatedAt: z.number().int().positive(),
+  // Enriched fields for presentation
+  username: z.string().nullable().optional(),
+  userFirstName: z.string().nullable().optional(),
+  jobTitle: z.string().nullable().optional(),
+  companyName: z.string().nullable().optional(),
+});
+export type LlmFeedback = z.infer<typeof LlmFeedbackSchema>;
+

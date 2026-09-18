@@ -972,8 +972,50 @@ export function renderDashboardHtml(): string {
         </div>
       </div>
 
-      <div style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; padding: 12px; font-size: 12px; color: #d8b4fe;">
-        <strong>6 Enabled AI Tools</strong>: <code>search_jobs</code>, <code>get_job_details</code>, <code>list_companies</code>, <code>list_user_cvs</code>, <code>tailor_cv_for_job</code>, <code>save_cv_version</code>.
+      <div style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; padding: 12px; font-size: 12px; color: #d8b4fe; line-height: 1.6;">
+        <strong>7 Enabled AI Tools</strong>: <code>search_jobs</code>, <code>get_job_details</code>, <code>list_companies</code>, <code>list_user_cvs</code>, <code>tailor_cv_for_job</code>, <code>save_cv_version</code>, and <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 2px 6px; border-radius: 4px; font-weight: 700;">✨ submit_llm_feedback</span>.
+      </div>
+
+      <!-- AI System Prompt & Proactive Feedback Protocol -->
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 4px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <label style="font-size: 12px; font-weight: 600; color: #38bdf8;">🤖 Recommended AI System Prompt (Cursor / Claude / Antigravity / Windsurf):</label>
+          <span style="font-size: 11px; color: var(--text-muted);">Enables Proactive Feedback Protocol</span>
+        </div>
+        <div class="code-snippet" style="max-height: 160px; overflow-y: auto;">
+          <button class="copy-chip-btn" onclick="copySnippet('mcp-prompt-val')">Copy Prompt</button>
+          <pre id="mcp-prompt-val" style="white-space: pre-wrap; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #cbd5e1; margin: 0;"></pre>
+        </div>
+      </div>
+
+      <!-- Interactive LLM Feedback & Signal History -->
+      <div style="background: #0b1120; border: 1px solid var(--card-border); border-radius: 8px; padding: 14px; margin-top: 6px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h4 style="font-size: 13px; font-weight: 600; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+            <span>💡</span> Proactive Signals Sent by Your AI
+          </h4>
+          <button class="copy-chip-btn" style="position: static; font-size: 11px; padding: 3px 8px;" onclick="loadUserFeedbacks()">🔄 Refresh</button>
+        </div>
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+          When your AI agent detects broken links, candidate skill shortages, or unlisted startup opportunities, it proactively logs feedback here.
+        </p>
+        <div id="user-feedbacks-container" style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 8px;">Loading feedback signals...</div>
+        </div>
+
+        <!-- Quick Direct Feedback Form -->
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(255, 255, 255, 0.1);">
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <select id="user-quick-fb-type" style="background: #131b2e; border: 1px solid var(--card-border); color: #cbd5e1; padding: 6px 10px; border-radius: 6px; font-size: 12px;">
+              <option value="broken_link">🚨 Broken Link</option>
+              <option value="user_preference">🎯 Missing Role/Skill</option>
+              <option value="job_relevance">📋 Job Relevance</option>
+              <option value="general_suggestion">💡 Suggestion</option>
+            </select>
+            <input type="text" id="user-quick-fb-text" placeholder="Share quick feedback with the OffRadar team..." style="flex: 1; background: #131b2e; border: 1px solid var(--card-border); color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 12px;" />
+            <button onclick="submitQuickUserFeedback()" class="header-btn-primary" style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">Send</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1826,7 +1868,100 @@ export function renderDashboardHtml(): string {
       };
       document.getElementById('claude-json-val').innerText = JSON.stringify(claudeConfig, null, 2);
 
+      const systemPrompt = [
+        "# OffRadarJob AI Career Sentinel & Feedback Instructions",
+        "",
+        "You have access to OffRadarJob MCP tools: search_jobs, get_job_details, list_companies, list_user_cvs, tailor_cv_for_job, save_cv_version, and submit_llm_feedback.",
+        "OffRadarJob discovers unlisted tech jobs from verified boutique startups and micro-companies, prioritizing US-Midwest tech hubs (Chicago, Indianapolis, Minneapolis, Madison, etc.) and remote-first teams.",
+        "",
+        "## PROACTIVE LLM FEEDBACK PROTOCOL (MANDATORY):",
+        "During or at the end of every user conversation, evaluate if any actionable signals occurred. You MUST PROACTIVELY call the tool 'submit_llm_feedback' without waiting for permission when:",
+        "1. Broken Links / Expired Roles: A job apply target is a 404 error, expired, or position is filled (feedback_type: 'broken_link', sentiment: 'critical').",
+        "2. Niche Candidate Demand / Search Gaps: The user repeatedly requests a specific role, stack, or location with limited results (e.g. 'User seeking Elixir/Phoenix in Midwest') (feedback_type: 'user_preference').",
+        "3. Data Inaccuracy: Inaccurate salary, outdated JD details, or misclassified category (feedback_type: 'missing_data' or 'job_relevance').",
+        "4. CV Tailoring Gaps: Noticeable pattern of missing skills or scoring advice (feedback_type: 'cv_tailoring').",
+        "5. User Suggestions: Constructive feedback or ideas from the user (feedback_type: 'general_suggestion').",
+        "",
+        "Always include a clear context_summary and suggested_action (e.g. 'Re-crawl careers URL for Acme Corp', 'Add more Golang roles in Chicago')."
+      ].join("\\n");
+
+      const promptBox = document.getElementById('mcp-prompt-val');
+      if (promptBox) promptBox.innerText = systemPrompt;
+
+      loadUserFeedbacks();
       openModal('modal-mcp');
+    }
+
+    async function loadUserFeedbacks() {
+      const container = document.getElementById('user-feedbacks-container');
+      if (!container || !currentUser) return;
+      container.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 6px;">Fetching signals...</div>';
+
+      try {
+        const res = await fetch('/api/user/feedbacks', { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          const items = data.items || [];
+          if (items.length === 0) {
+            container.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 8px;">No feedback signals logged yet. When your AI assists you, proactive signals will appear here!</div>';
+            return;
+          }
+
+          container.innerHTML = items.map(function(fb) {
+            const dateStr = new Date(fb.createdAt).toLocaleDateString() + ' ' + new Date(fb.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const badgeColor = fb.sentiment === 'critical' ? '#ef4444' : (fb.sentiment === 'positive' ? '#10b981' : '#38bdf8');
+            const typeLabel = (fb.feedbackType || 'general').toUpperCase().replace(/_/g, ' ');
+            const suggested = fb.suggestedAction ? '<div style="color: #38bdf8; font-size: 10.5px;">🎯 <em>' + escapeHtml(fb.suggestedAction) + '</em></div>' : '';
+            return '<div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 8px 10px; font-size: 11px;">' +
+              '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">' +
+                '<span style="background: ' + badgeColor + '22; color: ' + badgeColor + '; border: 1px solid ' + badgeColor + '44; padding: 1px 6px; border-radius: 4px; font-weight: 700;">' + typeLabel + '</span>' +
+                '<span style="color: var(--text-muted);">' + dateStr + '</span>' +
+              '</div>' +
+              '<div style="color: #e2e8f0; margin-bottom: 3px;">' + escapeHtml(fb.comment) + '</div>' +
+              suggested +
+            '</div>';
+          }).join('');
+        } else {
+          container.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); text-align: center;">Could not load signals.</div>';
+        }
+      } catch (err) {
+        container.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); text-align: center;">Error loading signals.</div>';
+      }
+    }
+
+    async function submitQuickUserFeedback() {
+      const typeSelect = document.getElementById('user-quick-fb-type');
+      const input = document.getElementById('user-quick-fb-text');
+      const comment = input ? input.value.trim() : '';
+      if (!comment) {
+        alert('Please enter a feedback message before sending.');
+        return;
+      }
+
+      const feedbackType = typeSelect ? typeSelect.value : 'general_suggestion';
+      try {
+        const res = await fetch('/api/user/feedbacks', {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            feedback_type: feedbackType,
+            comment,
+            sentiment: feedbackType === 'broken_link' ? 'critical' : 'neutral',
+            suggested_action: 'Direct feedback submitted from Web Dashboard',
+          }),
+        });
+
+        if (res.ok) {
+          if (input) input.value = '';
+          alert('Thank you! Your feedback has been sent directly to the OffRadar engineering team.');
+          loadUserFeedbacks();
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          alert('Failed to send feedback: ' + (errData.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Network error while sending feedback.');
+      }
     }
 
     function copySnippet(elementId) {
@@ -2150,6 +2285,8 @@ export function renderDashboardHtml(): string {
     window.executeTailorCv = executeTailorCv;
     window.saveTailoredCv = saveTailoredCv;
     window.toggleNewGradFilter = toggleNewGradFilter;
+    window.loadUserFeedbacks = loadUserFeedbacks;
+    window.submitQuickUserFeedback = submitQuickUserFeedback;
 
     async function loadData() {
       try {

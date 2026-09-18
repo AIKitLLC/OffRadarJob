@@ -19,6 +19,7 @@ export class InMemoryD1Database implements ID1Database {
     this.tables.set("cv_versions", new Map());
     this.tables.set("auth_sessions", new Map());
     this.tables.set("system_settings", new Map());
+    this.tables.set("llm_feedbacks", new Map());
   }
 
   public prepare(query: string): ID1PreparedStatement {
@@ -555,6 +556,124 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: rows as T[], success: true };
     }
 
+    // LLM Feedbacks queries
+    if (q.includes("FROM llm_feedbacks")) {
+      const fbTable = this.db.tables.get("llm_feedbacks")!;
+      let rows = Array.from(fbTable.values());
+
+      // Enrich with users, jobs, companies
+      const userTable = this.db.tables.get("users");
+      const jobTable = this.db.tables.get("jobs");
+      const compTable = this.db.tables.get("companies");
+
+      rows = rows.map((r) => {
+        const u = userTable?.get(String(r["user_id"]));
+        const j = r["job_id"] ? jobTable?.get(String(r["job_id"])) : null;
+        const c = r["company_id"] ? compTable?.get(String(r["company_id"])) : null;
+        return {
+          ...r,
+          username: u?.["username"] || null,
+          user_first_name: u?.["first_name"] || null,
+          job_title: j?.["title"] || null,
+          company_name: c?.["name"] || null,
+        };
+      });
+
+      // Check stats summary query
+      if (q.includes("COUNT(*) as total") && q.includes("SUM(CASE WHEN status = 'new'")) {
+        let total = rows.length;
+        let newCount = 0;
+        let criticalCount = 0;
+        let brokenLinkCount = 0;
+        let userPrefCount = 0;
+        let actionedCount = 0;
+
+        for (const r of rows) {
+          if (r["status"] === "new") newCount++;
+          if (r["sentiment"] === "critical") criticalCount++;
+          if (r["feedback_type"] === "broken_link") brokenLinkCount++;
+          if (r["feedback_type"] === "user_preference") userPrefCount++;
+          if (r["status"] === "actioned") actionedCount++;
+        }
+
+        return {
+          results: [{
+            total,
+            new_count: newCount,
+            critical_count: criticalCount,
+            broken_link_count: brokenLinkCount,
+            user_pref_count: userPrefCount,
+            actioned_count: actionedCount,
+          } as T],
+          success: true,
+        };
+      }
+
+      // Single item by id: WHERE fb.id = ?
+      if (q.includes("WHERE fb.id = ?")) {
+        const targetId = String(this.boundValues[0]);
+        const found = rows.find((r) => r["id"] === targetId);
+        return { results: found ? [found as T] : [], success: true };
+      }
+
+      // Filter by user_id for listByUser: WHERE fb.user_id = ?
+      if (q.includes("WHERE fb.user_id = ?") && !q.includes("fb.feedback_type")) {
+        const targetUserId = String(this.boundValues[0]);
+        let userRows = rows.filter((r) => r["user_id"] === targetUserId);
+        userRows.sort((a, b) => Number(b["created_at"] ?? 0) - Number(a["created_at"] ?? 0));
+        const limitVal = typeof this.boundValues[1] === "number" ? this.boundValues[1] : 20;
+        return { results: userRows.slice(0, limitVal) as T[], success: true };
+      }
+
+      // General filtered list with where clauses
+      let filtered = rows;
+      let bIdx = 0;
+      if (q.includes("fb.user_id = ?")) {
+        const uid = String(this.boundValues[bIdx++]);
+        filtered = filtered.filter((r) => r["user_id"] === uid);
+      }
+      if (q.includes("fb.feedback_type = ?")) {
+        const ft = String(this.boundValues[bIdx++]);
+        filtered = filtered.filter((r) => r["feedback_type"] === ft);
+      }
+      if (q.includes("fb.sentiment = ?")) {
+        const st = String(this.boundValues[bIdx++]);
+        filtered = filtered.filter((r) => r["sentiment"] === st);
+      }
+      if (q.includes("fb.status = ?")) {
+        const ss = String(this.boundValues[bIdx++]);
+        filtered = filtered.filter((r) => r["status"] === ss);
+      }
+      if (q.includes("LOWER(fb.comment) LIKE ?")) {
+        const searchPattern = String(this.boundValues[bIdx++] || "").replace(/%/g, "").toLowerCase();
+        bIdx += 2; // skips suggested_action and context_summary bindings
+        if (searchPattern) {
+          filtered = filtered.filter((r) =>
+            String(r["comment"] ?? "").toLowerCase().includes(searchPattern) ||
+            String(r["suggested_action"] ?? "").toLowerCase().includes(searchPattern) ||
+            String(r["context_summary"] ?? "").toLowerCase().includes(searchPattern)
+          );
+        }
+      }
+
+      if (q.includes("COUNT(*) as total")) {
+        return { results: [{ total: filtered.length } as T], success: true };
+      }
+
+      filtered.sort((a, b) => Number(b["created_at"] ?? 0) - Number(a["created_at"] ?? 0));
+
+      if (q.includes("LIMIT ? OFFSET ?")) {
+        const limit = Number(this.boundValues[bIdx++] ?? 20);
+        const offset = Number(this.boundValues[bIdx++] ?? 0);
+        filtered = filtered.slice(offset, offset + limit);
+      } else if (q.includes("LIMIT ?")) {
+        const limit = Number(this.boundValues[bIdx++] ?? 20);
+        filtered = filtered.slice(0, limit);
+      }
+
+      return { results: filtered as T[], success: true };
+    }
+
     return { results: [], success: true };
   }
 
@@ -969,6 +1088,55 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       const key = String(this.boundValues[0]);
       const table = this.db.tables.get("system_settings")!;
       const deleted = table.delete(key);
+      return { success: true, meta: { changes: deleted ? 1 : 0 } };
+    }
+
+    // INSERT INTO llm_feedbacks
+    if (q.includes("INTO llm_feedbacks")) {
+      const [
+        id, userId, feedbackType, sentiment, rating, comment,
+        jobId, companyId, contextSummary, suggestedAction,
+        metadata, status, createdAt, updatedAt
+      ] = this.boundValues;
+
+      const record: Record<string, unknown> = {
+        id: String(id),
+        user_id: String(userId),
+        feedback_type: String(feedbackType),
+        sentiment: String(sentiment || "neutral"),
+        rating: rating !== undefined && rating !== null ? Number(rating) : null,
+        comment: String(comment),
+        job_id: jobId ? String(jobId) : null,
+        company_id: companyId ? String(companyId) : null,
+        context_summary: contextSummary ? String(contextSummary) : null,
+        suggested_action: suggestedAction ? String(suggestedAction) : null,
+        metadata: String(metadata || "{}"),
+        status: String(status || "new"),
+        created_at: Number(createdAt),
+        updated_at: Number(updatedAt),
+      };
+
+      this.db.tables.get("llm_feedbacks")!.set(String(id), record);
+      return { success: true };
+    }
+
+    // UPDATE llm_feedbacks SET status = ?, updated_at = ? WHERE id = ?
+    if (q.includes("UPDATE llm_feedbacks SET status =")) {
+      const [status, updatedAt, id] = this.boundValues;
+      const table = this.db.tables.get("llm_feedbacks")!;
+      const row = table.get(String(id));
+      if (row) {
+        row["status"] = String(status);
+        row["updated_at"] = Number(updatedAt);
+      }
+      return { success: true, meta: { changes: row ? 1 : 0 } };
+    }
+
+    // DELETE FROM llm_feedbacks WHERE id = ?
+    if (q.includes("DELETE FROM llm_feedbacks WHERE id = ?")) {
+      const id = String(this.boundValues[0]);
+      const table = this.db.tables.get("llm_feedbacks")!;
+      const deleted = table.delete(id);
       return { success: true, meta: { changes: deleted ? 1 : 0 } };
     }
 

@@ -390,6 +390,7 @@ export function renderAdminDashboardHtml(): string {
       <button class="tab-btn" onclick="switchTab('moderation')">📋 Job Moderation (<span id="tab-jobs-count">0</span>)</button>
       <button class="tab-btn" onclick="switchTab('telemetry')">📡 Error & DLQ Logs (<span id="tab-logs-count">0</span>)</button>
       <button class="tab-btn" onclick="switchTab('telegram')">🤖 Telegram Bot & Admins</button>
+      <button class="tab-btn" onclick="switchTab('feedbacks')">💡 LLM Feedbacks (<span id="tab-feedbacks-count">0</span>)</button>
     </div>
 
     <!-- Real-time Stats Grid -->
@@ -1010,6 +1011,101 @@ export function renderAdminDashboardHtml(): string {
         </div>
       </div>
     </div>
+
+    <!-- Tab 6: LLM Feedbacks Moderation & Quality Insights -->
+    <div id="tab-feedbacks" class="tab-content" style="display: none;">
+      <!-- Stats row -->
+      <div class="stats-grid" style="margin-bottom: 20px;">
+        <div class="stat-card">
+          <div class="stat-label">Total Signals</div>
+          <div class="stat-value" id="stat-fb-total">0</div>
+        </div>
+        <div class="stat-card running">
+          <div class="stat-label">New / Pending</div>
+          <div class="stat-value" id="stat-fb-new">0</div>
+        </div>
+        <div class="stat-card danger">
+          <div class="stat-label">Critical / Broken Links</div>
+          <div class="stat-value" id="stat-fb-critical">0</div>
+        </div>
+        <div class="stat-card accent">
+          <div class="stat-label">Candidate Preferences</div>
+          <div class="stat-value" id="stat-fb-pref">0</div>
+        </div>
+        <div class="stat-card success">
+          <div class="stat-label">Actioned / Resolved</div>
+          <div class="stat-value" id="stat-fb-actioned">0</div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header">
+          <div class="card-title">🔍 Filter & Search Feedback Signals</div>
+        </div>
+        <div style="padding: 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+          <input type="text" id="fb-filter-search" placeholder="Search comments, suggested actions, context..." style="flex: 1; min-width: 200px; background: var(--bg); border: 1px solid var(--card-border); color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 13px;" onkeydown="if(event.key==='Enter') loadFeedbacks(1)" />
+          <select id="fb-filter-type" style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px;">
+            <option value="all">All Types</option>
+            <option value="broken_link">🚨 Broken Link (404/Closed)</option>
+            <option value="user_preference">🎯 Candidate Preference / Missing Stack</option>
+            <option value="job_relevance">📋 Job Relevance / Category</option>
+            <option value="missing_data">❓ Missing Data / Salary</option>
+            <option value="cv_tailoring">📄 CV Tailoring Quality</option>
+            <option value="general_suggestion">💡 General Suggestion</option>
+          </select>
+          <select id="fb-filter-sentiment" style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px;">
+            <option value="all">All Sentiments</option>
+            <option value="critical">🚨 Critical</option>
+            <option value="negative">⚠️ Negative</option>
+            <option value="neutral">💬 Neutral</option>
+            <option value="positive">⭐ Positive</option>
+          </select>
+          <select id="fb-filter-status" style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px;">
+            <option value="all">All Statuses</option>
+            <option value="new">🆕 New</option>
+            <option value="reviewed">👀 Reviewed</option>
+            <option value="actioned">✅ Actioned</option>
+            <option value="dismissed">🗑️ Dismissed</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="loadFeedbacks(1)">Apply Filters</button>
+          <button class="btn btn-secondary btn-sm" onclick="resetFeedbackFilters()">Reset</button>
+        </div>
+      </div>
+
+      <!-- Feedbacks Table -->
+      <div class="card">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div class="card-title">💡 Proactive LLM & User Feedback Feed</div>
+          <button class="btn btn-secondary btn-sm" onclick="loadFeedbacks(1)">🔄 Refresh</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Time & User</th>
+                <th>Type & Severity</th>
+                <th>Comment & Context</th>
+                <th>Linked Entity</th>
+                <th>Suggested Action</th>
+                <th>Status & Actions</th>
+              </tr>
+            </thead>
+            <tbody id="fb-table-body">
+              <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">Loading feedback records...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- Pagination -->
+        <div id="fb-pagination-bar" style="padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--card-border); font-size: 13px; color: var(--text-muted);">
+          <span id="fb-pagination-info">Showing 0 of 0 records</span>
+          <div style="display: flex; gap: 8px;">
+            <button id="fb-prev-btn" class="btn btn-secondary btn-sm" onclick="prevFeedbackPage()" disabled>← Previous</button>
+            <button id="fb-next-btn" class="btn btn-secondary btn-sm" onclick="nextFeedbackPage()" disabled>Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="toast" class="toast"></div>
@@ -1038,6 +1134,7 @@ export function renderAdminDashboardHtml(): string {
       if (tabId === 'moderation') loadModerationJobs();
       if (tabId === 'telemetry') loadTelemetry();
       if (tabId === 'telegram') loadTelegramData();
+      if (tabId === 'feedbacks') loadFeedbacks(1);
     }
 
     async function apiFetch(endpoint, options = {}) {
@@ -1057,7 +1154,8 @@ export function renderAdminDashboardHtml(): string {
         loadTasks(),
         loadModerationJobs(),
         loadTelemetry(),
-        loadTelegramData()
+        loadTelegramData(),
+        loadFeedbacks(currentFeedbackPage)
       ]);
       showToast("Data refreshed!");
     }
@@ -1095,6 +1193,24 @@ export function renderAdminDashboardHtml(): string {
         document.getElementById('tab-tasks-count').textContent = data.tasks?.total ?? 0;
         document.getElementById('tab-jobs-count').textContent = data.jobsCount ?? 0;
         document.getElementById('tab-logs-count').textContent = data.logsCount ?? 0;
+
+        // Fetch feedback stats
+        apiFetch('/api/admin/feedbacks?limit=1').then(r => r.json()).then(fbData => {
+          if (fbData.stats) {
+            const countEl = document.getElementById('tab-feedbacks-count');
+            if (countEl) countEl.textContent = fbData.stats.total ?? 0;
+            const newEl = document.getElementById('stat-fb-new');
+            if (newEl) newEl.textContent = fbData.stats.newCount ?? 0;
+            const critEl = document.getElementById('stat-fb-critical');
+            if (critEl) critEl.textContent = fbData.stats.criticalCount ?? 0;
+            const prefEl = document.getElementById('stat-fb-pref');
+            if (prefEl) prefEl.textContent = fbData.stats.userPrefCount ?? 0;
+            const actEl = document.getElementById('stat-fb-actioned');
+            if (actEl) actEl.textContent = fbData.stats.actionedCount ?? 0;
+            const totEl = document.getElementById('stat-fb-total');
+            if (totEl) totEl.textContent = fbData.stats.total ?? 0;
+          }
+        }).catch(() => {});
       } catch (err) {
         console.error("Failed to load stats:", err);
       }
@@ -1688,6 +1804,197 @@ export function renderAdminDashboardHtml(): string {
         }
       } catch (err) {
         showToast("Error triggering test alert.");
+      }
+    }
+
+    // --- LLM Feedback Moderation & Analysis ---
+    let currentFeedbackPage = 1;
+    let totalFeedbackPages = 1;
+
+    async function loadFeedbacks(page = 1) {
+      currentFeedbackPage = page;
+      const type = document.getElementById('fb-filter-type')?.value || 'all';
+      const sentiment = document.getElementById('fb-filter-sentiment')?.value || 'all';
+      const status = document.getElementById('fb-filter-status')?.value || 'all';
+      const search = document.getElementById('fb-filter-search')?.value.trim() || '';
+
+      const queryParams = new URLSearchParams({
+        page: String(page),
+        limit: '15',
+        type,
+        sentiment,
+        status,
+      });
+      if (search) queryParams.set('search', search);
+
+      const tbody = document.getElementById('fb-table-body');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">Loading feedback records...</td></tr>';
+
+      try {
+        const res = await apiFetch('/api/admin/feedbacks?' + queryParams.toString());
+        if (!res.ok) {
+          if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--danger); padding: 30px;">Failed to load feedbacks.</td></tr>';
+          return;
+        }
+
+        const data = await res.json();
+        const items = data.items || [];
+        totalFeedbackPages = data.pagination?.totalPages || 1;
+
+        // Update stats
+        if (data.stats) {
+          const countEl = document.getElementById('tab-feedbacks-count');
+          if (countEl) countEl.textContent = data.stats.total ?? 0;
+          const newEl = document.getElementById('stat-fb-new');
+          if (newEl) newEl.textContent = data.stats.newCount ?? 0;
+          const critEl = document.getElementById('stat-fb-critical');
+          if (critEl) critEl.textContent = data.stats.criticalCount ?? 0;
+          const prefEl = document.getElementById('stat-fb-pref');
+          if (prefEl) prefEl.textContent = data.stats.userPrefCount ?? 0;
+          const actEl = document.getElementById('stat-fb-actioned');
+          if (actEl) actEl.textContent = data.stats.actionedCount ?? 0;
+          const totEl = document.getElementById('stat-fb-total');
+          if (totEl) totEl.textContent = data.stats.total ?? 0;
+        }
+
+        // Pagination bar
+        const infoEl = document.getElementById('fb-pagination-info');
+        if (infoEl) {
+          const total = data.pagination?.total || 0;
+          const start = total === 0 ? 0 : (page - 1) * 15 + 1;
+          const end = Math.min(page * 15, total);
+          infoEl.textContent = 'Showing ' + start + '-' + end + ' of ' + total + ' records (Page ' + page + ' of ' + totalFeedbackPages + ')';
+        }
+        const prevBtn = document.getElementById('fb-prev-btn');
+        const nextBtn = document.getElementById('fb-next-btn');
+        if (prevBtn) prevBtn.disabled = page <= 1;
+        if (nextBtn) nextBtn.disabled = page >= totalFeedbackPages;
+
+        if (items.length === 0) {
+          if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px;">No feedback signals found matching current filters.</td></tr>';
+          return;
+        }
+
+        if (tbody) {
+          tbody.innerHTML = items.map(function(fb) {
+            const timeStr = new Date(fb.createdAt).toLocaleDateString() + ' ' + new Date(fb.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const userHandle = fb.username ? '@' + escapeHtml(fb.username) : (fb.userFirstName || fb.userId.slice(-8));
+
+            let typeBadgeColor = 'rgba(56, 189, 248, 0.15)';
+            let typeTextColor = '#38bdf8';
+            if (fb.feedbackType === 'broken_link') { typeBadgeColor = 'rgba(239, 68, 68, 0.15)'; typeTextColor = '#ef4444'; }
+            if (fb.feedbackType === 'user_preference') { typeBadgeColor = 'rgba(168, 85, 247, 0.15)'; typeTextColor = '#a855f7'; }
+            if (fb.feedbackType === 'cv_tailoring') { typeBadgeColor = 'rgba(16, 185, 129, 0.15)'; typeTextColor = '#10b981'; }
+
+            let sentBadge = '💬 Neutral';
+            let sentClass = 'color: #94a3b8;';
+            if (fb.sentiment === 'critical') { sentBadge = '🚨 Critical'; sentClass = 'color: #ef4444; font-weight: 700;'; }
+            if (fb.sentiment === 'negative') { sentBadge = '⚠️ Negative'; sentClass = 'color: #f59e0b;'; }
+            if (fb.sentiment === 'positive') { sentBadge = '⭐ Positive'; sentClass = 'color: #10b981; font-weight: 600;'; }
+
+            const entityParts = [];
+            if (fb.jobTitle) entityParts.push('💼 <strong>' + escapeHtml(fb.jobTitle) + '</strong>');
+            else if (fb.jobId) entityParts.push('💼 <code>' + escapeHtml(fb.jobId) + '</code>');
+            if (fb.companyName) entityParts.push('🏢 ' + escapeHtml(fb.companyName));
+            else if (fb.companyId) entityParts.push('🏢 <code>' + escapeHtml(fb.companyId) + '</code>');
+            const entityHtml = entityParts.length > 0 ? entityParts.join('<br>') : '<span style="color: var(--text-muted);">Platform / General</span>';
+
+            let statusBadge = '<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">🆕 New</span>';
+            if (fb.status === 'reviewed') statusBadge = '<span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">👀 Reviewed</span>';
+            if (fb.status === 'actioned') statusBadge = '<span style="background: rgba(16, 185, 129, 0.15); color: #10b981; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">✅ Actioned</span>';
+            if (fb.status === 'dismissed') statusBadge = '<span style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; padding: 2px 8px; border-radius: 4px; font-size: 11px;">🗑️ Dismissed</span>';
+
+            const actions = [];
+            if (fb.status === 'new') {
+              actions.push('<button class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="updateFeedbackStatus(&quot;' + fb.id + '&quot;, &quot;reviewed&quot;)">Mark Reviewed</button>');
+            }
+            if (fb.status !== 'actioned') {
+              actions.push('<button class="btn btn-primary btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="updateFeedbackStatus(&quot;' + fb.id + '&quot;, &quot;actioned&quot;)">Mark Actioned</button>');
+            }
+            if (fb.status !== 'dismissed') {
+              actions.push('<button class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="updateFeedbackStatus(&quot;' + fb.id + '&quot;, &quot;dismissed&quot;)">Dismiss</button>');
+            }
+            actions.push('<button class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 8px; color: #ef4444;" onclick="deleteFeedback(&quot;' + fb.id + '&quot;)">Delete</button>');
+
+            return '<tr>' +
+              '<td>' +
+                '<div style="font-weight: 600; color: #fff;">' + userHandle + '</div>' +
+                '<div style="font-size: 11px; color: var(--text-muted);">' + timeStr + '</div>' +
+              '</td>' +
+              '<td>' +
+                '<span style="background: ' + typeBadgeColor + '; color: ' + typeTextColor + '; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; display: inline-block; margin-bottom: 4px;">' + escapeHtml(fb.feedbackType) + '</span>' +
+                '<div style="' + sentClass + '; font-size: 11px;">' + sentBadge + '</div>' +
+              '</td>' +
+              '<td style="max-width: 320px;">' +
+                '<div style="font-size: 13px; color: #f1f5f9; margin-bottom: 4px; line-height: 1.4;">' + escapeHtml(fb.comment) + '</div>' +
+                (fb.contextSummary ? '<div style="font-size: 11px; color: var(--text-muted); font-style: italic;">Context: ' + escapeHtml(fb.contextSummary) + '</div>' : '') +
+              '</td>' +
+              '<td style="font-size: 12px;">' + entityHtml + '</td>' +
+              '<td style="max-width: 220px; font-size: 12px; color: #38bdf8;">' +
+                (fb.suggestedAction ? '🎯 <em>' + escapeHtml(fb.suggestedAction) + '</em>' : '<span style="color: var(--text-muted);">—</span>') +
+              '</td>' +
+              '<td>' +
+                '<div style="margin-bottom: 6px;">' + statusBadge + '</div>' +
+                '<div style="display: flex; flex-wrap: wrap; gap: 4px;">' + actions.join('') + '</div>' +
+              '</td>' +
+            '</tr>';
+          }).join('');
+        }
+      } catch (err) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--danger); padding: 30px;">Error fetching feedbacks.</td></tr>';
+      }
+    }
+
+    function prevFeedbackPage() {
+      if (currentFeedbackPage > 1) loadFeedbacks(currentFeedbackPage - 1);
+    }
+
+    function nextFeedbackPage() {
+      if (currentFeedbackPage < totalFeedbackPages) loadFeedbacks(currentFeedbackPage + 1);
+    }
+
+    function resetFeedbackFilters() {
+      const s = document.getElementById('fb-filter-search'); if (s) s.value = '';
+      const t = document.getElementById('fb-filter-type'); if (t) t.value = 'all';
+      const m = document.getElementById('fb-filter-sentiment'); if (m) m.value = 'all';
+      const st = document.getElementById('fb-filter-status'); if (st) st.value = 'all';
+      loadFeedbacks(1);
+    }
+
+    async function updateFeedbackStatus(id, newStatus) {
+      try {
+        const res = await apiFetch('/api/admin/feedbacks/status', {
+          method: 'POST',
+          body: { id, status: newStatus }
+        });
+        if (res.ok) {
+          showToast('Feedback status updated to ' + newStatus);
+          loadFeedbacks(currentFeedbackPage);
+          loadStats();
+        } else {
+          showToast('Failed to update status');
+        }
+      } catch (err) {
+        showToast('Network error updating status');
+      }
+    }
+
+    async function deleteFeedback(id) {
+      if (!confirm('Are you sure you want to permanently delete this feedback record?')) return;
+      try {
+        const res = await apiFetch('/api/admin/feedbacks/delete', {
+          method: 'POST',
+          body: { id }
+        });
+        if (res.ok) {
+          showToast('Feedback deleted');
+          loadFeedbacks(currentFeedbackPage);
+          loadStats();
+        } else {
+          showToast('Failed to delete feedback');
+        }
+      } catch (err) {
+        showToast('Network error deleting feedback');
       }
     }
 

@@ -11,6 +11,7 @@ import {
   CvRepository,
   AuthSessionRepository,
   SystemSettingsRepository,
+  LlmFeedbackRepository,
 } from "./db/repositories.js";
 import { McpServerHandler } from "./mcp/mcp-server.js";
 import { PipelineOrchestrator } from "./orchestrator/dispatcher.js";
@@ -20,7 +21,7 @@ import {
   HuntMessage,
   ExtractMessage,
 } from "./types/queues.js";
-import { CrawlTaskStatus, User, CvVersion } from "./types/domain.js";
+import { CrawlTaskStatus, User, CvVersion, LlmFeedback, FeedbackStatus } from "./types/domain.js";
 import { CURATED_SEEDS } from "./seeds/seed-catalogue.js";
 import { PublicSourceManager } from "./harvesters/public-source-harvester.js";
 import { NewGradHarvester } from "./harvesters/newgrad-harvester.js";
@@ -280,8 +281,29 @@ export default {
     const cvRepo = new CvRepository(env.DB);
     const sessionRepo = new AuthSessionRepository(env.DB);
     const settingsRepo = new SystemSettingsRepository(env.DB);
+    const feedbackRepo = new LlmFeedbackRepository(env.DB);
     const effectiveConfig = await getEffectiveConfig(env, settingsRepo);
-    const mcpHandler = new McpServerHandler(jobRepo, companyRepo, cvRepo);
+    const mcpHandler = new McpServerHandler(
+      jobRepo,
+      companyRepo,
+      cvRepo,
+      feedbackRepo,
+      async (feedback, u) => {
+        const isCriticalOrBroken = feedback.sentiment === "critical" || feedback.feedbackType === "broken_link";
+        const icon = isCriticalOrBroken ? "🚨" : "💡";
+        const alertLines = [
+          `${icon} *OFFRADARJOB - PHẢN HỒI MỚI TỪ LLM (MCP)*`,
+          `👤 *User:* ${u.firstName} (@${u.username || u.telegramId})`,
+          `🏷️ *Loại:* \`${feedback.feedbackType}\` | *Mức độ:* \`${feedback.sentiment}\``,
+          feedback.jobId ? `💼 *Job ID:* \`${feedback.jobId}\`` : "",
+          feedback.companyId ? `🏢 *Company ID:* \`${feedback.companyId}\`` : "",
+          `📝 *Nội dung:* ${feedback.comment}`,
+          feedback.suggestedAction ? `🎯 *Hành động đề xuất:* ${feedback.suggestedAction}` : "",
+        ].filter(Boolean);
+
+        await notifyTelegramAdmin(env, alertLines.join("\n"), effectiveConfig);
+      }
+    );
 
     // 1. Public Dashboard UI
     if (path === "/" || path === "/index.html") {
@@ -673,6 +695,7 @@ export default {
             `⚡ \`/sweep\` - Quét đồng loạt danh sách seed companies`,
             `🌾 \`/harvest [hn|github|newgrad|all]\` - Thu thập jobs từ HackerNews, GitHub, hoặc New Grad 2025/2026`,
             `👥 \`/users\` - Thống kê users & danh sách tài khoản MCP`,
+            `💡 \`/feedbacks\` - Xem danh sách phản hồi từ LLM & Người dùng qua MCP`,
             `🔗 \`/adminlink\` - Lấy link 1-click vào thẳng Web Admin Control Center`,
             `🔔 \`/testalert\` - Kiểm tra hệ thống gửi thông báo khẩn cấp`,
             `❓ \`/admin help\` - Xem lại menu này`,
@@ -1036,6 +1059,45 @@ export default {
           return Response.json({ ok: true });
         }
 
+        // L. /feedbacks - Admin list recent LLM feedbacks
+        if (text === "/feedbacks" && chatId) {
+          if (!isAdmin) {
+            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Bạn cần quyền Admin để xem /feedbacks.");
+            return Response.json({ ok: false, error: "Unauthorized" });
+          }
+          const stats = await feedbackRepo.getStats();
+          const listRes = await feedbackRepo.listPaged({ limit: 5 });
+          const items = listRes.items;
+
+          const snippet = items.length > 0
+            ? items.map((f, i) => {
+                const statusIcon = f.status === "actioned" ? "✅" : (f.status === "reviewed" ? "👀" : "🆕");
+                const sentimentIcon = f.sentiment === "critical" ? "🚨" : (f.sentiment === "positive" ? "⭐" : "💬");
+                const userStr = f.username ? `@${f.username}` : f.userId.slice(-6);
+                const shortComment = f.comment.length > 90 ? f.comment.slice(0, 90) + "..." : f.comment;
+                return `${i + 1}. ${statusIcon} ${sentimentIcon} *[${f.feedbackType.toUpperCase()}]* (${userStr})\n   📝 "${shortComment}"${f.suggestedAction ? `\n   🎯 *Đề xuất:* ${f.suggestedAction}` : ""}`;
+              }).join("\n\n")
+            : "Chưa có phản hồi nào.";
+
+          const reply = [
+            `💡 *OFFRADARJOB - PHẢN HỒI TỪ LLM & NGƯỜI DÙNG*`,
+            ``,
+            `📊 *Thống kê:*`,
+            `• Tổng số: \`${stats.total}\` | Mới: \`${stats.newCount}\``,
+            `• Sự cố khẩn cấp (Critical): \`${stats.criticalCount}\``,
+            `• Link hỏng (Broken links): \`${stats.brokenLinkCount}\``,
+            `• Tín hiệu nhu cầu (Preferences): \`${stats.userPrefCount}\``,
+            ``,
+            `*5 phản hồi gần nhất:*`,
+            snippet,
+            ``,
+            `🌐 Xem & xử lý chi tiết tại Web Admin Dashboard.`,
+          ].join("\n");
+
+          if (botToken) await sendTelegramMessage(botToken, chatId, reply);
+          return Response.json({ ok: true });
+        }
+
         return Response.json({ ok: true });
       } catch (err: any) {
         return Response.json({ ok: false, error: err?.message }, { status: 500 });
@@ -1280,6 +1342,61 @@ export default {
         return Response.json({ error: parsed.error }, { status: 400 });
       }
       return Response.json({ success: true, analysis: parsed });
+    }
+
+    // 9b. User Feedbacks API (View & Submit Feedbacks directly or from extensions)
+    if (path === "/api/user/feedbacks" && request.method === "GET") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const items = await feedbackRepo.listByUser(user.id, 50);
+      return Response.json({ success: true, items });
+    }
+
+    if (path === "/api/user/feedbacks" && request.method === "POST") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+      const body = (await request.json().catch(() => ({}))) as Record<string, any>;
+      const comment = String(body.comment || "").trim();
+      if (!comment) {
+        return Response.json({ error: "Missing required 'comment'" }, { status: 400 });
+      }
+
+      const id = `fb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const now = Date.now();
+
+      const feedbackRecord: LlmFeedback = {
+        id,
+        userId: user.id,
+        feedbackType: body.feedback_type || body.feedbackType || "general_suggestion",
+        sentiment: body.sentiment || "neutral",
+        rating: body.rating != null ? Number(body.rating) : undefined,
+        comment,
+        jobId: body.job_id || body.jobId || undefined,
+        companyId: body.company_id || body.companyId || undefined,
+        contextSummary: body.context_summary || body.contextSummary || undefined,
+        suggestedAction: body.suggested_action || body.suggestedAction || undefined,
+        metadata: typeof body.metadata === "object" && body.metadata !== null ? body.metadata : { client: "WebDashboard" },
+        status: "new",
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await feedbackRepo.create(feedbackRecord);
+
+      // Notify Telegram admin if critical or broken link
+      if (feedbackRecord.sentiment === "critical" || feedbackRecord.feedbackType === "broken_link") {
+        const alertMsg = [
+          `🚨 *OFFRADARJOB - PHẢN HỒI KHẨN CẤP TỪ WEB USER*`,
+          `👤 *User:* ${user.firstName} (@${user.username || user.telegramId})`,
+          `🏷️ *Loại:* \`${feedbackRecord.feedbackType}\` | *Mức độ:* \`${feedbackRecord.sentiment}\``,
+          `📝 *Nội dung:* ${feedbackRecord.comment}`,
+          feedbackRecord.suggestedAction ? `🎯 *Đề xuất:* ${feedbackRecord.suggestedAction}` : "",
+        ].filter(Boolean).join("\n");
+        await notifyTelegramAdmin(env, alertMsg, effectiveConfig);
+      }
+
+      return Response.json({ success: true, feedback: feedbackRecord });
     }
 
     // 10. MCP (Model Context Protocol) Endpoints for AI Agents (Cursor, Claude Desktop, Antigravity)
@@ -2133,6 +2250,58 @@ export default {
         await notifyTelegramAdmin(env, alertMsg, effectiveConfig);
         return Response.json({ success: true, broadcast: true });
       }
+    }
+
+    // 15e. Admin API: LLM Feedbacks Moderation & Analysis
+    if (path === "/api/admin/feedbacks" && request.method === "GET") {
+      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
+      const limit = Math.min(parseInt(url.searchParams.get("limit") || "20", 10), 100);
+      const type = url.searchParams.get("type") || undefined;
+      const sentiment = url.searchParams.get("sentiment") || undefined;
+      const status = url.searchParams.get("status") || undefined;
+      const search = url.searchParams.get("search") || undefined;
+
+      const [feedbacksData, stats] = await Promise.all([
+        feedbackRepo.listPaged({ page, limit, type, sentiment, status, search }),
+        feedbackRepo.getStats(),
+      ]);
+
+      return Response.json({
+        success: true,
+        ...feedbacksData,
+        stats,
+      });
+    }
+
+    if (path === "/api/admin/feedbacks/status" && request.method === "POST") {
+      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const body = (await request.json().catch(() => ({}))) as { id?: string; status?: FeedbackStatus };
+      if (!body.id || !body.status) {
+        return Response.json({ error: "Missing 'id' or 'status'" }, { status: 400 });
+      }
+      const ok = await feedbackRepo.updateStatus(body.id, body.status);
+      return Response.json({ success: ok, id: body.id, status: body.status });
+    }
+
+    if ((path === "/api/admin/feedbacks/delete" && request.method === "POST") || (path === "/api/admin/feedbacks" && request.method === "DELETE")) {
+      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      let id = url.searchParams.get("id");
+      if (!id) {
+        const body = (await request.json().catch(() => ({}))) as { id?: string };
+        id = body.id || null;
+      }
+      if (!id) {
+        return Response.json({ error: "Missing 'id'" }, { status: 400 });
+      }
+      const ok = await feedbackRepo.delete(id);
+      return Response.json({ success: ok, id });
     }
 
     // 16. API: Trigger Ingest / Crawl Seed (Public)

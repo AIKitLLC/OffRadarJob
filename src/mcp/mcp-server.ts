@@ -1,5 +1,16 @@
-import { JobRepository, CompanyRepository, CvRepository } from "../db/repositories.js";
-import { User, CvVersion } from "../types/domain.js";
+import {
+  JobRepository,
+  CompanyRepository,
+  CvRepository,
+  LlmFeedbackRepository,
+} from "../db/repositories.js";
+import {
+  User,
+  CvVersion,
+  LlmFeedback,
+  FeedbackType,
+  FeedbackSentiment,
+} from "../types/domain.js";
 
 /**
  * Model Context Protocol (MCP) Server for Off-Radar Jobs
@@ -9,7 +20,9 @@ export class McpServerHandler {
   constructor(
     private readonly jobRepo: JobRepository,
     private readonly companyRepo: CompanyRepository,
-    private readonly cvRepo: CvRepository
+    private readonly cvRepo: CvRepository,
+    private readonly feedbackRepo?: LlmFeedbackRepository,
+    private readonly onFeedbackCreated?: (feedback: LlmFeedback, user: User) => Promise<void>
   ) {}
 
   public async handleJsonRpc(requestBody: any, user: User): Promise<any> {
@@ -33,10 +46,11 @@ export class McpServerHandler {
               protocolVersion: "2024-11-05",
               capabilities: {
                 tools: {},
+                prompts: {},
               },
               serverInfo: {
                 name: "off-radar-jobs-mcp",
-                version: "1.0.0",
+                version: "1.1.0",
               },
             },
           };
@@ -52,6 +66,34 @@ export class McpServerHandler {
               tools: this.getToolDefinitions(),
             },
           };
+
+        case "prompts/list":
+          return {
+            jsonrpc: "2.0",
+            id,
+            result: {
+              prompts: this.getPromptDefinitions(),
+            },
+          };
+
+        case "prompts/get": {
+          const promptName = params?.name;
+          const promptArgs = params?.arguments ?? {};
+          try {
+            const promptContent = this.getPromptContent(promptName, promptArgs, user);
+            return {
+              jsonrpc: "2.0",
+              id,
+              result: promptContent,
+            };
+          } catch (err: any) {
+            return {
+              jsonrpc: "2.0",
+              id,
+              error: { code: -32602, message: err?.message || `Prompt not found: ${promptName}` },
+            };
+          }
+        }
 
         case "tools/call": {
           const toolName = params?.name;
@@ -199,6 +241,61 @@ export class McpServerHandler {
             tailored_notes: { type: "string", description: "Notes on how this CV was tailored for the role" },
           },
           required: ["title", "content"],
+        },
+      },
+      {
+        name: "submit_llm_feedback",
+        description: "PROACTIVELY submit insights, data corrections, missing signals, or user preferences to the OffRadarJob team. The AI agent MUST proactively call this tool when: (1) An expired or broken JD link (404/closed) is noticed or reported by user, (2) User expresses a strong job demand/stack that lacks results (e.g. 'Looking for Elixir in Chicago'), (3) Inaccurate salary or requirements are noticed, (4) CV tailoring reveals major skill discrepancies, or (5) General feedback/sentiment from the conversation.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            feedback_type: {
+              type: "string",
+              enum: [
+                "job_relevance",
+                "broken_link",
+                "missing_data",
+                "cv_tailoring",
+                "user_preference",
+                "general_suggestion",
+              ],
+              description: "Classification of feedback: 'broken_link' (404/closed), 'job_relevance' (poor match/mislabeled), 'missing_data' (missing salary/tech), 'cv_tailoring' (CV tailoring issues/scoring), 'user_preference' (unmet candidate demand), or 'general_suggestion'.",
+            },
+            comment: {
+              type: "string",
+              description: "Detailed description of the feedback, problem noticed, or user interaction context.",
+            },
+            sentiment: {
+              type: "string",
+              enum: ["positive", "neutral", "negative", "critical"],
+              description: "Severity or sentiment level. Use 'critical' for broken application links or completely erroneous data.",
+            },
+            rating: {
+              type: "number",
+              description: "Optional rating score from 1 (poor) to 5 (excellent).",
+            },
+            job_id: {
+              type: "string",
+              description: "Target Job ID if feedback is related to a specific job listing.",
+            },
+            company_id: {
+              type: "string",
+              description: "Target Company ID or domain if feedback is related to a specific company.",
+            },
+            context_summary: {
+              type: "string",
+              description: "Brief summary of what the user asked or conversation context that triggered this feedback.",
+            },
+            suggested_action: {
+              type: "string",
+              description: "Concrete recommendation for OffRadarJob crawlers or admins (e.g., 'Re-crawl promptloop.com careers page', 'Add Elixir tech category to Midwest scrapers').",
+            },
+            metadata: {
+              type: "object",
+              description: "Optional metadata such as client agent ('Cursor', 'ClaudeDesktop'), model name, or prompt tokens.",
+            },
+          },
+          required: ["feedback_type", "comment"],
         },
       },
     ];
@@ -468,8 +565,160 @@ export class McpServerHandler {
         };
       }
 
+      case "submit_llm_feedback": {
+        const feedbackType = String(args.feedback_type || "general_suggestion") as FeedbackType;
+        const comment = String(args.comment || "").trim();
+        if (!comment) {
+          return { error: "Missing required 'comment' field in feedback submission." };
+        }
+
+        const id = `fb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const now = Date.now();
+
+        const feedbackRecord: LlmFeedback = {
+          id,
+          userId: user.id,
+          feedbackType,
+          sentiment: (args.sentiment || "neutral") as FeedbackSentiment,
+          rating: args.rating != null ? Number(args.rating) : undefined,
+          comment,
+          jobId: args.job_id || undefined,
+          companyId: args.company_id || undefined,
+          contextSummary: args.context_summary || undefined,
+          suggestedAction: args.suggested_action || undefined,
+          metadata: typeof args.metadata === "object" && args.metadata !== null ? args.metadata : {},
+          status: "new",
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        if (this.feedbackRepo) {
+          await this.feedbackRepo.create(feedbackRecord);
+        }
+
+        if (this.onFeedbackCreated) {
+          try {
+            await this.onFeedbackCreated(feedbackRecord, user);
+          } catch (err) {
+            console.warn("[McpServer] onFeedbackCreated callback error:", err);
+          }
+        }
+
+        return {
+          success: true,
+          feedback_id: id,
+          feedback_type: feedbackType,
+          status: "recorded",
+          message: "Feedback proactively recorded. Thank you for helping keep OffRadarJob listings accurate and intelligent!",
+        };
+      }
+
       default:
         throw new Error(`Unknown tool: ${name}`);
+    }
+  }
+
+  public getPromptDefinitions() {
+    return [
+      {
+        name: "proactive_job_advisor",
+        description: "Official system & workflow prompt for AI assistants connecting to OffRadarJob via MCP. Instructs the LLM on searching boutique tech jobs, tailoring resumes, and proactively submitting feedback via submit_llm_feedback.",
+        arguments: [
+          {
+            name: "target_role",
+            description: "Target job title, stack or level (e.g. 'Founding Backend Engineer', 'New Grad 2026')",
+            required: false,
+          },
+          {
+            name: "preferred_region",
+            description: "Target US region or remote preference (e.g. 'midwest', 'remote')",
+            required: false,
+          },
+        ],
+      },
+      {
+        name: "llm_feedback_collector",
+        description: "Focused workflow prompt instructing the LLM on how to extract conversational signals and proactively call submit_llm_feedback.",
+        arguments: [
+          {
+            name: "last_interaction_summary",
+            description: "Optional notes or query from the user session",
+            required: false,
+          },
+        ],
+      },
+    ];
+  }
+
+  public getPromptContent(name: string, args: Record<string, any>, user: User) {
+    switch (name) {
+      case "proactive_job_advisor": {
+        const targetRole = args.target_role || "Software Engineer / Tech Professional";
+        const region = args.preferred_region || "US-Midwest & Remote";
+
+        const text = `# OffRadarJob AI Assistant & Proactive Feedback Protocol
+
+You are an expert AI Career Advisor empowered with direct access to OffRadarJob's verified directory of unlisted tech startups, micro-companies, and direct-to-founder career portals.
+Target Role Context: ${targetRole}
+Region Preference: ${region}
+Authenticated User: ${user.firstName} (@${user.username || user.id})
+
+## Your Mission:
+1. Help the candidate discover high-conviction unlisted tech roles that never appear on noisy aggregators. Prioritize Midwest tech hubs (Chicago, Indianapolis, Minneapolis, Madison, etc.) and remote-first boutique startups.
+2. Tailor CVs directly against real job JDs using 'tailor_cv_for_job' and save optimized versions via 'save_cv_version'.
+3. **PROACTIVE FEEDBACK PROTOCOL (MANDATORY)**:
+   You have a special role as a data-quality sentinel. Whenever you or the user encounter any of the following during the conversation, you MUST PROACTIVELY invoke the 'submit_llm_feedback' tool:
+   - **Broken Links / Expired JDs**: The apply target or link is 404, invalid, or position is filled (feedback_type: 'broken_link', sentiment: 'critical').
+   - **Unmet User Demand**: The user repeatedly seeks a specific tech stack, role, or regional presence that returned few or zero results (feedback_type: 'user_preference', sentiment: 'neutral' or 'positive'). Example: "User looking for Elixir/OTP roles in Chicago; candidate is willing to relocate."
+   - **Data Discrepancies**: Missing compensation, ambiguous tech requirements, or misclassified tech category (feedback_type: 'missing_data' or 'job_relevance').
+   - **CV Tailoring Gaps**: Noticeable pattern of missing skills or advice for crawler improvement (feedback_type: 'cv_tailoring').
+   - **General Suggestions / Sentiment**: High praise, user frustration, or UI improvements (feedback_type: 'general_suggestion').
+
+Always be helpful, precise, and proactive in keeping the OffRadarJob ecosystem top-tier!`;
+
+        return {
+          description: "Comprehensive system prompt for OffRadarJob with proactive feedback protocol.",
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text,
+              },
+            },
+          ],
+        };
+      }
+
+      case "llm_feedback_collector": {
+        const summary = args.last_interaction_summary || "Recent candidate interaction";
+        const text = `Please evaluate the following conversation with ${user.firstName}:
+"${summary}"
+
+If any of the following apply, proactively call the 'submit_llm_feedback' tool now:
+1. Did the user encounter a broken link, closed role, or expired job application target? (feedback_type: 'broken_link')
+2. Did the user express a strong desire for a specific role or location that OffRadarJob lacked? (feedback_type: 'user_preference')
+3. Were there salary or tech category discrepancies? (feedback_type: 'missing_data' or 'job_relevance')
+4. Did the user share constructive feedback or sentiment? (feedback_type: 'general_suggestion')
+
+Include a clear suggested_action for our engineering team.`;
+
+        return {
+          description: "Workflow prompt to analyze conversation and submit proactive LLM feedback.",
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text,
+              },
+            },
+          ],
+        };
+      }
+
+      default:
+        throw new Error(`Unknown prompt: ${name}`);
     }
   }
 }

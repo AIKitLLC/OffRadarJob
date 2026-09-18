@@ -15,6 +15,11 @@ import {
   CvVersion,
   AuthSession,
   SystemSetting,
+  LlmFeedback,
+  LlmFeedbackSchema,
+  FeedbackType,
+  FeedbackSentiment,
+  FeedbackStatus,
 } from "../types/domain.js";
 import { buildStateSqlCondition, getUsState } from "../utils/us-states.js";
 
@@ -1815,5 +1820,245 @@ export class SystemSettingsRepository {
   }
 }
 
+// -----------------------------------------------------------------------------
+// LLM Feedback Repository (MCP Proactive Feedback & Web UI Feedback)
+// -----------------------------------------------------------------------------
 
+export interface ListFeedbacksOptions {
+  page?: number | undefined;
+  limit?: number | undefined;
+  userId?: string | undefined;
+  type?: string | undefined;
+  sentiment?: string | undefined;
+  status?: string | undefined;
+  search?: string | undefined;
+}
 
+export class LlmFeedbackRepository {
+  constructor(private readonly db: ID1Database) {}
+
+  public async create(feedback: Partial<LlmFeedback> & { userId: string; feedbackType: FeedbackType; comment: string }): Promise<LlmFeedback> {
+    const id = feedback.id || `fb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const now = Date.now();
+    const createdAt = feedback.createdAt || now;
+    const updatedAt = feedback.updatedAt || now;
+    const sentiment = feedback.sentiment || "neutral";
+    const status = feedback.status || "new";
+    const metaStr = typeof feedback.metadata === "string"
+      ? feedback.metadata
+      : JSON.stringify(feedback.metadata ?? {});
+
+    await this.db
+      .prepare(
+        `INSERT INTO llm_feedbacks (
+          id, user_id, feedback_type, sentiment, rating, comment,
+          job_id, company_id, context_summary, suggested_action,
+          metadata, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        id,
+        feedback.userId,
+        feedback.feedbackType,
+        sentiment,
+        feedback.rating ?? null,
+        feedback.comment,
+        feedback.jobId ?? null,
+        feedback.companyId ?? null,
+        feedback.contextSummary ?? null,
+        feedback.suggestedAction ?? null,
+        metaStr,
+        status,
+        createdAt,
+        updatedAt
+      )
+      .run();
+
+    return {
+      id,
+      userId: feedback.userId,
+      feedbackType: feedback.feedbackType,
+      sentiment,
+      rating: feedback.rating,
+      comment: feedback.comment,
+      jobId: feedback.jobId,
+      companyId: feedback.companyId,
+      contextSummary: feedback.contextSummary,
+      suggestedAction: feedback.suggestedAction,
+      metadata: typeof feedback.metadata === "object" && feedback.metadata !== null ? feedback.metadata : {},
+      status,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  public async getById(id: string): Promise<LlmFeedback | null> {
+    const query = `
+      SELECT fb.*, u.username, u.first_name as user_first_name, j.title as job_title, c.name as company_name
+      FROM llm_feedbacks fb
+      LEFT JOIN users u ON fb.user_id = u.id
+      LEFT JOIN jobs j ON fb.job_id = j.id
+      LEFT JOIN companies c ON fb.company_id = c.id
+      WHERE fb.id = ?
+      LIMIT 1
+    `;
+    const row = await this.db.prepare(query).bind(id).first<Record<string, unknown>>();
+    return row ? this.mapRowToFeedback(row) : null;
+  }
+
+  public async listByUser(userId: string, limit = 20): Promise<LlmFeedback[]> {
+    const query = `
+      SELECT fb.*, u.username, u.first_name as user_first_name, j.title as job_title, c.name as company_name
+      FROM llm_feedbacks fb
+      LEFT JOIN users u ON fb.user_id = u.id
+      LEFT JOIN jobs j ON fb.job_id = j.id
+      LEFT JOIN companies c ON fb.company_id = c.id
+      WHERE fb.user_id = ?
+      ORDER BY fb.created_at DESC
+      LIMIT ?
+    `;
+    const res = await this.db.prepare(query).bind(userId, limit).all<Record<string, unknown>>();
+    return (res.results ?? []).map((r) => this.mapRowToFeedback(r));
+  }
+
+  public async listPaged(options: ListFeedbacksOptions = {}): Promise<{
+    items: LlmFeedback[];
+    pagination: { total: number; page: number; limit: number; totalPages: number };
+  }> {
+    const page = Math.max(1, options.page ?? 1);
+    const limit = Math.min(Math.max(1, options.limit ?? 20), 100);
+    const offset = (page - 1) * limit;
+
+    const whereClauses: string[] = ["1=1"];
+    const bindings: unknown[] = [];
+
+    if (options.userId) {
+      whereClauses.push("fb.user_id = ?");
+      bindings.push(options.userId);
+    }
+    if (options.type && options.type !== "all") {
+      whereClauses.push("fb.feedback_type = ?");
+      bindings.push(options.type);
+    }
+    if (options.sentiment && options.sentiment !== "all") {
+      whereClauses.push("fb.sentiment = ?");
+      bindings.push(options.sentiment);
+    }
+    if (options.status && options.status !== "all") {
+      whereClauses.push("fb.status = ?");
+      bindings.push(options.status);
+    }
+    if (options.search) {
+      whereClauses.push("(LOWER(fb.comment) LIKE ? OR LOWER(COALESCE(fb.suggested_action, '')) LIKE ? OR LOWER(COALESCE(fb.context_summary, '')) LIKE ?)");
+      const term = `%${options.search.toLowerCase()}%`;
+      bindings.push(term, term, term);
+    }
+
+    const whereStr = whereClauses.join(" AND ");
+
+    // Count total
+    const countSql = `SELECT COUNT(*) as total FROM llm_feedbacks fb WHERE ${whereStr}`;
+    const countRow = await this.db.prepare(countSql).bind(...bindings).first<{ total: number }>();
+    const total = countRow?.total ?? 0;
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    // Fetch items
+    const fetchSql = `
+      SELECT fb.*, u.username, u.first_name as user_first_name, j.title as job_title, c.name as company_name
+      FROM llm_feedbacks fb
+      LEFT JOIN users u ON fb.user_id = u.id
+      LEFT JOIN jobs j ON fb.job_id = j.id
+      LEFT JOIN companies c ON fb.company_id = c.id
+      WHERE ${whereStr}
+      ORDER BY fb.created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+    const res = await this.db.prepare(fetchSql).bind(...bindings, limit, offset).all<Record<string, unknown>>();
+    const items = (res.results ?? []).map((r) => this.mapRowToFeedback(r));
+
+    return {
+      items,
+      pagination: { total, page, limit, totalPages },
+    };
+  }
+
+  public async updateStatus(id: string, status: FeedbackStatus): Promise<boolean> {
+    const now = Date.now();
+    const res = await this.db
+      .prepare("UPDATE llm_feedbacks SET status = ?, updated_at = ? WHERE id = ?")
+      .bind(status, now, id)
+      .run();
+    const changes = (res.meta as { changes?: number } | undefined)?.changes;
+    return changes != null ? changes > 0 : true;
+  }
+
+  public async delete(id: string): Promise<boolean> {
+    const res = await this.db
+      .prepare("DELETE FROM llm_feedbacks WHERE id = ?")
+      .bind(id)
+      .run();
+    const changes = (res.meta as { changes?: number } | undefined)?.changes;
+    return changes != null ? changes > 0 : true;
+  }
+
+  public async getStats(): Promise<{
+    total: number;
+    newCount: number;
+    criticalCount: number;
+    brokenLinkCount: number;
+    userPrefCount: number;
+    actionedCount: number;
+  }> {
+    const query = `
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END) as new_count,
+        SUM(CASE WHEN sentiment = 'critical' THEN 1 ELSE 0 END) as critical_count,
+        SUM(CASE WHEN feedback_type = 'broken_link' THEN 1 ELSE 0 END) as broken_link_count,
+        SUM(CASE WHEN feedback_type = 'user_preference' THEN 1 ELSE 0 END) as user_pref_count,
+        SUM(CASE WHEN status = 'actioned' THEN 1 ELSE 0 END) as actioned_count
+      FROM llm_feedbacks
+    `;
+    const row = await this.db.prepare(query).first<Record<string, unknown>>();
+    return {
+      total: Number(row?.["total"] ?? 0),
+      newCount: Number(row?.["new_count"] ?? 0),
+      criticalCount: Number(row?.["critical_count"] ?? 0),
+      brokenLinkCount: Number(row?.["broken_link_count"] ?? 0),
+      userPrefCount: Number(row?.["user_pref_count"] ?? 0),
+      actionedCount: Number(row?.["actioned_count"] ?? 0),
+    };
+  }
+
+  private mapRowToFeedback(row: Record<string, unknown>): LlmFeedback {
+    let metadata: Record<string, unknown> = {};
+    try {
+      if (typeof row["metadata"] === "string") {
+        metadata = JSON.parse(row["metadata"]);
+      } else if (typeof row["metadata"] === "object" && row["metadata"] !== null) {
+        metadata = row["metadata"] as Record<string, unknown>;
+      }
+    } catch {}
+
+    return {
+      id: String(row["id"]),
+      userId: String(row["user_id"]),
+      feedbackType: String(row["feedback_type"]) as FeedbackType,
+      sentiment: (row["sentiment"] ? String(row["sentiment"]) : "neutral") as FeedbackSentiment,
+      rating: row["rating"] != null ? Number(row["rating"]) : undefined,
+      comment: String(row["comment"] || ""),
+      jobId: row["job_id"] != null ? String(row["job_id"]) : undefined,
+      companyId: row["company_id"] != null ? String(row["company_id"]) : undefined,
+      contextSummary: row["context_summary"] != null ? String(row["context_summary"]) : undefined,
+      suggestedAction: row["suggested_action"] != null ? String(row["suggested_action"]) : undefined,
+      metadata,
+      status: (row["status"] ? String(row["status"]) : "new") as FeedbackStatus,
+      createdAt: Number(row["created_at"] || 0),
+      updatedAt: Number(row["updated_at"] || 0),
+      username: row["username"] != null ? String(row["username"]) : undefined,
+      userFirstName: row["user_first_name"] != null ? String(row["user_first_name"]) : undefined,
+      jobTitle: row["job_title"] != null ? String(row["job_title"]) : undefined,
+      companyName: row["company_name"] != null ? String(row["company_name"]) : undefined,
+    };
+  }
+}
