@@ -24,6 +24,7 @@ import {
   SubscriptionFrequency,
 } from "../types/domain.js";
 import { buildStateSqlCondition, getUsState } from "../utils/us-states.js";
+import { ignoredSourceSql } from "../utils/source-policy.js";
 
 export const MIDWEST_COMPANY_SQL_CONDITION = `(
   COALESCE(location_hint, '') LIKE '%midwest%' 
@@ -340,7 +341,7 @@ export class CompanyRepository {
   }
 
   public async list(limit = 50, region?: string): Promise<Company[]> {
-    let whereClause = "WHERE 1=1";
+    let whereClause = `WHERE ${ignoredSourceSql("companies")}`;
     if (region === "midwest") {
       whereClause += ` AND ${MIDWEST_COMPANY_SQL_CONDITION}`;
     } else if (region === "west") {
@@ -390,7 +391,7 @@ export class CompanyRepository {
     const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
     const region = options.region && options.region !== "all" ? options.region : null;
 
-    let whereClause = "WHERE 1=1";
+    let whereClause = `WHERE ${ignoredSourceSql("companies")}`;
     const bindings: unknown[] = [];
 
     if (search) {
@@ -465,7 +466,7 @@ export class CompanyRepository {
 
   public async count(): Promise<number> {
     const res = await this.db
-      .prepare("SELECT COUNT(*) as count FROM companies")
+      .prepare(`SELECT COUNT(*) as count FROM companies WHERE ${ignoredSourceSql("companies")}`)
       .first<{ count: number }>();
     return res?.count ?? 0;
   }
@@ -855,7 +856,7 @@ export class JobRepository {
 
   public async findByContentHash(hash: string): Promise<Job | null> {
     const row = await this.db
-      .prepare("SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE j.content_hash = ? LIMIT 1")
+      .prepare(`SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE j.content_hash = ? AND ${ignoredSourceSql("c")} LIMIT 1`)
       .bind(hash)
       .first<Record<string, unknown>>();
 
@@ -865,7 +866,7 @@ export class JobRepository {
 
   public async getById(id: string): Promise<Job | null> {
     const row = await this.db
-      .prepare("SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE j.id = ? LIMIT 1")
+      .prepare(`SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE j.id = ? AND ${ignoredSourceSql("c")} LIMIT 1`)
       .bind(id)
       .first<Record<string, unknown>>();
 
@@ -904,7 +905,7 @@ export class JobRepository {
     const techOnly = options.techOnly !== false ? 1 : 0;
     const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
 
-    let query = "SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE 1=1";
+    let query = `SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")}`;
     const bindings: unknown[] = [];
 
     if (techOnly === 1) {
@@ -978,7 +979,7 @@ export class JobRepository {
     const techOnly = options.techOnly !== false ? 1 : 0;
     const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
 
-    let whereClause = "WHERE 1=1";
+    let whereClause = `WHERE ${ignoredSourceSql("c")}`;
     const bindings: unknown[] = [];
 
     if (techOnly === 1) {
@@ -1113,7 +1114,9 @@ export class JobRepository {
             OR (' ' || COALESCE(location, '') || ' ') LIKE '%, ut %'
             OR (' ' || COALESCE(location, '') || ' ') LIKE '%, az %'
           ) THEN 1 ELSE 0 END) as mountain_count
-        FROM jobs
+        FROM jobs j
+        LEFT JOIN companies c ON j.company_id = c.id
+        WHERE ${ignoredSourceSql("c")}
       `)
       .first<{
         total: number;
@@ -1153,7 +1156,9 @@ export class JobRepository {
           SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) as updated_last_24h,
           SUM(CASE WHEN first_seen_at >= ? THEN 1 ELSE 0 END) as created_last_24h,
           SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) as updated_last_7d
-        FROM jobs
+        FROM jobs j
+        LEFT JOIN companies c ON j.company_id = c.id
+        WHERE ${ignoredSourceSql("c")}
       `)
       .bind(oneDayAgo, oneDayAgo, sevenDaysAgo)
       .first<{
@@ -1173,7 +1178,7 @@ export class JobRepository {
 
   public async count(): Promise<number> {
     const res = await this.db
-      .prepare("SELECT COUNT(*) as count FROM jobs")
+      .prepare(`SELECT COUNT(*) as count FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")}`)
       .first<{ count: number }>();
     return res?.count ?? 0;
   }

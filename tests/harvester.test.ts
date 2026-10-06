@@ -169,6 +169,23 @@ ReactJs, Docker, Django, Python
   });
 
   describe("PublicSourceManager Ingestion & Dispatch", () => {
+    it("should skip profiles sourced from job-board aggregators", async () => {
+      const res = await manager.ingestProfiles([{
+        name: "Adzuna",
+        domain: "adzuna.co.uk",
+        websiteUrl: "https://www.adzuna.co.uk",
+        careersUrl: "https://www.adzuna.co.uk/jobs/careers",
+        techStack: [],
+        socialLinks: {},
+        discoverySource: "seed_list",
+        inlineRoles: [],
+      }]);
+
+      expect(res.importedCompanies).toHaveLength(0);
+      expect(res.directJobsCount).toBe(0);
+      expect(await manager.companyRepo.count()).toBe(0);
+    });
+
     it("should ingest harvested company profiles, direct jobs, and career pages into D1", async () => {
       const profiles: HarvestedCompanyProfile[] = [
         {

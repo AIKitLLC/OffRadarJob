@@ -12,6 +12,7 @@ import {
 } from "../types/domain.js";
 import { ExtractMessage } from "../types/queues.js";
 import { JobRepository, LogRepository, CompanyRepository } from "../db/repositories.js";
+import { isIgnoredSourceDomain } from "../utils/source-policy.js";
 
 const TECH_SKILLS = [
   "TypeScript", "JavaScript", "Python", "Rust", "Go", "Golang", "C++",
@@ -37,6 +38,16 @@ export class JobExtractorAgent extends BaseAgent {
     const targetUrl = msg.careerPageUrl;
 
     try {
+      if (isIgnoredSourceDomain(targetUrl)) {
+        await this.recordLog(
+          targetUrl,
+          "warning",
+          Date.now() - startTime,
+          `Skipped blocked source domain: ${targetUrl}`
+        );
+        return Ok([]);
+      }
+
       const fetchResult = await this.safeFetch(targetUrl, { timeoutMs: 8000 });
       if (!fetchResult.ok) {
         await this.recordLog(

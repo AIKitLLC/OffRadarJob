@@ -1,6 +1,7 @@
 import { ID1Database, ID1PreparedStatement, ID1Result, ID1Response } from "./types.js";
 import { detectUsRegion } from "./repositories.js";
 import { matchesUsState } from "../utils/us-states.js";
+import { isIgnoredSourceDomain } from "../utils/source-policy.js";
 
 /**
  * In-memory ID1Database mock for Node / Vitest testing & standalone simulation.
@@ -98,11 +99,17 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       );
       return endIdx === Infinity ? afterWhere : afterWhere.slice(0, endIdx);
     };
+    const sourcePolicyApplied = (sql: string): boolean => sql.includes("NOT (LOWER(COALESCE(");
+    const visibleCompany = (row: Record<string, unknown>): boolean => !isIgnoredSourceDomain(String(row["domain"] ?? ""));
+    const visibleJob = (row: Record<string, unknown>): boolean => {
+      const company = this.db.tables.get("companies")?.get(String(row["company_id"]));
+      return !isIgnoredSourceDomain(String(company?.["domain"] ?? ""));
+    };
 
     if (q.includes("FROM companies") && q.includes("COUNT(*)")) {
       const rows = Array.from(this.db.tables.get("companies")!.values());
       const wherePart = extractWhereClause(q);
-      let filtered = rows;
+      let filtered = sourcePolicyApplied(q) ? rows.filter(visibleCompany) : rows;
       if (wherePart.includes("LIKE '%california%'") || wherePart.includes("LIKE '%, ca %'")) {
         filtered = filtered.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "west");
       } else if (wherePart.includes("LIKE '%new york%'") || wherePart.includes("LIKE '%, ny %'")) {
@@ -143,6 +150,7 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
 
     if (q.includes("FROM companies")) {
       let rows = Array.from(this.db.tables.get("companies")!.values());
+      if (sourcePolicyApplied(q)) rows = rows.filter(visibleCompany);
       const wherePart = extractWhereClause(q);
       if (wherePart.includes("LIKE '%california%'") || wherePart.includes("LIKE '%, ca %'")) {
         rows = rows.filter((r) => detectUsRegion(null, String(r["location_hint"] ?? ""), null, false) === "west");
@@ -240,22 +248,22 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: results as T[], success: true };
     }
 
-    if (q.includes("FROM jobs") && q.includes("WHERE content_hash = ?")) {
+    if (q.includes("FROM jobs") && (q.includes("WHERE content_hash = ?") || q.includes("WHERE j.content_hash = ?"))) {
       const hash = String(this.boundValues[0]);
       const table = this.db.tables.get("jobs")!;
       for (const row of table.values()) {
-        if (row["content_hash"] === hash) {
+        if (row["content_hash"] === hash && (!sourcePolicyApplied(q) || visibleJob(row))) {
           return { results: [row as T], success: true };
         }
       }
       return { results: [], success: true };
     }
 
-    if (q.includes("FROM jobs") && q.includes("WHERE id = ?")) {
+    if (q.includes("FROM jobs") && (q.includes("WHERE id = ?") || q.includes("WHERE j.id = ?"))) {
       const id = String(this.boundValues[0]);
       const table = this.db.tables.get("jobs")!;
       const row = table.get(id);
-      if (row) {
+      if (row && (!sourcePolicyApplied(q) || visibleJob(row))) {
         const compTable = this.db.tables.get("companies");
         const comp = compTable?.get(String(row["company_id"]));
         const enriched = {
@@ -270,6 +278,7 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
 
     if (q.includes("FROM jobs")) {
       let rows = Array.from(this.db.tables.get("jobs")!.values());
+      if (sourcePolicyApplied(q)) rows = rows.filter(visibleJob);
 
       let bindingIdx = 0;
       if (q.includes("is_tech_role = 1")) {

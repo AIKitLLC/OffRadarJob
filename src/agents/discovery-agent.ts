@@ -2,31 +2,7 @@ import { BaseAgent } from "./base.js";
 import { Result, Ok, Err } from "../types/domain.js";
 import { DiscoveryMessage, ProfileMessage } from "../types/queues.js";
 import { LogRepository } from "../db/repositories.js";
-
-// Blocklist for megacorps & generic job boards - focus only on off-radar micro-companies
-const IGNORED_DOMAINS = new Set([
-  "google.com",
-  "facebook.com",
-  "meta.com",
-  "microsoft.com",
-  "apple.com",
-  "amazon.com",
-  "linkedin.com",
-  "indeed.com",
-  "glassdoor.com",
-  "monster.com",
-  "upwork.com",
-  "fiverr.com",
-  "topcv.vn",
-  "vietnamworks.com",
-  "itviec.com",
-  "github.com",
-  "twitter.com",
-  "x.com",
-  "youtube.com",
-  "wikipedia.org",
-  "reddit.com",
-]);
+import { isIgnoredSourceDomain } from "../utils/source-policy.js";
 
 export class DiscoveryAgent extends BaseAgent {
   public readonly name = "discovery_agent";
@@ -56,12 +32,12 @@ export class DiscoveryAgent extends BaseAgent {
         return Ok([]);
       }
 
-      if (IGNORED_DOMAINS.has(extractedDomain)) {
+      if (isIgnoredSourceDomain(extractedDomain)) {
         await this.recordLog(
           msg.sourceUrl,
           "warning",
           Date.now() - startTime,
-          `Ignored mainstream platform or giant: ${extractedDomain}`
+          `Ignored blocked source domain: ${extractedDomain}`
         );
         return Ok([]);
       }

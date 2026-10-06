@@ -8,6 +8,7 @@ import {
 } from "../db/repositories.js";
 import { PipelineOrchestrator } from "../orchestrator/dispatcher.js";
 import { Company, Job, SeniorityLevel, TechCategory, EmploymentType, ApplyType } from "../types/domain.js";
+import { isIgnoredSourceDomain } from "../utils/source-policy.js";
 
 // -----------------------------------------------------------------------------
 // Public Harvester Domain Types
@@ -745,6 +746,11 @@ export class PublicSourceManager {
     // Deduplicate by domain
     const unique = new Map<string, HarvestedCompanyProfile>();
     for (const p of profiles) {
+      if (
+        isIgnoredSourceDomain(p.domain) ||
+        isIgnoredSourceDomain(p.websiteUrl) ||
+        isIgnoredSourceDomain(p.careersUrl)
+      ) continue;
       if (!unique.has(p.domain)) {
         unique.set(p.domain, p);
       }
@@ -770,6 +776,12 @@ export class PublicSourceManager {
     const now = Date.now();
 
     for (const p of profiles) {
+      if (
+        isIgnoredSourceDomain(p.domain) ||
+        isIgnoredSourceDomain(p.websiteUrl) ||
+        isIgnoredSourceDomain(p.careersUrl)
+      ) continue;
+
       // Reuse existing company ID if already present in DB to avoid FOREIGN KEY constraint failures
       const existingCompany = await this.companyRepo.findByDomain(p.domain);
       const companyId = existingCompany?.id ?? `comp_${p.domain.replace(/[^a-z0-9]/g, "_")}`;

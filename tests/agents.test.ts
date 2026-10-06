@@ -85,6 +85,22 @@ describe("Decoupled Agent Pipeline Suite", () => {
       if (!res.ok) return;
       expect(res.value).toHaveLength(0);
     });
+
+    it("should reject job-board aggregators such as Adzuna", async () => {
+      const agent = new DiscoveryAgent(logRepo);
+      const res = await agent.process({
+        type: "DISCOVER_SEED",
+        traceId: "test_trace_adzuna",
+        source: "seed_list",
+        sourceUrl: "https://www.adzuna.co.uk/jobs/careers",
+        timestamp: Date.now(),
+        retryCount: 0,
+      });
+
+      expect(res.ok).toBe(true);
+      if (!res.ok) return;
+      expect(res.value).toHaveLength(0);
+    });
   });
 
   describe("Agent 2: CompanyProfilerAgent", () => {
