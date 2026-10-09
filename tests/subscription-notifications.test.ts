@@ -52,12 +52,14 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
       name: "37signals",
       domain: "37signals.com",
       websiteUrl: "https://37signals.com",
-      source: "manual",
+      techStack: ["Ruby", "Rails"],
+      socialLinks: {},
+      discoverySource: "manual",
       isMidwest: true,
       usRegion: "midwest",
-      stateCode: "IL",
-      metroArea: "Chicago",
       locationHint: "Chicago, IL",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
 
     await jobRepo.upsert({
@@ -71,8 +73,6 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
       applyTarget: "https://37signals.com/jobs/rails",
       employmentType: "full-time",
       location: "Chicago, IL",
-      locationCity: "Chicago",
-      locationState: "IL",
       isRemote: true,
       remoteScope: "us-only",
       isMidwest: true,
@@ -157,7 +157,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
 
       const activeDaily = await subRepo.listActive("daily");
       expect(activeDaily.length).toBe(1);
-      expect(activeDaily[0].userId).toBe(testUserId);
+      expect(activeDaily[0]!.userId).toBe(testUserId);
 
       const counts = await subRepo.countSubscribers();
       expect(counts.total).toBe(2);
@@ -278,7 +278,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
       const toolNames = res.result.tools.map((t: any) => t.name);
       expect(toolNames).toContain("get_daily_digest");
       expect(toolNames).toContain("manage_job_subscription");
-      expect(toolNames.length).toBe(9);
+      expect(toolNames.length).toBe(12);
     });
 
     it("should execute get_daily_digest tool and return curated openings", async () => {

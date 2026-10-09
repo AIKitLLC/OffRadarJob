@@ -12,21 +12,35 @@ import {
   FeedbackType,
   FeedbackSentiment,
   UserSubscription,
+  TargetGroup,
+  TARGET_GROUPS,
+  RealtimeJdRankingReport,
+  DecisionCvSuggestion,
 } from "../types/domain.js";
+import { JdRerankerService } from "../services/jd-reranker.js";
+import { DecisionApiService } from "../services/decision-api.js";
 
 /**
  * Model Context Protocol (MCP) Server for Off-Radar Jobs
  * Implements JSON-RPC 2.0 protocol for Cursor IDE, Claude Desktop, Antigravity, and other AI agents.
  */
 export class McpServerHandler {
+  private readonly decisionApi: DecisionApiService;
+  private readonly rerankerService: JdRerankerService;
+
   constructor(
     private readonly jobRepo: JobRepository,
     private readonly companyRepo: CompanyRepository,
     private readonly cvRepo?: CvRepository,
     private readonly feedbackRepo?: LlmFeedbackRepository,
     private readonly onFeedbackCreated?: (feedback: LlmFeedback, user: User) => Promise<void>,
-    private readonly subscriptionRepo?: UserSubscriptionRepository
-  ) {}
+    private readonly subscriptionRepo?: UserSubscriptionRepository,
+    decisionApi?: DecisionApiService,
+    rerankerService?: JdRerankerService
+  ) {
+    this.decisionApi = decisionApi || new DecisionApiService();
+    this.rerankerService = rerankerService || new JdRerankerService();
+  }
 
   public async handleJsonRpc(requestBody: any, user: User): Promise<any> {
     const { jsonrpc, id, method, params } = requestBody;
@@ -361,6 +375,63 @@ export class McpServerHandler {
           required: ["action"],
         },
       },
+      {
+        name: "get_realtime_jd_ranking_report",
+        description: "Retrieve the live real-time continuous reranking of all micro-company job descriptions, demand velocity, trending tech skills (+growth %), and target employer group distributions. Use to analyze current market hiring dynamics or select target jobs.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target_group: {
+              type: "string",
+              enum: ["all", "early_stage_startups", "scaleups_growth", "ai_first_innovators", "midwest_regional", "new_grad_junior", "remote_first_boutique"],
+              description: "Filter report by employer target group (default: 'all')",
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of top-ranked JDs to return (default: 10, max: 50)",
+            },
+          },
+        },
+      },
+      {
+        name: "optimize_cv_with_decision_api",
+        description: "Run Cloudflare Decision API / Workers AI on candidate CV to generate concrete additions (thêm) and removals (bớt) tailored to distinct employer target groups. Yields revised markdown CV, key rationale, and projected match score.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target_group: {
+              type: "string",
+              enum: ["early_stage_startups", "scaleups_growth", "ai_first_innovators", "midwest_regional", "new_grad_junior", "remote_first_boutique"],
+              description: "The specific employer segment to optimize this CV version for.",
+            },
+            base_cv_id: {
+              type: "string",
+              description: "Optional ID of an existing saved CV version to use as base.",
+            },
+            custom_cv_content: {
+              type: "string",
+              description: "Optional raw Markdown/text CV if not using base_cv_id.",
+            },
+            save_as_version: {
+              type: "boolean",
+              description: "If true, automatically saves the optimized result as a new CV version in user storage (default: false).",
+            },
+            version_title: {
+              type: "string",
+              description: "Optional custom title for the saved CV version (e.g. 'Jane Doe - Early-Stage Startup CV').",
+            },
+          },
+          required: ["target_group"],
+        },
+      },
+      {
+        name: "list_target_groups",
+        description: "List all employer target groups (Early-Stage Startups, Scale-ups, AI Innovators, Midwest Tech, New Grad, Remote Studios) with key evaluation criteria, recommended keywords, and anti-patterns.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      },
     ];
   }
 
@@ -459,6 +530,9 @@ export class McpServerHandler {
       }
 
       case "list_user_cvs": {
+        if (!this.cvRepo) {
+          return { error: "CV repository is not available on this server instance." };
+        }
         const cvs = await this.cvRepo.listByUser(user.id);
         return {
           user: { telegram: user.username || user.firstName, id: user.id },
@@ -479,6 +553,9 @@ export class McpServerHandler {
       }
 
       case "tailor_cv_for_job": {
+        if (!this.cvRepo) {
+          return { error: "CV repository is not available on this server instance." };
+        }
         const jobId = String(args.job_id);
         const job = await this.jobRepo.getById(jobId);
         if (!job) {
@@ -589,6 +666,9 @@ export class McpServerHandler {
       }
 
       case "save_cv_version": {
+        if (!this.cvRepo) {
+          return { error: "CV repository is not available on this server instance." };
+        }
         const id = args.id || `cv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const now = Date.now();
 
@@ -814,6 +894,125 @@ export class McpServerHandler {
         }
 
         throw new Error(`Invalid action '${action}' for manage_job_subscription. Must be 'get', 'update', or 'toggle'.`);
+      }
+
+      case "get_realtime_jd_ranking_report": {
+        const jobsRes = await this.jobRepo.listPaged({ page: 1, limit: 150, techOnly: true });
+        const compRes = await this.companyRepo.listPaged({ page: 1, limit: 100 });
+        const companiesMap = new Map<string, any>();
+        for (const c of compRes.items) {
+          companiesMap.set(c.id, c);
+        }
+
+        const report = this.rerankerService.generateRealtimeReport(jobsRes.items, companiesMap);
+        const filterGroup = args.target_group;
+        let topJobs = report.topRankedJobs;
+
+        if (filterGroup && filterGroup !== "all") {
+          topJobs = topJobs.filter(
+            (j) => j.rerank.primaryTargetGroup === filterGroup || (j.rerank.targetGroupFit[filterGroup as TargetGroup] || 0) >= 60
+          );
+        }
+
+        const limit = Math.min(Math.max(1, Number(args.limit) || 10), 50);
+        return {
+          generated_at: new Date(report.generatedAt).toISOString(),
+          total_jds_analyzed: report.totalJdsAnalyzed,
+          market_summary: report.marketSummary,
+          target_group_breakdown: report.targetGroupBreakdown,
+          trending_skills: report.trendingSkills,
+          top_ranked_jds: topJobs.slice(0, limit).map(({ job, rerank }) => ({
+            id: job.id,
+            title: job.title,
+            company: job.companyName || job.companyId,
+            composite_score: rerank.compositeScore,
+            trend: rerank.trendDirection,
+            primary_target_group: rerank.primaryTargetGroup,
+            demand_score: rerank.demandScore,
+            freshness_score: rerank.freshnessScore,
+            transparency_score: rerank.transparencyScore,
+            skills: job.skills,
+            salary: job.salaryMin && job.salaryMax ? `$${job.salaryMin.toLocaleString()} - $${job.salaryMax.toLocaleString()}` : "Not Disclosed",
+            apply_target: job.applyTarget,
+          })),
+        };
+      }
+
+      case "optimize_cv_with_decision_api": {
+        const targetGroup = args.target_group as TargetGroup;
+        if (!TARGET_GROUPS[targetGroup]) {
+          return {
+            error: `Invalid target_group '${targetGroup}'. Supported groups: ${Object.keys(TARGET_GROUPS).join(", ")}`,
+          };
+        }
+
+        let baseContent = args.custom_cv_content;
+        if (!baseContent && args.base_cv_id && this.cvRepo) {
+          const baseCv = await this.cvRepo.getById(args.base_cv_id, user.id);
+          if (baseCv) baseContent = baseCv.content;
+        }
+
+        if (!baseContent && this.cvRepo) {
+          const userCvs = await this.cvRepo.listByUser(user.id);
+          if (userCvs.length > 0 && userCvs[0]) {
+            baseContent = userCvs[0].content;
+          }
+        }
+
+        if (!baseContent) {
+          baseContent = `# ${user.firstName} - Software Engineer\n\n## Experience\n- Software Engineer building scalable backend systems, APIs, and cloud services.\n- Worked with modern web technologies and automated testing.\n\n## Skills\nTypeScript, Node.js, Python, PostgreSQL, React, Git, Cloud Services`;
+        }
+
+        // Fetch live jobs for report
+        const jobsRes = await this.jobRepo.listPaged({ page: 1, limit: 100, techOnly: true });
+        const report = this.rerankerService.generateRealtimeReport(jobsRes.items);
+
+        // Run Decision API
+        const decision = await this.decisionApi.optimizeCvForTargetGroup(baseContent, targetGroup, report);
+
+        let savedCv: CvVersion | null = null;
+        if (args.save_as_version && this.cvRepo) {
+          const id = `cv_dec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const title = args.version_title || `${user.firstName} - ${decision.targetGroupName} CV`;
+          const now = Date.now();
+          const cvRecord: CvVersion = {
+            id,
+            userId: user.id,
+            title,
+            targetRole: decision.targetGroupName,
+            targetGroup: targetGroup,
+            content: decision.optimizedCvContent,
+            skills: decision.topDemandedSkillsInSegment,
+            matchScore: decision.projectedMatchScore,
+            tailoredNotes: decision.targetGroupStrategy,
+            decisionSuggestions: decision,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await this.cvRepo.create(cvRecord);
+          savedCv = (await this.cvRepo.getById(id, user.id)) ?? cvRecord;
+        }
+
+        return {
+          success: true,
+          target_group: decision.targetGroup,
+          target_group_name: decision.targetGroupName,
+          current_match_score: `${decision.currentMatchScore}%`,
+          projected_match_score: `${decision.projectedMatchScore}%`,
+          target_group_strategy: decision.targetGroupStrategy,
+          additions: decision.additions,
+          removals: decision.removals,
+          top_demanded_skills_in_segment: decision.topDemandedSkillsInSegment,
+          optimized_cv_content: decision.optimizedCvContent,
+          saved_version_id: savedCv?.id || null,
+        };
+      }
+
+      case "list_target_groups": {
+        return {
+          total_groups: Object.keys(TARGET_GROUPS).length,
+          target_groups: Object.values(TARGET_GROUPS),
+        };
       }
 
       default:

@@ -22,11 +22,22 @@ import {
   HuntMessage,
   ExtractMessage,
 } from "./types/queues.js";
-import { CrawlTaskStatus, User, CvVersion, LlmFeedback, FeedbackStatus, UserSubscription } from "./types/domain.js";
+import {
+  CrawlTaskStatus,
+  User,
+  CvVersion,
+  LlmFeedback,
+  FeedbackStatus,
+  UserSubscription,
+  TargetGroup,
+  TARGET_GROUPS,
+} from "./types/domain.js";
 import { CURATED_SEEDS } from "./seeds/seed-catalogue.js";
 import { PublicSourceManager } from "./harvesters/public-source-harvester.js";
 import { NewGradHarvester } from "./harvesters/newgrad-harvester.js";
 import { SmbHarvester, SMB_CATALOGUE } from "./harvesters/smb-harvester.js";
+import { JdRerankerService } from "./services/jd-reranker.js";
+import { DecisionApiService } from "./services/decision-api.js";
 
 export interface KvNamespace {
   get(key: string, type?: "text" | "json"): Promise<any>;
@@ -37,6 +48,9 @@ export interface KvNamespace {
 export interface Env {
   DB: ID1Database;
   CACHE?: KvNamespace;
+  AI?: {
+    run(model: string, inputs: Record<string, unknown>): Promise<any>;
+  };
   ADMIN_TOKEN?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_BOT_USERNAME?: string;
@@ -285,6 +299,8 @@ export default {
     const feedbackRepo = new LlmFeedbackRepository(env.DB);
     const subscriptionRepo = new UserSubscriptionRepository(env.DB);
     const effectiveConfig = await getEffectiveConfig(env, settingsRepo);
+    const decisionApi = new DecisionApiService({ ai: env.AI });
+    const rerankerService = new JdRerankerService();
     const mcpHandler = new McpServerHandler(
       jobRepo,
       companyRepo,
@@ -305,7 +321,9 @@ export default {
 
         await notifyTelegramAdmin(env, alertLines.join("\n"), effectiveConfig);
       },
-      subscriptionRepo
+      subscriptionRepo,
+      decisionApi,
+      rerankerService
     );
 
     // 1. Public Dashboard UI
@@ -435,6 +453,51 @@ export default {
         headers: {
           "Cache-Control": "public, max-age=30, s-maxage=120, stale-while-revalidate=300",
         },
+      });
+    }
+
+    // 5b. API: Real-time Continuous JD Reranking Report
+    if (path === "/api/reports/realtime-jd-ranking" && request.method === "GET") {
+      const targetGroup = url.searchParams.get("target_group") || "all";
+      const limit = Math.min(Math.max(1, parseInt(url.searchParams.get("limit") || "20")), 100);
+
+      const cacheKey = `report:rerank:live:${targetGroup}:${limit}`;
+      const data = await getOrSetKvCache(env, cacheKey, 180, async () => {
+        const jobsRes = await jobRepo.listPaged({ page: 1, limit: 200, techOnly: true });
+        const compRes = await companyRepo.listPaged({ page: 1, limit: 150 });
+        const companiesMap = new Map<string, any>();
+        for (const c of compRes.items) companiesMap.set(c.id, c);
+
+        const report = rerankerService.generateRealtimeReport(jobsRes.items, companiesMap);
+        let topJobs = report.topRankedJobs;
+        if (targetGroup !== "all") {
+          topJobs = topJobs.filter(
+            (j) => j.rerank.primaryTargetGroup === targetGroup || (j.rerank.targetGroupFit[targetGroup as TargetGroup] || 0) >= 60
+          );
+        }
+
+        return {
+          generatedAt: report.generatedAt,
+          totalJdsAnalyzed: report.totalJdsAnalyzed,
+          marketSummary: report.marketSummary,
+          targetGroupBreakdown: report.targetGroupBreakdown,
+          trendingSkills: report.trendingSkills,
+          topRankedJobs: topJobs.slice(0, limit),
+        };
+      });
+
+      return Response.json(data, {
+        headers: {
+          "Cache-Control": "public, max-age=60, s-maxage=180, stale-while-revalidate=300",
+        },
+      });
+    }
+
+    // 5c. API: Target Groups Directory
+    if (path === "/api/target-groups" && request.method === "GET") {
+      return Response.json({
+        total: Object.keys(TARGET_GROUPS).length,
+        groups: Object.values(TARGET_GROUPS),
       });
     }
 
@@ -1470,6 +1533,66 @@ export default {
       return Response.json({ success: true, analysis: parsed });
     }
 
+    // 9a2. User CV: Optimize via Cloudflare Decision API for Target Groups
+    if (path === "/api/user/cvs/optimize-decision" && request.method === "POST") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+      const body = (await request.json().catch(() => ({}))) as Record<string, any>;
+      const targetGroup = (body.target_group || body.targetGroup || "early_stage_startups") as TargetGroup;
+      if (!TARGET_GROUPS[targetGroup]) {
+        return Response.json({ error: `Invalid targetGroup '${targetGroup}'` }, { status: 400 });
+      }
+
+      let baseContent = body.custom_cv_content || body.customCvContent;
+      if (!baseContent && (body.base_cv_id || body.baseCvId)) {
+        const baseCv = await cvRepo.getById(body.base_cv_id || body.baseCvId, user.id);
+        if (baseCv) baseContent = baseCv.content;
+      }
+      if (!baseContent) {
+        const userCvs = await cvRepo.listByUser(user.id);
+        if (userCvs.length > 0 && userCvs[0]) {
+          baseContent = userCvs[0].content;
+        }
+      }
+      if (!baseContent) {
+        baseContent = `# ${user.firstName} - Software Engineer\n\n## Experience\n- Full Stack Software Engineer.\n\n## Skills\nTypeScript, Node.js, Python, PostgreSQL`;
+      }
+
+      const jobsRes = await jobRepo.listPaged({ page: 1, limit: 120, techOnly: true });
+      const report = rerankerService.generateRealtimeReport(jobsRes.items);
+      const decision = await decisionApi.optimizeCvForTargetGroup(baseContent, targetGroup, report);
+
+      let savedCv = null;
+      if (body.save_as_version || body.saveAsVersion) {
+        const id = `cv_dec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const title = body.version_title || body.versionTitle || `${user.firstName} - ${decision.targetGroupName} CV`;
+        const now = Date.now();
+        const cvRecord = {
+          id,
+          userId: user.id,
+          title,
+          targetRole: decision.targetGroupName,
+          targetGroup,
+          content: decision.optimizedCvContent,
+          skills: decision.topDemandedSkillsInSegment,
+          matchScore: decision.projectedMatchScore,
+          tailoredNotes: decision.targetGroupStrategy,
+          decisionSuggestions: decision,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await cvRepo.create(cvRecord);
+        savedCv = await cvRepo.getById(id, user.id);
+      }
+
+      return Response.json({
+        success: true,
+        decision,
+        savedCv,
+      });
+    }
+
     // 9b. User Feedbacks API (View & Submit Feedbacks directly or from extensions)
     if (path === "/api/user/feedbacks" && request.method === "GET") {
       const user = await getAuthenticatedUser(request, userRepo);
@@ -2089,6 +2212,33 @@ export default {
       const jobId = jobDeleteMatch[1]!;
       await jobRepo.delete(jobId);
       return Response.json({ success: true, id: jobId, deleted: true });
+    }
+
+    // 12b. Admin API: Continuous JD Reranker Trigger
+    if (path === "/api/admin/rerank" && request.method === "POST") {
+      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      const jobsRes = await jobRepo.listPaged({ page: 1, limit: 250, techOnly: true });
+      const compRes = await companyRepo.listPaged({ page: 1, limit: 150 });
+      const companiesMap = new Map<string, any>();
+      for (const c of compRes.items) companiesMap.set(c.id, c);
+
+      const report = rerankerService.generateRealtimeReport(jobsRes.items, companiesMap);
+
+      if (env.CACHE && typeof env.CACHE.put === "function") {
+        await env.CACHE.put("cache_realtime_jd_ranking_report", JSON.stringify(report), { expirationTtl: 600 });
+      }
+
+      return Response.json({
+        success: true,
+        message: "Continuous JD Reranker executed successfully.",
+        totalAnalyzed: report.totalJdsAnalyzed,
+        topJob: report.topRankedJobs[0]?.job.title || "None",
+        trendingSkillsCount: report.trendingSkills.length,
+        targetGroupBreakdown: report.targetGroupBreakdown,
+      });
     }
 
     // 13. Admin API: Harvest from Hacker News "Who is Hiring"

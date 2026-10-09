@@ -826,6 +826,7 @@ export function renderDashboardHtml(): string {
       <div class="nav-tabs">
         <button class="tab-btn active" onclick="switchTab('jobs')">Gathered Tech Jobs</button>
         <button class="tab-btn" onclick="switchTab('companies')">Micro-Companies Directory</button>
+        <button class="tab-btn" onclick="switchTab('rerank')">⚡ Real-time JD Ranking & Decision CV</button>
         <button class="tab-btn" onclick="switchTab('telemetry')">Agent Telemetry & Logs</button>
       </div>
       <div class="filter-controls">
@@ -948,6 +949,184 @@ export function renderDashboardHtml(): string {
         <p style="color: var(--text-muted); padding: 32px; text-align: center; grid-column: 1/-1;">Click to load companies directory...</p>
       </div>
       <div id="companies-pagination" class="pagination-bar"></div>
+    </div>
+
+    <!-- Tab 4: Real-time JD Reranking Report & Cloudflare Decision CV Optimizer -->
+    <div id="tab-rerank" class="tab-content">
+      <!-- Live Real-Time Banner & Stats -->
+      <div style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(168, 85, 247, 0.1)); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+          <div>
+            <h3 style="font-size: 18px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px;">
+              <span>⚡ Continuous Job Description Reranking</span>
+              <span class="status-badge" style="font-size: 11px; padding: 3px 10px;"><span class="status-dot"></span> REAL-TIME EDGE PULSE</span>
+            </h3>
+            <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;" id="rerank-market-summary">
+              Analyzing real-time market demand velocity, freshness decay, and target employer groups.
+            </p>
+          </div>
+          <button onclick="fetchRealtimeRerankReport()" class="region-select" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); cursor: pointer; padding: 8px 16px; font-weight: 600;">
+            🔄 Refresh Ranking
+          </button>
+        </div>
+
+        <!-- Metric Pulse Cards -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;">Total Analyzed JDs</div>
+            <div style="font-size: 22px; font-weight: 700; color: #38bdf8; margin-top: 4px;" id="rerank-stat-total">—</div>
+          </div>
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;">Top Demanded Stack</div>
+            <div style="font-size: 16px; font-weight: 600; color: #a855f7; margin-top: 6px;" id="rerank-stat-top-skill">—</div>
+          </div>
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); border-radius: 8px; padding: 12px 16px;">
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;">Leading Employer Group</div>
+            <div style="font-size: 16px; font-weight: 600; color: #34d399; margin-top: 6px;" id="rerank-stat-top-group">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trending Skills Bar -->
+      <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
+        <div style="font-size: 13px; font-weight: 700; color: #e2e8f0; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+          <span>📈 High-Demand Keywords & Skills Velocity Across JDs:</span>
+        </div>
+        <div id="rerank-trending-skills" style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <span style="color: var(--text-muted); font-size: 12px;">Loading trending skills...</span>
+        </div>
+      </div>
+
+      <!-- CV Optimization Tool Section (Decision API) -->
+      <div style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(56, 189, 248, 0.08)); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h4 style="font-size: 16px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px;">
+              <span>🎯 Cloudflare Decision API — Multi-Version CV Optimizer</span>
+              <span style="font-size: 11px; background: rgba(168, 85, 247, 0.2); color: #c084fc; padding: 2px 8px; border-radius: 6px; font-weight: 600;">AI DECISION ENGINE</span>
+            </h4>
+            <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+              Suggests precise additions (thêm) and removals (bớt) into your CV tailored to specific employer target groups.
+            </p>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">
+              1. Chọn Target Group (Nhóm nhà tuyển dụng mục tiêu):
+            </label>
+            <select id="decision-target-group" class="region-select" style="width: 100%; padding: 10px;">
+              <option value="early_stage_startups">🚀 Early-Stage Startups & Stealth (Agility, Full-stack, MVP)</option>
+              <option value="scaleups_growth">💎 High-Growth Scale-Ups (Distributed Systems, Scale, CI/CD)</option>
+              <option value="ai_first_innovators">🤖 AI-First & LLM Innovators (Workers AI, Agents, MCP, RAG)</option>
+              <option value="midwest_regional">🌾 US-Midwest Regional Tech (Chicago, Stability, Clean Code)</option>
+              <option value="new_grad_junior">🌱 New Grad & Junior Tech (CS Foundations, Projects, Learning)</option>
+              <option value="remote_first_boutique">🏠 Remote-First Boutique Studios (Async, Craftsmanship)</option>
+            </select>
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">
+              2. Sử dụng CV Base:
+            </label>
+            <select id="decision-base-cv" class="region-select" style="width: 100%; padding: 10px;" onchange="onDecisionBaseCvChange()">
+              <option value="sample">📝 Mẫu CV chuẩn (Default Template)</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">
+            Nội dung CV hiện tại (Markdown):
+          </label>
+          <textarea id="decision-cv-content" style="width: 100%; height: 130px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--card-border); border-radius: 8px; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 10px; resize: vertical;" placeholder="# Nguyễn Văn A - Software Engineer&#10;&#10;## Experience&#10;- Software Engineer building web apps...&#10;&#10;## Skills&#10;TypeScript, React, Python, Docker"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+          <button id="btn-run-decision" onclick="runDecisionOptimization()" class="region-select" style="background: linear-gradient(135deg, #38bdf8, #a855f7); color: #fff; font-weight: 700; border: none; padding: 10px 24px; cursor: pointer; border-radius: 8px;">
+            ⚡ Phân tích & Tối ưu bằng Decision API
+          </button>
+          <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer;">
+            <input type="checkbox" id="decision-save-checkbox" checked /> Tự động lưu phiên bản mới vào kho CV của tôi
+          </label>
+        </div>
+
+        <!-- Decision Results Container -->
+        <div id="decision-results-container" style="display: none; margin-top: 20px; border-top: 1px solid rgba(168, 85, 247, 0.2); padding-top: 20px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 16px;">
+            <!-- Match Score Box -->
+            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--card-border); border-radius: 10px; padding: 16px;">
+              <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Dự báo điểm khớp hồ sơ (Match Score)</div>
+              <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 8px;">
+                <span style="font-size: 28px; font-weight: 800; color: #94a3b8;" id="decision-current-score">55%</span>
+                <span style="font-size: 18px; color: var(--text-muted);">➔</span>
+                <span style="font-size: 32px; font-weight: 800; color: #34d399;" id="decision-projected-score">94%</span>
+              </div>
+              <div style="font-size: 12px; color: #34d399; margin-top: 4px;">🚀 Tăng khả năng qua vòng lọc sơ loại của target group!</div>
+            </div>
+
+            <!-- Strategy Box -->
+            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--card-border); border-radius: 10px; padding: 16px;">
+              <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Chiến lược định vị hồ sơ</div>
+              <p style="font-size: 13px; color: #cbd5e1; margin-top: 8px; line-height: 1.5;" id="decision-strategy-text"></p>
+            </div>
+          </div>
+
+          <!-- Additions (Thêm) & Removals (Bớt) Cards -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+            <!-- Additions -->
+            <div style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 16px;">
+              <h5 style="color: #34d399; font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                <span>✅ NÊN THÊM VÀO CV (Additions):</span>
+              </h5>
+              <div id="decision-additions-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            </div>
+
+            <!-- Removals -->
+            <div style="background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 16px;">
+              <h5 style="color: #f87171; font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                <span>❌ NÊN LƯỢC BỚT KHỎI CV (Removals):</span>
+              </h5>
+              <div id="decision-removals-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            </div>
+          </div>
+
+          <!-- Optimized CV Preview -->
+          <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--card-border); border-radius: 10px; padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <span style="font-size: 13px; font-weight: 700; color: #fff;">📄 Nội dung CV hoàn chỉnh sau tối ưu (Markdown):</span>
+              <button onclick="copyOptimizedCv()" class="region-select" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); cursor: pointer; padding: 4px 12px; font-size: 12px;">
+                📋 Copy CV Markdown
+              </button>
+            </div>
+            <textarea id="decision-optimized-output" style="width: 100%; height: 180px; background: #0b1120; border: 1px solid var(--card-border); border-radius: 8px; color: #a5f3fc; font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 10px; resize: vertical;" readonly></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time Top Ranked JDs Table -->
+      <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+          <h4 style="font-size: 16px; font-weight: 700; color: #fff;">
+            🏆 Bảng xếp hạng Real-Time Job Descriptions (Top Micro-Companies)
+          </h4>
+          <div style="display: flex; gap: 8px;">
+            <select id="rerank-group-filter" class="region-select" onchange="onRerankGroupFilterChange()">
+              <option value="all">Tất cả Target Groups</option>
+              <option value="early_stage_startups">🚀 Early-Stage Startups</option>
+              <option value="scaleups_growth">💎 Scale-Ups</option>
+              <option value="ai_first_innovators">🤖 AI-First Innovators</option>
+              <option value="midwest_regional">🌾 US-Midwest Tech</option>
+              <option value="new_grad_junior">🌱 New Grad & Junior</option>
+              <option value="remote_first_boutique">🏠 Remote Boutique</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="rerank-jobs-container" style="display: flex; flex-direction: column; gap: 12px;">
+          <p style="color: var(--text-muted); text-align: center; padding: 24px;">Click to load real-time ranking...</p>
+        </div>
+      </div>
     </div>
 
     <div id="tab-telemetry" class="tab-content">
@@ -1703,6 +1882,233 @@ export function renderDashboardHtml(): string {
       if (tab === 'companies' && !companiesLoaded) {
         fetchCompanies(1);
       }
+
+      if (tab === 'rerank' && !rerankLoaded) {
+        fetchRealtimeRerankReport();
+      }
+    }
+
+    // Real-time Reranking & Decision CV State
+    let rerankLoaded = false;
+    let currentRerankReport = null;
+
+    async function fetchRealtimeRerankReport(targetGroup) {
+      const group = targetGroup || document.getElementById('rerank-group-filter')?.value || 'all';
+      const container = document.getElementById('rerank-jobs-container');
+      if (container) {
+        container.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">🔄 Fetching real-time reranked JDs from Edge...</p>';
+      }
+
+      try {
+        const res = await fetch('/api/reports/realtime-jd-ranking?target_group=' + encodeURIComponent(group) + '&limit=25');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        currentRerankReport = data;
+        rerankLoaded = true;
+        renderRerankReport(data);
+      } catch (err) {
+        console.error('Failed to load rerank report:', err);
+        if (container) {
+          container.innerHTML = '<p style="color: var(--danger); text-align: center; padding: 24px;">Failed to load real-time ranking report: ' + err.message + '</p>';
+        }
+      }
+    }
+
+    function onRerankGroupFilterChange() {
+      const val = document.getElementById('rerank-group-filter')?.value || 'all';
+      fetchRealtimeRerankReport(val);
+    }
+
+    function renderRerankReport(data) {
+      if (!data) return;
+
+      const totalEl = document.getElementById('rerank-stat-total');
+      const topSkillEl = document.getElementById('rerank-stat-top-skill');
+      const topGroupEl = document.getElementById('rerank-stat-top-group');
+      const summaryEl = document.getElementById('rerank-market-summary');
+
+      if (totalEl) totalEl.innerText = String(data.totalJdsAnalyzed || 0);
+      if (summaryEl && data.marketSummary) summaryEl.innerText = data.marketSummary;
+
+      if (data.trendingSkills && data.trendingSkills.length > 0) {
+        if (topSkillEl) {
+          topSkillEl.innerText = data.trendingSkills[0].skill + ' (' + data.trendingSkills[0].demandGrowth + ')';
+        }
+        const skillsContainer = document.getElementById('rerank-trending-skills');
+        if (skillsContainer) {
+          skillsContainer.innerHTML = data.trendingSkills.map(function(s) {
+            return '<span style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">' +
+              escapeHtml(s.skill) + ' <span style="color: #34d399; font-size: 10px; font-weight: 700;">' + escapeHtml(s.demandGrowth) + '</span></span>';
+          }).join('');
+        }
+      }
+
+      if (data.targetGroupBreakdown && topGroupEl) {
+        const topGrpEntry = Object.entries(data.targetGroupBreakdown).sort((a, b) => b[1].count - a[1].count)[0];
+        if (topGrpEntry) {
+          const names = {
+            early_stage_startups: '🚀 Early-Stage Startups',
+            scaleups_growth: '💎 Scale-Ups',
+            ai_first_innovators: '🤖 AI-First',
+            midwest_regional: '🌾 US-Midwest Tech',
+            new_grad_junior: '🌱 New Grad',
+            remote_first_boutique: '🏠 Remote Boutique'
+          };
+          topGroupEl.innerText = (names[topGrpEntry[0]] || topGrpEntry[0]) + ' (' + topGrpEntry[1].count + ')';
+        }
+      }
+
+      const container = document.getElementById('rerank-jobs-container');
+      if (!container) return;
+
+      const jobs = data.topRankedJobs || [];
+      if (jobs.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 32px;">No JDs found matching this target group.</p>';
+        return;
+      }
+
+      container.innerHTML = jobs.map(function(item, idx) {
+        var j = item.job;
+        var r = item.rerank;
+        var rank = idx + 1;
+        var trendIcon = r.trendDirection === 'trending_up' ? '▲ Up' : (r.trendDirection === 'cooling' ? '▼ Cooling' : '● Stable');
+        var trendColor = r.trendDirection === 'trending_up' ? '#34d399' : (r.trendDirection === 'cooling' ? '#f87171' : '#94a3b8');
+        var salaryText = j.salaryMin && j.salaryMax ? ('$' + j.salaryMin.toLocaleString() + ' - $' + j.salaryMax.toLocaleString()) : (j.salaryMin ? ('$' + j.salaryMin.toLocaleString() + '+') : 'Not Disclosed');
+
+        return '<div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); border-radius: 10px; padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">' +
+          '<div style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 280px;">' +
+            '<div style="background: linear-gradient(135deg, #38bdf8, #a855f7); color: #000; font-weight: 800; font-size: 14px; width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">#' + rank + '</div>' +
+            '<div>' +
+              '<div style="font-size: 15px; font-weight: 700; color: #fff;">' + escapeHtml(j.title) + '</div>' +
+              '<div style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">' +
+                '🏢 <strong style="color: #cbd5e1;">' + escapeHtml(j.companyName || j.companyId) + '</strong> • 📍 ' + (j.isRemote ? 'Remote' : escapeHtml(j.location || 'US')) + ' • 💰 <span style="color: #34d399; font-weight: 600;">' + salaryText + '</span>' +
+              '</div>' +
+              '<div style="display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;">' +
+                '<span style="background: rgba(168, 85, 247, 0.15); color: #c084fc; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Group: ' + r.primaryTargetGroup + '</span>' +
+                '<span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Demand: ' + r.demandScore + '/100</span>' +
+                '<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 11px; padding: 2px 8px; border-radius: 4px;">Freshness: ' + r.freshnessScore + '/100</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display: flex; align-items: center; gap: 16px;">' +
+            '<div style="text-align: right;">' +
+              '<div style="font-size: 20px; font-weight: 800; color: #38bdf8;">' + r.compositeScore + ' <span style="font-size: 12px; color: var(--text-muted);">/100</span></div>' +
+              '<div style="font-size: 11px; font-weight: 700; color: ' + trendColor + ';">' + trendIcon + '</div>' +
+            '</div>' +
+            '<a href="' + escapeHtml(j.applyTarget) + '" target="_blank" rel="noopener noreferrer" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 8px 14px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-block;">Direct Apply ↗</a>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    function onDecisionBaseCvChange() {
+      const select = document.getElementById('decision-base-cv');
+      const cvId = select?.value;
+      if (!cvId || cvId === 'sample') {
+        document.getElementById('decision-cv-content').value = 
+          "# " + (currentUser?.firstName || "Candidate") + " - Software Engineer\\n\\n## Experience\\n- Software Engineer building scalable web applications, REST APIs, and backend microservices.\\n- Experienced with automated testing and relational databases.\\n\\n## Skills\\nTypeScript, Node.js, Python, PostgreSQL, React, Docker, Git";
+        return;
+      }
+
+      const cv = userCvsList.find(c => c.id === cvId);
+      if (cv) {
+        document.getElementById('decision-cv-content').value = cv.content;
+      }
+    }
+
+    let lastOptimizedCvMarkdown = '';
+
+    async function runDecisionOptimization() {
+      const btn = document.getElementById('btn-run-decision');
+      const targetGroup = document.getElementById('decision-target-group')?.value || 'early_stage_startups';
+      const content = document.getElementById('decision-cv-content')?.value.trim();
+      const saveAsVersion = document.getElementById('decision-save-checkbox')?.checked ?? true;
+      const baseCvId = document.getElementById('decision-base-cv')?.value;
+
+      if (!content) {
+        alert('Vui lòng nhập hoặc chọn nội dung CV cần tối ưu!');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = '⏳ Đang chạy Cloudflare Decision API...';
+
+      try {
+        const payload = {
+          target_group: targetGroup,
+          custom_cv_content: content,
+          base_cv_id: baseCvId !== 'sample' ? baseCvId : undefined,
+          save_as_version: saveAsVersion,
+        };
+
+        const res = await fetch('/api/user/cvs/optimize-decision', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload),
+        });
+
+        if (res.status === 401) {
+          openLoginModal();
+          throw new Error('Vui lòng đăng nhập qua Telegram Bot để lưu và tối ưu CV!');
+        }
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'HTTP ' + res.status);
+        }
+
+        const data = await res.json();
+        const decision = data.decision;
+        lastOptimizedCvMarkdown = decision.optimizedCvContent;
+
+        // Render Results
+        document.getElementById('decision-results-container').style.display = 'block';
+        document.getElementById('decision-current-score').innerText = decision.currentMatchScore + '%';
+        document.getElementById('decision-projected-score').innerText = decision.projectedMatchScore + '%';
+        document.getElementById('decision-strategy-text').innerText = decision.targetGroupStrategy;
+
+        // Additions
+        const addsEl = document.getElementById('decision-additions-list');
+        if (addsEl) {
+          addsEl.innerHTML = (decision.additions || []).map(function(a) {
+            return '<div style="background: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 8px 12px; border-radius: 4px;">' +
+              '<div style="font-weight: 700; color: #6ee7b7; font-size: 13px;">' + escapeHtml(a.item) + '</div>' +
+              '<div style="color: var(--text-muted); font-size: 11px; margin-top: 2px;">💡 ' + escapeHtml(a.rationale) + '</div>' +
+            '</div>';
+          }).join('') || '<div style="color: var(--text-muted); font-size: 12px;">Hồ sơ đã bao quát tốt các kĩ năng của nhóm này.</div>';
+        }
+
+        // Removals
+        const remsEl = document.getElementById('decision-removals-list');
+        if (remsEl) {
+          remsEl.innerHTML = (decision.removals || []).map(function(r) {
+            return '<div style="background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 8px 12px; border-radius: 4px;">' +
+              '<div style="font-weight: 700; color: #fca5a5; font-size: 13px;">' + escapeHtml(r.item) + '</div>' +
+              '<div style="color: var(--text-muted); font-size: 11px; margin-top: 2px;">⚠️ ' + escapeHtml(r.rationale) + '</div>' +
+            '</div>';
+          }).join('') || '<div style="color: var(--text-muted); font-size: 12px;">Không phát hiện công nghệ lỗi thời hoặc từ ngữ thừa.</div>';
+        }
+
+        // Output markdown
+        document.getElementById('decision-optimized-output').value = decision.optimizedCvContent;
+
+        if (data.savedCv) {
+          fetchUserCvs();
+        }
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '⚡ Phân tích & Tối ưu bằng Decision API';
+      }
+    }
+
+    function copyOptimizedCv() {
+      const output = document.getElementById('decision-optimized-output')?.value;
+      if (!output) return;
+      navigator.clipboard.writeText(output).then(() => {
+        alert('Đã sao chép nội dung CV tối ưu vào Clipboard!');
+      });
     }
 
     // User & MCP State
@@ -2144,6 +2550,15 @@ export function renderDashboardHtml(): string {
           const headerBadge = document.getElementById('cv-header-count');
           if (headerBadge) headerBadge.innerText = String(userCvsList.length);
           renderCvsList();
+
+          const decisionSelect = document.getElementById('decision-base-cv');
+          if (decisionSelect) {
+            let opts = '<option value="sample">📝 Mẫu CV chuẩn (Default Template)</option>';
+            for (const cv of userCvsList) {
+              opts += '<option value="' + cv.id + '">' + escapeHtml(cv.title) + '</option>';
+            }
+            decisionSelect.innerHTML = opts;
+          }
         }
       } catch (err) {
         console.warn('Error fetching user CVs:', err);

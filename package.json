@@ -2,6 +2,12 @@
   "name": "off-radar-job-gatherer",
   "version": "1.0.0",
   "description": "Decoupled asynchronous agent pipeline for gathering jobs from micro-companies on Cloudflare",
+  "license": "MIT",
+  "author": "AIKit LLC & Tuan Nguyen <tuannx87@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AIKitLLC/OffRadarJob.git"
+  },
   "main": "src/index.ts",
   "type": "module",
   "scripts": {

@@ -1039,20 +1039,35 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
 
     // INSERT cv_versions
     if (q.includes("INTO cv_versions")) {
-      const [
-        id, userId, jobId, title, targetRole, content,
-        skills, matchScore, tailoredNotes, createdAt, updatedAt
-      ] = this.boundValues;
+      let id: unknown, userId: unknown, jobId: unknown, title: unknown;
+      let targetRole: unknown, targetGroup: unknown, content: unknown;
+      let skills: unknown, matchScore: unknown, tailoredNotes: unknown;
+      let decisionSuggestions: unknown, createdAt: unknown, updatedAt: unknown;
+
+      if (this.boundValues.length === 13) {
+        [
+          id, userId, jobId, title, targetRole, targetGroup, content,
+          skills, matchScore, tailoredNotes, decisionSuggestions, createdAt, updatedAt
+        ] = this.boundValues;
+      } else {
+        [
+          id, userId, jobId, title, targetRole, content,
+          skills, matchScore, tailoredNotes, createdAt, updatedAt
+        ] = this.boundValues;
+      }
+
       const record: Record<string, unknown> = {
         id: String(id),
         user_id: String(userId),
         job_id: jobId ? String(jobId) : null,
         title: String(title),
         target_role: targetRole ? String(targetRole) : null,
+        target_group: targetGroup ? String(targetGroup) : null,
         content: String(content),
         skills: String(skills ?? "[]"),
         match_score: matchScore !== undefined && matchScore !== null ? Number(matchScore) : null,
         tailored_notes: tailoredNotes ? String(tailoredNotes) : null,
+        decision_suggestions: decisionSuggestions ? String(decisionSuggestions) : null,
         created_at: Number(createdAt),
         updated_at: Number(updatedAt),
       };
@@ -1070,10 +1085,12 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         let valIdx = 0;
         if (q.includes("title = ?")) row["title"] = String(this.boundValues[valIdx++]);
         if (q.includes("target_role = ?")) row["target_role"] = this.boundValues[valIdx++] ?? null;
+        if (q.includes("target_group = ?")) row["target_group"] = this.boundValues[valIdx++] ?? null;
         if (q.includes("content = ?")) row["content"] = String(this.boundValues[valIdx++]);
         if (q.includes("skills = ?")) row["skills"] = String(this.boundValues[valIdx++]);
         if (q.includes("match_score = ?")) row["match_score"] = this.boundValues[valIdx++] ?? null;
         if (q.includes("tailored_notes = ?")) row["tailored_notes"] = this.boundValues[valIdx++] ?? null;
+        if (q.includes("decision_suggestions = ?")) row["decision_suggestions"] = this.boundValues[valIdx++] ?? null;
         if (q.includes("job_id = ?")) row["job_id"] = this.boundValues[valIdx++] ?? null;
         row["updated_at"] = Date.now();
       }

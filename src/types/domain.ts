@@ -269,10 +269,12 @@ export const CvVersionSchema = z.object({
   jobId: z.string().nullable().optional(),
   title: z.string().min(1),
   targetRole: z.string().nullable().optional(),
+  targetGroup: z.string().nullable().optional(),
   content: z.string().min(1),
   skills: z.array(z.string()).default([]),
   matchScore: z.number().int().min(0).max(100).nullable().optional(),
   tailoredNotes: z.string().nullable().optional(),
+  decisionSuggestions: z.unknown().nullable().optional(),
   createdAt: z.number().int().positive(),
   updatedAt: z.number().int().positive(),
   jobTitle: z.string().nullable().optional(),
@@ -371,5 +373,134 @@ export const UserSubscriptionSchema = z.object({
   updatedAt: z.number().int().positive(),
 });
 export type UserSubscription = z.infer<typeof UserSubscriptionSchema>;
+
+// -----------------------------------------------------------------------------
+// Target Groups, Real-time JD Reranking & Decision CV Optimization
+// -----------------------------------------------------------------------------
+
+export const TargetGroupEnum = z.enum([
+  "early_stage_startups",   // High agility, autonomy, full-stack prototyping, equity
+  "scaleups_growth",        // Microservices, high throughput, distributed systems, CI/CD
+  "ai_first_innovators",    // LLMs, MCP, vector retrieval, Python/TypeScript inference, RAG
+  "midwest_regional",       // US-Midwest tech hubs (Chicago, Minneapolis, Columbus, Indianapolis)
+  "new_grad_junior",        // Entry-level, strong computer science fundamentals, mentorship
+  "remote_first_boutique",  // Async communication, self-starter, small distributed teams
+]);
+export type TargetGroup = z.infer<typeof TargetGroupEnum>;
+
+export interface TargetGroupProfile {
+  id: TargetGroup;
+  name: string;
+  description: string;
+  keyAttributes: string[];
+  recommendedKeywords: string[];
+  avoidKeywords: string[];
+}
+
+export const TARGET_GROUPS: Record<TargetGroup, TargetGroupProfile> = {
+  early_stage_startups: {
+    id: "early_stage_startups",
+    name: "Early-Stage Startups & Stealth",
+    description: "Fast-moving early-stage venture & bootstrapped companies looking for agile generalists who ship quickly and take ownership.",
+    keyAttributes: ["Product velocity", "Full-stack ownership", "Rapid prototyping", "Ambiguity tolerance"],
+    recommendedKeywords: ["0-to-1", "TypeScript", "MVP", "Cloudflare Workers", "PostgreSQL", "Fullstack", "User feedback", "Fast iteration"],
+    avoidKeywords: ["Enterprise committee", "Legacy Waterfall", "Slow release cycles", "Narrow specialization"],
+  },
+  scaleups_growth: {
+    id: "scaleups_growth",
+    name: "High-Growth Scale-Ups",
+    description: "Series B/C scale-ups prioritizing resilient distributed architecture, reliability, throughput, and automated testing.",
+    keyAttributes: ["System design", "High throughput", "Observability", "Microservices", "Scalability"],
+    recommendedKeywords: ["Distributed systems", "Kafka", "PostgreSQL", "Kubernetes", "Redis", "Microservices", "Latency reduction", "CI/CD"],
+    avoidKeywords: ["Manual deployments", "Hacky workarounds", "Solo unreviewed commits"],
+  },
+  ai_first_innovators: {
+    id: "ai_first_innovators",
+    name: "AI-First & LLM Innovators",
+    description: "Cutting-edge AI application builders deploying generative AI, autonomous agent loops, RAG, and MCP servers.",
+    keyAttributes: ["LLM integration", "Agent pipelines", "Vector search", "Prompt engineering", "Workers AI"],
+    recommendedKeywords: ["Workers AI", "LLM", "Model Context Protocol (MCP)", "Embeddings", "Vector search", "Python", "RAG", "Agentic workflows"],
+    avoidKeywords: ["Legacy SOAP", "Static scripts only", "Obsolete NLP libraries"],
+  },
+  midwest_regional: {
+    id: "midwest_regional",
+    name: "US-Midwest Regional Tech",
+    description: "High-stability engineering hubs in Illinois, Minnesota, Ohio, Indiana, and Wisconsin with strong engineering culture.",
+    keyAttributes: ["Long-term value", "Strong culture", "Pragmatic engineering", "Competitive compensation"],
+    recommendedKeywords: ["Chicago tech", "TypeScript", "Java / Spring", "Go", "Cloud Native", "Reliable engineering", "Clean architecture"],
+    avoidKeywords: ["Silicon Valley hype words", "Unstable pivots"],
+  },
+  new_grad_junior: {
+    id: "new_grad_junior",
+    name: "New Grad & Junior Tech",
+    description: "Early-career tech talent highlighting CS foundations, projects, curiosity, and rapid learning capacity.",
+    keyAttributes: ["Foundational CS", "Project portfolio", "Fast learning", "Team collaboration"],
+    recommendedKeywords: ["Algorithms", "Data structures", "Git", "TypeScript", "REST APIs", "Automated tests", "Capstone project"],
+    avoidKeywords: ["Overblown senior leadership claims", "Generic filler text without concrete code links"],
+  },
+  remote_first_boutique: {
+    id: "remote_first_boutique",
+    name: "Remote-First Boutique Studios",
+    description: "Async-first, high-autonomy teams valuing written communication, craft, and minimalist architectures.",
+    keyAttributes: ["Async communication", "Documentation", "Craftsmanship", "Self-starter"],
+    recommendedKeywords: ["Async-first", "Documentation", "Edge computing", "Performance tuning", "High autonomy"],
+    avoidKeywords: ["Requires constant micromanagement", "Meeting-heavy culture"],
+  },
+};
+
+export interface JdRerankScores {
+  jobId: string;
+  demandScore: number;
+  freshnessScore: number;
+  transparencyScore: number;
+  employerTrustScore: number;
+  targetGroupFit: Record<TargetGroup, number>;
+  compositeScore: number;
+  trendDirection: "trending_up" | "stable" | "cooling";
+  primaryTargetGroup: TargetGroup;
+}
+
+export interface TrendingSkill {
+  skill: string;
+  frequency: number;
+  demandGrowth: string; // e.g. "+35%"
+  primaryTargetGroup: TargetGroup;
+}
+
+export interface RealtimeJdRankingReport {
+  generatedAt: number;
+  totalJdsAnalyzed: number;
+  topRankedJobs: Array<{
+    job: Job;
+    rerank: JdRerankScores;
+  }>;
+  trendingSkills: TrendingSkill[];
+  targetGroupBreakdown: Record<TargetGroup, {
+    count: number;
+    averageScore: number;
+    topSkills: string[];
+  }>;
+  marketSummary: string;
+}
+
+export interface CvSuggestionItem {
+  category: "skill" | "project_impact" | "architecture_keyword" | "metric" | "outdated_tech" | "generic_filler" | "irrelevant_detail";
+  item: string;
+  rationale: string;
+  priority: "high" | "medium" | "low";
+}
+
+export interface DecisionCvSuggestion {
+  targetGroup: TargetGroup;
+  targetGroupName: string;
+  currentMatchScore: number;
+  projectedMatchScore: number;
+  targetGroupStrategy: string;
+  additions: CvSuggestionItem[];
+  removals: CvSuggestionItem[];
+  optimizedCvContent: string;
+  topDemandedSkillsInSegment: string[];
+}
+
 
 

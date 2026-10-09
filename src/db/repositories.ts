@@ -1620,9 +1620,9 @@ export class CvRepository {
   public async create(cv: CvVersion): Promise<void> {
     const query = `
       INSERT INTO cv_versions (
-        id, user_id, job_id, title, target_role, content,
-        skills, match_score, tailored_notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, user_id, job_id, title, target_role, target_group, content,
+        skills, match_score, tailored_notes, decision_suggestions, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     await this.db
       .prepare(query)
@@ -1632,10 +1632,12 @@ export class CvRepository {
         cv.jobId ?? null,
         cv.title,
         cv.targetRole ?? null,
+        cv.targetGroup ?? null,
         cv.content,
         JSON.stringify(cv.skills ?? []),
         cv.matchScore ?? null,
         cv.tailoredNotes ?? null,
+        cv.decisionSuggestions ? JSON.stringify(cv.decisionSuggestions) : null,
         cv.createdAt,
         cv.updatedAt
       )
@@ -1648,10 +1650,12 @@ export class CvRepository {
     updates: {
       title?: string | undefined;
       targetRole?: string | null | undefined;
+      targetGroup?: string | null | undefined;
       content?: string | undefined;
       skills?: string[] | undefined;
       matchScore?: number | null | undefined;
       tailoredNotes?: string | null | undefined;
+      decisionSuggestions?: unknown | null | undefined;
       jobId?: string | null | undefined;
     }
   ): Promise<void> {
@@ -1665,6 +1669,10 @@ export class CvRepository {
     if (updates.targetRole !== undefined) {
       fields.push("target_role = ?");
       bindings.push(updates.targetRole);
+    }
+    if (updates.targetGroup !== undefined) {
+      fields.push("target_group = ?");
+      bindings.push(updates.targetGroup);
     }
     if (updates.content !== undefined) {
       fields.push("content = ?");
@@ -1681,6 +1689,10 @@ export class CvRepository {
     if (updates.tailoredNotes !== undefined) {
       fields.push("tailored_notes = ?");
       bindings.push(updates.tailoredNotes);
+    }
+    if (updates.decisionSuggestions !== undefined) {
+      fields.push("decision_suggestions = ?");
+      bindings.push(updates.decisionSuggestions ? JSON.stringify(updates.decisionSuggestions) : null);
     }
     if (updates.jobId !== undefined) {
       fields.push("job_id = ?");
@@ -1743,16 +1755,27 @@ export class CvRepository {
       skills = typeof row["skills"] === "string" ? JSON.parse(row["skills"] as string) : [];
     } catch {}
 
+    let decisionSuggestions: unknown = undefined;
+    if (row["decision_suggestions"] != null) {
+      try {
+        decisionSuggestions = typeof row["decision_suggestions"] === "string"
+          ? JSON.parse(row["decision_suggestions"] as string)
+          : row["decision_suggestions"];
+      } catch {}
+    }
+
     return {
       id: String(row["id"]),
       userId: String(row["user_id"]),
       jobId: row["job_id"] != null ? String(row["job_id"]) : undefined,
       title: String(row["title"]),
       targetRole: row["target_role"] != null ? String(row["target_role"]) : undefined,
+      targetGroup: row["target_group"] != null ? String(row["target_group"]) : undefined,
       content: String(row["content"]),
       skills,
       matchScore: row["match_score"] != null ? Number(row["match_score"]) : undefined,
       tailoredNotes: row["tailored_notes"] != null ? String(row["tailored_notes"]) : undefined,
+      decisionSuggestions: decisionSuggestions !== undefined ? decisionSuggestions : undefined,
       createdAt: Number(row["created_at"]),
       updatedAt: Number(row["updated_at"]),
       jobTitle: row["job_title"] != null ? String(row["job_title"]) : undefined,
