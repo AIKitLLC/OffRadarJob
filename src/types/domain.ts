@@ -502,5 +502,57 @@ export interface DecisionCvSuggestion {
   topDemandedSkillsInSegment: string[];
 }
 
+// -----------------------------------------------------------------------------
+// Tag Cloud & Synchronized JD Matching Domain Models
+// -----------------------------------------------------------------------------
+
+export type SkillCategory =
+  | "languages"
+  | "frameworks"
+  | "cloud_infra"
+  | "ai_ml"
+  | "database"
+  | "architecture"
+  | "tools"
+  | "other";
+
+export interface SkillTag {
+  name: string;
+  category: SkillCategory;
+  weight: number; // 1-100 normalized score based on frequency & market relevance
+  frequency: number; // occurrences in text
+  status?: "matched" | "missing" | "cv_only" | "deprecated" | undefined;
+  marketGrowth?: string | undefined; // e.g. "+35%"
+}
+
+export interface CvTagCloudAnalysis {
+  cvId?: string | undefined;
+  title?: string | undefined;
+  totalTags: number;
+  tags: SkillTag[];
+  categoryBreakdown: Record<SkillCategory, number>;
+  topSkills: string[];
+  detectedTargetGroupFit: Record<TargetGroup, number>;
+  primaryTargetGroup: TargetGroup;
+  extractedRole?: string | undefined;
+}
+
+export interface SynchronizedTagCloudComparison {
+  cvTags: SkillTag[];
+  jdTags: SkillTag[];
+  matchedTags: SkillTag[]; // In both CV and JD/Market
+  missingTags: SkillTag[]; // In JD/Market but absent in CV (top recommendation to add)
+  cvOnlyTags: SkillTag[]; // Unique to candidate's CV
+  deprecatedTags: SkillTag[]; // Outdated/legacy skills flagged for removal
+  matchPercentage: number; // 0-100%
+  targetContext: {
+    type: "job" | "target_group" | "market";
+    id?: string | undefined;
+    title?: string | undefined;
+    companyName?: string | undefined;
+    targetGroup?: TargetGroup | undefined;
+  };
+}
+
 
 

@@ -731,6 +731,86 @@ export function renderDashboardHtml(): string {
       color: #fff;
       border-color: rgba(255, 255, 255, 0.25);
     }
+
+    /* Synchronized Tag Cloud & CV Import Styles */
+    .tag-cloud-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .tag-cloud-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: default;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+    .tag-cloud-chip:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+    .chip-cat-languages { background: rgba(6, 182, 212, 0.15); color: #67e8f9; border-color: rgba(6, 182, 212, 0.35); }
+    .chip-cat-frameworks { background: rgba(59, 130, 246, 0.15); color: #93c5fd; border-color: rgba(59, 130, 246, 0.35); }
+    .chip-cat-cloud_infra { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border-color: rgba(168, 85, 247, 0.35); }
+    .chip-cat-ai_ml { background: rgba(244, 63, 94, 0.15); color: #fda4af; border-color: rgba(244, 63, 94, 0.35); }
+    .chip-cat-database { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.35); }
+    .chip-cat-architecture { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border-color: rgba(245, 158, 11, 0.35); }
+    .chip-cat-tools { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border-color: rgba(99, 102, 241, 0.35); }
+    .chip-cat-other { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border-color: rgba(148, 163, 184, 0.35); }
+
+    .chip-status-matched {
+      background: rgba(16, 185, 129, 0.18);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.15);
+    }
+    .chip-status-missing {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      cursor: pointer;
+    }
+    .chip-status-missing:hover {
+      background: rgba(245, 158, 11, 0.28);
+      border-color: #f59e0b;
+      transform: translateY(-1px);
+    }
+    .chip-status-cv_only {
+      background: rgba(56, 189, 248, 0.14);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .chip-status-deprecated {
+      background: rgba(239, 68, 68, 0.16);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      text-decoration: line-through;
+    }
+
+    .file-dropzone {
+      border: 2px dashed rgba(56, 189, 248, 0.35);
+      border-radius: 12px;
+      padding: 24px 16px;
+      text-align: center;
+      background: rgba(15, 23, 42, 0.5);
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .file-dropzone:hover, .file-dropzone.dragover {
+      border-color: var(--primary);
+      background: rgba(56, 189, 248, 0.08);
+      transform: scale(1.005);
+    }
+    .file-dropzone input[type="file"] {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -989,8 +1069,13 @@ export function renderDashboardHtml(): string {
 
       <!-- Trending Skills Bar -->
       <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
-        <div style="font-size: 13px; font-weight: 700; color: #e2e8f0; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
-          <span>📈 High-Demand Keywords & Skills Velocity Across JDs:</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <div style="font-size: 13px; font-weight: 700; color: #e2e8f0; display: flex; align-items: center; gap: 6px;">
+            <span>📈 High-Demand Keywords & Skills Velocity Across JDs:</span>
+          </div>
+          <button onclick="openSyncTagCloudModal()" class="header-btn" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 12px; padding: 4px 12px;">
+            ☁️ So sánh Tag Cloud Thị trường với CV của tôi
+          </button>
         </div>
         <div id="rerank-trending-skills" style="display: flex; flex-wrap: wrap; gap: 8px;">
           <span style="color: var(--text-muted); font-size: 12px;">Loading trending skills...</span>
@@ -1291,11 +1376,94 @@ export function renderDashboardHtml(): string {
         <h3><span>📄</span> My CV Versions</h3>
         <button class="modal-close-btn" onclick="closeModal('modal-my-cvs')">✕</button>
       </div>
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <p style="font-size: 13px; color: var(--text-muted);">
-          Manage your master CV and tailored variations for different job descriptions.
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+        <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
+          Quản lý CV gốc, các phiên bản tùy biến và phân tích <strong>Tag Cloud</strong> đồng bộ với JD.
         </p>
-        <button onclick="toggleNewCvForm()" class="header-btn">+ Add New CV</button>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="toggleImportCvSection()" class="header-btn" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">📁 Import File CV</button>
+          <button onclick="toggleNewCvForm()" class="header-btn">+ Add New CV</button>
+        </div>
+      </div>
+
+      <!-- Import CV File Section (hidden by default) -->
+      <div id="cv-import-section" style="display: none; background: #0b1120; border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 10px; padding: 16px; flex-direction: column; gap: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h4 style="font-size: 14px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
+            <span>📁</span> Import File & Phân Tích Tag Cloud Đồng Bộ
+          </h4>
+          <span style="font-size: 11px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 8px; border-radius: 6px;">PDF • DOCX • TXT • MD • JSON</span>
+        </div>
+        <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
+          Kéo thả file CV của bạn hoặc chọn file để hệ thống tự động bóc tách kỹ năng, tính trọng số và hiển thị Tag Cloud đồng bộ với JD.
+        </p>
+
+        <!-- Dropzone -->
+        <div id="cv-file-dropzone" class="file-dropzone" onclick="document.getElementById('cv-file-input').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+          <div style="font-size: 32px; margin-bottom: 8px;">📄</div>
+          <div style="font-size: 13px; font-weight: 600; color: #e2e8f0;" id="dropzone-label">
+            Kéo thả file CV vào đây hoặc <span style="color: var(--primary); text-decoration: underline;">bấm để duyệt file</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+            Hỗ trợ PDF, Microsoft Word (.docx), Markdown (.md), Text (.txt), JSON (.json)
+          </div>
+          <input type="file" id="cv-file-input" accept=".pdf,.docx,.txt,.md,.json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,application/json" onchange="handleCvFileChosen(event)" />
+        </div>
+
+        <div id="selected-file-badge" style="display: none; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 8px 12px; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 16px;">📎</span>
+            <div>
+              <div id="selected-file-name" style="font-size: 13px; font-weight: 600; color: #fff;"></div>
+              <div id="selected-file-size" style="font-size: 11px; color: var(--text-muted);"></div>
+            </div>
+          </div>
+          <button onclick="clearSelectedCvFile()" style="background: transparent; border: none; color: #f87171; cursor: pointer; font-size: 16px;">✕</button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <label style="font-size: 11px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Tên phiên bản CV (tùy chọn):</label>
+            <input type="text" id="import-cv-title" placeholder="VD: Master Fullstack 2026" style="width: 100%;" />
+          </div>
+          <div>
+            <label style="font-size: 11px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Target Role (tùy chọn):</label>
+            <input type="text" id="import-cv-role" placeholder="VD: Senior Backend Engineer" style="width: 100%;" />
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size: 11px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Target Employer Group Archetype:</label>
+          <select id="import-cv-target-group" class="region-select" style="width: 100%;">
+            <option value="early_stage_startups">🚀 Early-Stage Startups & Stealth (Agility, MVP, Fullstack)</option>
+            <option value="scaleups_growth">📈 Scale-ups & Growth Tech (Microservices, Reliability, Scale)</option>
+            <option value="ai_first_innovators">🤖 DeepTech & AI-First Innovators (PyTorch, LLM, Agents, RAG)</option>
+            <option value="midwest_regional">🌾 Midwest Regional Hubs (Boutique, Long-term, High Impact)</option>
+            <option value="new_grad_junior">🌱 High-Potential Junior & New Grad (Core Foundations)</option>
+            <option value="remote_first_boutique">🌍 Remote-First Boutique Micro-Companies (Asynchronous)</option>
+          </select>
+        </div>
+
+        <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 4px;">
+          <button onclick="toggleImportCvSection()" class="header-btn-secondary">Đóng</button>
+          <button id="btn-upload-import-cv" onclick="uploadAndAnalyzeCvFile()" class="header-btn-primary" style="background: linear-gradient(135deg, #0284c7, #9333ea);">
+            ⚡ Upload & Trích xuất Tag Cloud
+          </button>
+        </div>
+
+        <!-- Import Result Preview Box -->
+        <div id="import-result-preview" style="display: none; background: #060911; border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; flex-direction: column; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 12px; font-weight: 700; color: #34d399;" id="import-result-title">✅ Phân tích Tag Cloud thành công</span>
+            <span style="font-size: 11px; color: var(--text-muted);" id="import-result-stats"></span>
+          </div>
+          <div id="import-result-tags" class="tag-cloud-wrapper" style="max-height: 120px; overflow-y: auto; padding: 4px 0;"></div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px;">
+            <button id="btn-open-sync-from-import" class="header-btn" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 12px;">
+              ☁️ Mở Synchronized Tag Cloud Studio
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- New CV Form (hidden by default) -->
@@ -1381,6 +1549,133 @@ export function renderDashboardHtml(): string {
         <div style="display: flex; justify-content: flex-end; gap: 10px;">
           <button onclick="copySnippet('tailor-final-markdown')" class="header-btn">📋 Copy Markdown</button>
           <button id="btn-save-tailored-cv" onclick="saveTailoredCv()" class="header-btn-primary">💾 Save as Tailored CV Version</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: Synchronized Tag Cloud Studio (CV vs JD / Market) -->
+  <div id="modal-sync-tag-cloud" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px;">
+          <span>☁️</span> Synchronized Tag Cloud Studio
+          <span style="font-size: 11px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 8px; border-radius: 6px; font-weight: 600;">CV vs JD DEMAND</span>
+        </h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-sync-tag-cloud')">✕</button>
+      </div>
+
+      <!-- Controls: CV Selector & Target Mode -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #0b1120; border: 1px solid var(--card-border); border-radius: 10px; padding: 14px;">
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 6px;">📄 Phiên bản CV cần phân tích:</label>
+          <select id="sync-cv-select" class="region-select" style="width: 100%;" onchange="onSyncCvSelectionChange()">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 6px;">🎯 Mục tiêu so sánh (JD / Archetype / Thị trường):</label>
+          <select id="sync-target-select" class="region-select" style="width: 100%;" onchange="runSynchronizedTagCloudComparison()">
+            <optgroup label="🌐 Thị trường Tech Toàn diện">
+              <option value="market">Thị trường Off-Radar Real-time Index (Tất cả JDs)</option>
+            </optgroup>
+            <optgroup label="🏢 Target Group Archetype">
+              <option value="group:early_stage_startups">🚀 Early-Stage Startups & Stealth (Agility, Full-stack, MVP)</option>
+              <option value="group:scaleups_growth">📈 Scale-ups & Growth Tech (Reliability, Scale, Microservices)</option>
+              <option value="group:ai_first_innovators">🤖 DeepTech & AI-First Innovators (LLMs, RAG, PyTorch)</option>
+              <option value="group:midwest_regional">🌾 Midwest Regional Tech Hubs (Boutique, Long-term Value)</option>
+              <option value="group:new_grad_junior">🌱 High-Potential Junior & New Grad (Core CS Fundamentals)</option>
+              <option value="group:remote_first_boutique">🌍 Remote-First Boutique Micro-Companies (Asynchronous)</option>
+            </optgroup>
+            <optgroup id="sync-target-jobs-group" label="💼 Job Cụ thể Đang Tuyển Dụng">
+              <!-- Populated dynamically -->
+            </optgroup>
+          </select>
+        </div>
+      </div>
+
+      <!-- Live Match Score Meter Banner -->
+      <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(56, 189, 248, 0.1)); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 12px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <div style="flex: 1; min-width: 240px;">
+          <div style="font-size: 12px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;">Độ Phù Hợp Kỹ Năng (Tag Cloud Match)</div>
+          <div style="display: flex; align-items: baseline; gap: 12px; margin-top: 4px;">
+            <span style="font-size: 32px; font-weight: 800; color: #34d399;" id="sync-match-score">0%</span>
+            <span style="font-size: 13px; font-weight: 600; color: #cbd5e1;" id="sync-match-rating">Đang tải...</span>
+          </div>
+          <div class="score-meter-bar" style="margin-top: 8px; height: 8px;">
+            <div id="sync-score-meter-fill" class="score-meter-fill" style="width: 0%; background: #10b981;"></div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <button onclick="runSynchronizedTagCloudComparison()" class="header-btn" style="padding: 8px 14px; font-size: 13px;">🔄 Phân tích lại</button>
+          <button onclick="triggerDecisionOptimizerFromSync()" class="header-btn-primary" style="background: linear-gradient(135deg, #a855f7, #38bdf8); padding: 8px 14px; font-size: 13px;">
+            ⚡ Tối ưu với Decision API
+          </button>
+        </div>
+      </div>
+
+      <!-- Category Breakdown Pills -->
+      <div id="sync-category-breakdown-bar" style="display: flex; flex-wrap: wrap; gap: 8px; background: #0b1120; border: 1px solid var(--card-border); border-radius: 8px; padding: 10px 14px; align-items: center;">
+        <span style="font-size: 11px; color: var(--text-muted);">Phân bố nhóm kỹ năng: Đang tính toán...</span>
+      </div>
+
+      <!-- 4-Box Matrix of Tag Clouds -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <!-- Box 1: 🟢 Matched Skills -->
+        <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 13px; font-weight: 700; color: #34d399; display: flex; align-items: center; gap: 6px;">
+              <span>✅</span> Kỹ Năng Đã Khớp Hoàn Hảo (<span id="count-matched-tags">0</span>)
+            </div>
+            <span style="font-size: 10px; color: #6ee7b7; text-transform: uppercase;">CV & JD Match</span>
+          </div>
+          <p style="font-size: 11px; color: var(--text-muted); margin: 0;">
+            Các kỹ năng xuất hiện đồng thời trong CV của bạn và yêu cầu của JD mục tiêu.
+          </p>
+          <div id="sync-matched-tags" class="tag-cloud-wrapper" style="min-height: 80px;"></div>
+        </div>
+
+        <!-- Box 2: 🟡 Missing High-Demand Skills -->
+        <div style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 13px; font-weight: 700; color: #fbbf24; display: flex; align-items: center; gap: 6px;">
+              <span>⚠️</span> Kỹ Năng Trọng Yếu Còn Thiếu (<span id="count-missing-tags">0</span>)
+            </div>
+            <span style="font-size: 10px; color: #fcd34d; text-transform: uppercase;">Cần Bổ Sung</span>
+          </div>
+          <p style="font-size: 11px; color: var(--text-muted); margin: 0;">
+            Kỹ năng JD đòi hỏi nhưng CV chưa có. Bấm <strong>+ Thêm</strong> để bổ sung ngay vào CV!
+          </p>
+          <div id="sync-missing-tags" class="tag-cloud-wrapper" style="min-height: 80px;"></div>
+        </div>
+
+        <!-- Box 3: ⚪ CV Superpowers / Unique Breadth -->
+        <div style="background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 13px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
+              <span>⭐</span> Thế Mạnh Độc Đáo Của CV (<span id="count-cv-only-tags">0</span>)
+            </div>
+            <span style="font-size: 10px; color: #93c5fd; text-transform: uppercase;">CV Superpowers</span>
+          </div>
+          <p style="font-size: 11px; color: var(--text-muted); margin: 0;">
+            Kỹ năng đặc sắc bạn sở hữu vượt ngoài yêu cầu cơ bản của JD, tạo lợi thế cạnh tranh.
+          </p>
+          <div id="sync-cv-only-tags" class="tag-cloud-wrapper" style="min-height: 80px;"></div>
+        </div>
+
+        <!-- Box 4: 🔴 Deprecated / Legacy Tech -->
+        <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 13px; font-weight: 700; color: #f87171; display: flex; align-items: center; gap: 6px;">
+              <span>🚫</span> Công Nghệ Cũ Nên Lược Bớt (<span id="count-deprecated-tags">0</span>)
+            </div>
+            <span style="font-size: 10px; color: #fca5a5; text-transform: uppercase;">Legacy Flag</span>
+          </div>
+          <p style="font-size: 11px; color: var(--text-muted); margin: 0;">
+            Các công nghệ cổ điển (jQuery, SVN, PHP 5...) có thể làm giảm điểm đánh giá hiện đại.
+          </p>
+          <div id="sync-deprecated-tags" class="tag-cloud-wrapper" style="min-height: 80px;"></div>
         </div>
       </div>
     </div>
@@ -2650,41 +2945,488 @@ export function renderDashboardHtml(): string {
       if (!container) return;
 
       if (userCvsList.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">No CV versions saved yet. Click "+ Add New CV" or use "✨ Tailor CV" on any job card to create one.</p>';
+        container.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">Chưa có phiên bản CV nào được lưu. Bạn có thể bấm "📁 Import File CV", "+ Add New CV" hoặc dùng "✨ Tailor CV" trên bất kỳ Job nào.</p>';
         return;
       }
 
       container.innerHTML = userCvsList.map(cv => {
         const date = new Date(cv.updatedAt || cv.createdAt).toLocaleDateString();
         const scoreBadge = cv.matchScore != null ? ('<span class="tag" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 700;">🎯 ' + cv.matchScore + '% Match</span>') : '';
-        const roleBadge = cv.targetRole ? ('<span class="tag">' + cv.targetRole + '</span>') : '';
-        const skillsChips = (cv.skills || []).map(s => '<span class="tag tag-cat">' + s + '</span>').join(' ');
+        const roleBadge = cv.targetRole ? ('<span class="tag">' + escapeHtml(cv.targetRole) + '</span>') : '';
+        const targetGroupBadge = cv.targetGroup ? ('<span class="tag" style="background: rgba(168, 85, 247, 0.2); color: #d8b4fe; font-weight: 600;">🏢 ' + escapeHtml(cv.targetGroup.replace(/_/g, ' ')) + '</span>') : '';
 
-        return \`
-          <div class="cv-card-item">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-              <div>
-                <h4 style="font-size: 15px; font-weight: 700; color: #fff;">\${cv.title}</h4>
-                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Saved on \${date} \${cv.jobId ? '• Linked to Job ' + cv.jobId : ''}</div>
-              </div>
-              <div style="display: flex; gap: 6px; align-items: center;">
-                \${scoreBadge}
-                <button class="header-btn-secondary" onclick="deleteCv('\${cv.id}')" style="color: #f87171;">🗑️ Delete</button>
-              </div>
-            </div>
-            <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
-              \${roleBadge}
-              \${skillsChips}
-            </div>
-            <div style="margin-top: 6px;">
-              <details style="font-size: 12px; color: var(--text-muted);">
-                <summary style="cursor: pointer; color: var(--primary);">View Markdown Content</summary>
-                <div class="code-snippet" style="margin-top: 8px; max-height: 200px; overflow-y: auto;">\${cv.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-              </details>
-            </div>
-          </div>
-        \`;
+        // Render skill chips with tag-cloud styling
+        const allSkills = Array.isArray(cv.skills) ? cv.skills : [];
+        const displaySkills = allSkills.slice(0, 10);
+        const remainder = allSkills.length - displaySkills.length;
+        const skillsChips = displaySkills.map(s => '<span class="tag tag-cat" style="font-size: 11px;">' + escapeHtml(s) + '</span>').join(' ') +
+          (remainder > 0 ? (' <span class="tag" style="opacity: 0.6; font-size: 10px;">+' + remainder + ' khác</span>') : '');
+
+        return '<div class="cv-card-item">' +
+          '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap;">' +
+            '<div>' +
+              '<h4 style="font-size: 15px; font-weight: 700; color: #fff;">' + escapeHtml(cv.title) + '</h4>' +
+              '<div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Lưu ngày ' + date + ' ' + (cv.jobId ? '• Liên kết Job ' + escapeHtml(cv.jobId) : '') + '</div>' +
+            '</div>' +
+            '<div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">' +
+              scoreBadge +
+              '<button class="header-btn" data-cvid="' + cv.id + '" onclick="openSyncTagCloudModal(this.dataset.cvid)" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 11px; padding: 4px 10px;">☁️ Tag Cloud & JD Sync</button>' +
+              '<button class="header-btn" data-cvid="' + cv.id + '" onclick="sendCvToDecisionOptimizer(this.dataset.cvid)" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); font-size: 11px; padding: 4px 10px;">⚡ Decision API</button>' +
+              '<button class="header-btn-secondary" data-cvid="' + cv.id + '" onclick="deleteCv(this.dataset.cvid)" style="color: #f87171; font-size: 11px; padding: 4px 8px;">🗑️ Xóa</button>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">' +
+            roleBadge + ' ' +
+            targetGroupBadge + ' ' +
+            skillsChips +
+          '</div>' +
+          '<div style="margin-top: 6px;">' +
+            '<details style="font-size: 12px; color: var(--text-muted);">' +
+              '<summary style="cursor: pointer; color: var(--primary);">Xem nội dung Markdown chi tiết</summary>' +
+              '<div class="code-snippet" style="margin-top: 8px; max-height: 200px; overflow-y: auto;">' + cv.content.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +
+            '</details>' +
+          '</div>' +
+        '</div>';
       }).join('');
+    }
+
+    // --- File Import & Tag Cloud Studio State ---
+    let activeSyncCvId = null;
+    let activeSyncComparison = null;
+    let selectedCvFile = null;
+
+    function toggleImportCvSection() {
+      const section = document.getElementById('cv-import-section');
+      if (!section) return;
+      const isVisible = section.style.display === 'flex';
+      section.style.display = isVisible ? 'none' : 'flex';
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const dropzone = document.getElementById('cv-file-dropzone');
+      if (dropzone) dropzone.classList.add('dragover');
+    }
+
+    function handleDragLeave(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const dropzone = document.getElementById('cv-file-dropzone');
+      if (dropzone) dropzone.classList.remove('dragover');
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const dropzone = document.getElementById('cv-file-dropzone');
+      if (dropzone) dropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        processSelectedCvFile(e.dataTransfer.files[0]);
+      }
+    }
+
+    function handleCvFileChosen(e) {
+      if (e.target && e.target.files && e.target.files.length > 0) {
+        processSelectedCvFile(e.target.files[0]);
+      }
+    }
+
+    function processSelectedCvFile(file) {
+      selectedCvFile = file;
+      const badge = document.getElementById('selected-file-badge');
+      const dropzone = document.getElementById('cv-file-dropzone');
+      if (badge && dropzone) {
+        badge.style.display = 'flex';
+        dropzone.style.display = 'none';
+        document.getElementById('selected-file-name').innerText = file.name;
+        const sizeKb = (file.size / 1024).toFixed(1);
+        document.getElementById('selected-file-size').innerText = sizeKb + ' KB • ' + (file.type || 'Document');
+      }
+
+      // Auto-fill title if empty
+      const titleInput = document.getElementById('import-cv-title');
+      if (titleInput && !titleInput.value.trim()) {
+        const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        titleInput.value = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+      }
+    }
+
+    function clearSelectedCvFile() {
+      selectedCvFile = null;
+      const badge = document.getElementById('selected-file-badge');
+      const dropzone = document.getElementById('cv-file-dropzone');
+      const input = document.getElementById('cv-file-input');
+      if (input) input.value = '';
+      if (badge) badge.style.display = 'none';
+      if (dropzone) dropzone.style.display = 'block';
+    }
+
+    async function uploadAndAnalyzeCvFile() {
+      if (!selectedCvFile) {
+        alert('Vui lòng chọn hoặc kéo thả một file CV (PDF, DOCX, TXT, MD, hoặc JSON) để tiếp tục.');
+        return;
+      }
+      const btn = document.getElementById('btn-upload-import-cv');
+      const prevText = btn ? btn.innerText : '';
+      if (btn) {
+        btn.innerText = '⏳ Đang phân tích file & trích xuất Tag Cloud...';
+        btn.disabled = true;
+      }
+
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedCvFile);
+        formData.append('save_as_version', 'true');
+        const title = document.getElementById('import-cv-title')?.value.trim();
+        const role = document.getElementById('import-cv-role')?.value.trim();
+        const targetGroup = document.getElementById('import-cv-target-group')?.value;
+        if (title) formData.append('version_title', title);
+        if (role) formData.append('target_role', role);
+        if (targetGroup) formData.append('target_group', targetGroup);
+
+        const token = getAuthToken();
+        const headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        const res = await fetch('/api/user/cvs/import', {
+          method: 'POST',
+          headers,
+          body: formData
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to import and analyze CV file');
+        }
+
+        // Show preview in import section
+        const previewEl = document.getElementById('import-result-preview');
+        if (previewEl) {
+          previewEl.style.display = 'flex';
+          const statsEl = document.getElementById('import-result-stats');
+          if (statsEl) {
+            statsEl.innerText = data.parsed.totalTags + ' kỹ năng nhận diện (' + (data.extractedTextLength || data.parsed.content.length) + ' ký tự text)';
+          }
+          const tagsEl = document.getElementById('import-result-tags');
+          if (tagsEl && data.parsed.tagCloud && data.parsed.tagCloud.tags) {
+            tagsEl.innerHTML = data.parsed.tagCloud.tags.map(function(t) {
+              const catClass = 'chip-cat-' + (t.category || 'other');
+              const countStr = t.frequency > 1 ? '<small style="opacity: 0.7;"> ×' + t.frequency + '</small>' : '';
+              return '<span class="tag-cloud-chip ' + catClass + '">' + escapeHtml(t.name) + countStr + '</span>';
+            }).join(' ');
+          }
+          const openSyncBtn = document.getElementById('btn-open-sync-from-import');
+          if (openSyncBtn && data.cv) {
+            openSyncBtn.onclick = () => {
+              openSyncTagCloudModal(data.cv.id);
+            };
+          }
+        }
+
+        await fetchUserCvs();
+      } catch (err) {
+        alert('Lỗi import CV: ' + err.message);
+      } finally {
+        if (btn) {
+          btn.innerText = prevText || '⚡ Upload & Trích xuất Tag Cloud';
+          btn.disabled = false;
+        }
+      }
+    }
+
+    // --- Synchronized Tag Cloud Studio Workflow ---
+    function openSyncTagCloudModal(cvId) {
+      if (!currentUser) {
+        openLoginModal();
+        alert('Vui lòng đăng nhập với Telegram để sử dụng Synchronized Tag Cloud Studio.');
+        return;
+      }
+
+      openModal('modal-sync-tag-cloud');
+      populateSyncCvSelect(cvId);
+      populateSyncJobsGroup();
+      runSynchronizedTagCloudComparison();
+    }
+
+    function populateSyncCvSelect(selectedId) {
+      const select = document.getElementById('sync-cv-select');
+      if (!select) return;
+
+      if (userCvsList.length === 0) {
+        select.innerHTML = '<option value="">(Chưa có CV nào - vui lòng tạo hoặc import CV)</option>';
+        return;
+      }
+
+      let options = '';
+      for (const cv of userCvsList) {
+        const isSelected = (selectedId && cv.id === selectedId) || (!selectedId && !options);
+        if (isSelected) activeSyncCvId = cv.id;
+        options += '<option value="' + cv.id + '" ' + (isSelected ? 'selected' : '') + '>' +
+          escapeHtml(cv.title) + (cv.targetRole ? ' (' + escapeHtml(cv.targetRole) + ')' : '') +
+          '</option>';
+      }
+      select.innerHTML = options;
+    }
+
+    async function populateSyncJobsGroup() {
+      const optgroup = document.getElementById('sync-target-jobs-group');
+      if (!optgroup) return;
+
+      try {
+        const res = await fetch('/api/jobs?limit=25&tech_only=true');
+        const data = await res.json();
+        const jobs = data.items || [];
+        if (jobs.length === 0) {
+          optgroup.innerHTML = '<option value="" disabled>(Không có job khả dụng)</option>';
+          return;
+        }
+
+        optgroup.innerHTML = jobs.map(j => {
+          const comp = j.companyName || 'Boutique Tech';
+          return '<option value="job:' + j.id + '">💼 ' + escapeHtml(j.title) + ' @ ' + escapeHtml(comp) + '</option>';
+        }).join('');
+      } catch (err) {
+        console.warn('Failed loading jobs for sync select:', err);
+      }
+    }
+
+    function onSyncCvSelectionChange() {
+      const select = document.getElementById('sync-cv-select');
+      if (select) {
+        activeSyncCvId = select.value;
+        runSynchronizedTagCloudComparison();
+      }
+    }
+
+    async function runSynchronizedTagCloudComparison() {
+      if (!activeSyncCvId) {
+        if (userCvsList.length > 0 && userCvsList[0]) {
+          activeSyncCvId = userCvsList[0].id;
+        } else {
+          return;
+        }
+      }
+
+      const targetVal = document.getElementById('sync-target-select')?.value || 'market';
+      let payload = { cv_id: activeSyncCvId };
+
+      if (targetVal.startsWith('group:')) {
+        payload.target_group = targetVal.replace('group:', '');
+      } else if (targetVal.startsWith('job:')) {
+        payload.job_id = targetVal.replace('job:', '');
+      }
+
+      try {
+        const res = await fetch('/api/user/cvs/compare-tags', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to compare tag clouds');
+        }
+
+        activeSyncComparison = data.comparison;
+        renderSyncComparisonResults(data.comparison);
+      } catch (err) {
+        console.warn('Sync Tag Cloud Error:', err);
+      }
+    }
+
+    function renderSyncComparisonResults(comp) {
+      if (!comp) return;
+
+      const score = Math.round(comp.matchPercentage || 0);
+      const scoreEl = document.getElementById('sync-match-score');
+      const fillEl = document.getElementById('sync-score-meter-fill');
+      const ratingEl = document.getElementById('sync-match-rating');
+
+      if (scoreEl) scoreEl.innerText = score + '%';
+      if (fillEl) fillEl.style.width = score + '%';
+
+      let scoreColor = '#f87171';
+      let ratingText = '🚨 Mức độ lệch cao: Cần tùy biến lại theo nhóm mục tiêu';
+      if (score >= 75) {
+        scoreColor = '#34d399';
+        ratingText = '🎯 Xuất sắc: CV rất phù hợp với nhu cầu tuyển dụng';
+      } else if (score >= 55) {
+        scoreColor = '#38bdf8';
+        ratingText = '⚡ Khá tốt: Khớp phần lớn công nghệ cốt lõi';
+      } else if (score >= 35) {
+        scoreColor = '#fbbf24';
+        ratingText = '⚠️ Trung bình: Cần bổ sung các kỹ năng trọng yếu';
+      }
+
+      if (scoreEl) scoreEl.style.color = scoreColor;
+      if (fillEl) fillEl.style.background = scoreColor;
+      if (ratingEl) ratingEl.innerText = ratingText;
+
+      const elCountMatched = document.getElementById('count-matched-tags');
+      const elCountMissing = document.getElementById('count-missing-tags');
+      const elCountCvOnly = document.getElementById('count-cv-only-tags');
+      const elCountDeprecated = document.getElementById('count-deprecated-tags');
+
+      if (elCountMatched) elCountMatched.innerText = String((comp.matchedTags || []).length);
+      if (elCountMissing) elCountMissing.innerText = String((comp.missingTags || []).length);
+      if (elCountCvOnly) elCountCvOnly.innerText = String((comp.cvOnlyTags || []).length);
+      if (elCountDeprecated) elCountDeprecated.innerText = String((comp.deprecatedTags || []).length);
+
+      const matchedEl = document.getElementById('sync-matched-tags');
+      if (matchedEl) {
+        matchedEl.innerHTML = (comp.matchedTags || []).length > 0
+          ? comp.matchedTags.map(t => {
+              const countStr = t.frequency > 1 ? ' <small style="opacity: 0.7;">(×' + t.frequency + ')</small>' : '';
+              return '<span class="tag-cloud-chip chip-status-matched">✅ ' + escapeHtml(t.name) + countStr + '</span>';
+            }).join(' ')
+          : '<span style="font-size: 11px; color: var(--text-muted);">(Chưa có kỹ năng khớp nào)</span>';
+      }
+
+      const missingEl = document.getElementById('sync-missing-tags');
+      if (missingEl) {
+        missingEl.innerHTML = (comp.missingTags || []).length > 0
+          ? comp.missingTags.map(function(t) {
+              const safeName = escapeHtml(t.name);
+              const growthBadge = t.marketGrowth ? ' <small style="color: #34d399; font-weight: 700;">' + t.marketGrowth + '</small>' : '';
+              return '<span class="tag-cloud-chip chip-status-missing" data-skill="' + safeName + '" onclick="addMissingSkillToCv(this.dataset.skill)" title="Bấm để bổ sung kỹ năng này vào CV">' +
+                '⚡ ' + safeName + growthBadge +
+                '<button style="background: rgba(245, 158, 11, 0.4); border: none; color: #fff; border-radius: 4px; padding: 1px 6px; font-size: 10px; margin-left: 6px; cursor: pointer; font-weight: 700;">+ Thêm</button>' +
+                '</span>';
+            }).join(' ')
+          : '<span style="font-size: 11px; color: #34d399;">🎉 Tuyệt vời! Không còn kỹ năng cốt lõi nào bị thiếu sót.</span>';
+      }
+
+      const cvOnlyEl = document.getElementById('sync-cv-only-tags');
+      if (cvOnlyEl) {
+        cvOnlyEl.innerHTML = (comp.cvOnlyTags || []).length > 0
+          ? comp.cvOnlyTags.map(t => {
+              return '<span class="tag-cloud-chip chip-status-cv_only">⭐ ' + escapeHtml(t.name) + '</span>';
+            }).join(' ')
+          : '<span style="font-size: 11px; color: var(--text-muted);">(Không có kỹ năng riêng biệt nào)</span>';
+      }
+
+      const deprecatedEl = document.getElementById('sync-deprecated-tags');
+      if (deprecatedEl) {
+        deprecatedEl.innerHTML = (comp.deprecatedTags || []).length > 0
+          ? comp.deprecatedTags.map(t => {
+              return '<span class="tag-cloud-chip chip-status-deprecated" title="Công nghệ cũ nên xem xét bỏ">🚫 ' + escapeHtml(t.name) + '</span>';
+            }).join(' ')
+          : '<span style="font-size: 11px; color: #34d399;">✨ CV sạch đẹp! Không phát hiện công nghệ lỗi thời/cũ.</span>';
+      }
+
+      const breakdownEl = document.getElementById('sync-category-breakdown-bar');
+      if (breakdownEl) {
+        const catCounts = {};
+        for (const t of (comp.cvTags || [])) {
+          catCounts[t.category] = (catCounts[t.category] || 0) + 1;
+        }
+        const catLabels = {
+          languages: 'Ngôn ngữ',
+          frameworks: 'Frameworks',
+          cloud_infra: 'Cloud & Infra',
+          database: 'Database',
+          ai_ml: 'AI / ML',
+          architecture: 'Kiến trúc',
+          tools: 'Tools & DevOps',
+          other: 'Khác'
+        };
+
+        const pillsHtml = Object.keys(catCounts).map(cat => {
+          const label = catLabels[cat] || cat;
+          const count = catCounts[cat];
+          const chipClass = 'chip-cat-' + cat;
+          return '<span class="tag-cloud-chip ' + chipClass + '" style="font-size: 11px;">' + label + ': <strong>' + count + '</strong></span>';
+        }).join(' ');
+
+        breakdownEl.innerHTML = '<span style="font-size: 11px; font-weight: 700; color: #cbd5e1; margin-right: 6px;">Phân bổ kỹ năng trong CV:</span>' + pillsHtml;
+      }
+    }
+
+    async function addMissingSkillToCv(skillName) {
+      if (!activeSyncCvId) return;
+      const cv = userCvsList.find(c => c.id === activeSyncCvId);
+      if (!cv) return;
+
+      const currentSkills = Array.isArray(cv.skills) ? [...cv.skills] : [];
+      if (!currentSkills.includes(skillName)) {
+        currentSkills.push(skillName);
+      }
+
+      let newContent = cv.content;
+      if (newContent.includes('## Skills') || newContent.includes('## Technical Skills')) {
+        newContent = newContent.replace(new RegExp('(## (?:Technical )?Skills[^\\n]*\\n)', 'i'), '$1- **' + skillName + '**: Hands-on proficiency and applied experience.\\n');
+      } else {
+        newContent += '\\n\\n## Technical Skills\\n- **' + skillName + '**: Hands-on proficiency and applied experience.';
+      }
+
+      try {
+        const res = await fetch('/api/user/cvs/' + activeSyncCvId, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            skills: currentSkills,
+            content: newContent
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to update CV');
+        }
+
+        cv.skills = currentSkills;
+        cv.content = newContent;
+        await fetchUserCvs();
+
+        // Immediately refresh comparison to show the skill moved from Missing to Matched!
+        await runSynchronizedTagCloudComparison();
+      } catch (err) {
+        alert('Lỗi khi thêm kỹ năng: ' + err.message);
+      }
+    }
+
+    function triggerDecisionOptimizerFromSync() {
+      closeModal('modal-sync-tag-cloud');
+      closeModal('modal-my-cvs');
+      switchTab('rerank');
+
+      if (activeSyncCvId) {
+        const cvSelect = document.getElementById('decision-base-cv');
+        if (cvSelect) {
+          cvSelect.value = activeSyncCvId;
+          onDecisionBaseCvChange();
+        }
+      }
+
+      const targetVal = document.getElementById('sync-target-select')?.value || '';
+      if (targetVal.startsWith('group:')) {
+        const group = targetVal.replace('group:', '');
+        const groupSelect = document.getElementById('decision-target-group');
+        if (groupSelect) groupSelect.value = group;
+      }
+
+      const optSection = document.getElementById('tab-rerank');
+      if (optSection) {
+        optSection.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    function sendCvToDecisionOptimizer(cvId) {
+      closeModal('modal-my-cvs');
+      switchTab('rerank');
+
+      const cvSelect = document.getElementById('decision-base-cv');
+      if (cvSelect && cvId) {
+        cvSelect.value = cvId;
+        onDecisionBaseCvChange();
+      }
+
+      const optSection = document.getElementById('tab-rerank');
+      if (optSection) {
+        optSection.scrollIntoView({ behavior: 'smooth' });
+      }
     }
 
     // --- Tailor CV Workflow ---
@@ -2864,6 +3606,19 @@ export function renderDashboardHtml(): string {
     window.submitQuickUserFeedback = submitQuickUserFeedback;
     window.toggleDashboardSubscription = toggleDashboardSubscription;
     window.loadUserSubscription = loadUserSubscription;
+    window.toggleImportCvSection = toggleImportCvSection;
+    window.handleDragOver = handleDragOver;
+    window.handleDragLeave = handleDragLeave;
+    window.handleDrop = handleDrop;
+    window.handleCvFileChosen = handleCvFileChosen;
+    window.clearSelectedCvFile = clearSelectedCvFile;
+    window.uploadAndAnalyzeCvFile = uploadAndAnalyzeCvFile;
+    window.openSyncTagCloudModal = openSyncTagCloudModal;
+    window.onSyncCvSelectionChange = onSyncCvSelectionChange;
+    window.runSynchronizedTagCloudComparison = runSynchronizedTagCloudComparison;
+    window.addMissingSkillToCv = addMissingSkillToCv;
+    window.triggerDecisionOptimizerFromSync = triggerDecisionOptimizerFromSync;
+    window.sendCvToDecisionOptimizer = sendCvToDecisionOptimizer;
 
     async function loadData() {
       try {

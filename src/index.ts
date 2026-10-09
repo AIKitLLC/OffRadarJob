@@ -26,6 +26,7 @@ import {
   CrawlTaskStatus,
   User,
   CvVersion,
+  Job,
   LlmFeedback,
   FeedbackStatus,
   UserSubscription,
@@ -38,6 +39,7 @@ import { NewGradHarvester } from "./harvesters/newgrad-harvester.js";
 import { SmbHarvester, SMB_CATALOGUE } from "./harvesters/smb-harvester.js";
 import { JdRerankerService } from "./services/jd-reranker.js";
 import { DecisionApiService } from "./services/decision-api.js";
+import { CvTagCloudService } from "./services/cv-tag-cloud.js";
 
 export interface KvNamespace {
   get(key: string, type?: "text" | "json"): Promise<any>;
@@ -301,6 +303,7 @@ export default {
     const effectiveConfig = await getEffectiveConfig(env, settingsRepo);
     const decisionApi = new DecisionApiService({ ai: env.AI });
     const rerankerService = new JdRerankerService();
+    const cvTagCloudService = new CvTagCloudService();
     const mcpHandler = new McpServerHandler(
       jobRepo,
       companyRepo,
@@ -489,6 +492,36 @@ export default {
       return Response.json(data, {
         headers: {
           "Cache-Control": "public, max-age=60, s-maxage=180, stale-while-revalidate=300",
+        },
+      });
+    }
+
+    // 5c. API: Market-wide Tag Cloud Analysis (All Live JDs)
+    if (path === "/api/reports/tag-cloud-market" && request.method === "GET") {
+      const jobsRes = await jobRepo.listPaged({ page: 1, limit: 150, techOnly: true });
+      const allText = jobsRes.items
+        .map((j) => `${j.title} ${(j.skills || []).join(" ")} ${j.descriptionSummary || ""}`)
+        .join(" ");
+      const marketTags = cvTagCloudService.extractTagCloudFromText(allText);
+      const topSkills = marketTags.slice(0, 15).map((t) => t.name);
+      const categories: Record<string, number> = {};
+      for (const t of marketTags) {
+        categories[t.category] = (categories[t.category] || 0) + 1;
+      }
+
+      return Response.json({
+        success: true,
+        totalJdsAnalyzed: jobsRes.items.length,
+        marketTags,
+        marketTagCloud: {
+          totalJobsSampled: jobsRes.items.length,
+          topSkills,
+          categories,
+          tags: marketTags,
+        },
+      }, {
+        headers: {
+          "Cache-Control": "public, max-age=120, s-maxage=300",
         },
       });
     }
@@ -1467,7 +1500,156 @@ export default {
       return Response.json({ success: true, cv: saved }, { status: 201 });
     }
 
-    if (path.startsWith("/api/user/cvs/") && path !== "/api/user/cvs/tailor") {
+    // 9a. User CV: Import Document & Parse Tag Cloud
+    if (path === "/api/user/cvs/import" && request.method === "POST") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+      let fileName = "uploaded-cv.md";
+      let fileContent = "";
+      let contentType = "text/plain";
+      let saveAsVersion = true;
+      let versionTitle: string | undefined = undefined;
+      let targetRole: string | undefined = undefined;
+      let targetGroup: TargetGroup | undefined = undefined;
+
+      const reqContentType = request.headers.get("content-type") || "";
+      if (reqContentType.includes("multipart/form-data")) {
+        const formData = await request.formData();
+        const file = formData.get("file");
+        saveAsVersion = formData.get("save_as_version") !== "false";
+        versionTitle = (formData.get("version_title") as string) || undefined;
+        targetRole = (formData.get("target_role") as string) || undefined;
+        targetGroup = ((formData.get("target_group") as string) || undefined) as TargetGroup | undefined;
+
+        if (file && typeof file === "object" && "name" in file) {
+          fileName = (file as File).name;
+          contentType = (file as File).type || contentType;
+          fileContent = await (file as File).text();
+        } else if (typeof file === "string") {
+          fileContent = file;
+        }
+      } else {
+        const body = (await request.json().catch(() => ({}))) as Record<string, any>;
+        fileName = body.file_name || body.fileName || "uploaded-cv.md";
+        fileContent = body.file_content || body.fileContent || body.content || "";
+        contentType = body.content_type || body.contentType || "text/plain";
+        saveAsVersion = body.save_as_version !== false && body.saveAsVersion !== false;
+        versionTitle = body.version_title || body.versionTitle || undefined;
+        targetRole = body.target_role || body.targetRole || undefined;
+        targetGroup = (body.target_group || body.targetGroup) as TargetGroup | undefined;
+      }
+
+      if (!fileContent || !fileContent.trim()) {
+        return Response.json({ error: "No CV file content received" }, { status: 400 });
+      }
+
+      const parsed = cvTagCloudService.parseUploadedDocument(fileName, fileContent, contentType);
+      const title = versionTitle || parsed.title;
+      const role = targetRole || parsed.targetRole;
+      const primaryGroup = targetGroup || parsed.tagCloud.primaryTargetGroup;
+
+      let savedCv: CvVersion | null = null;
+      if (saveAsVersion) {
+        const now = Date.now();
+        const newCvId = `cv_${now}_${Math.random().toString(36).slice(2, 7)}`;
+        const cvRecord: CvVersion = {
+          id: newCvId,
+          userId: user.id,
+          title,
+          targetRole: role,
+          targetGroup: primaryGroup,
+          content: parsed.content,
+          skills: parsed.skills,
+          matchScore: 85,
+          tailoredNotes: `Imported from ${fileName}. Primary Archetype: ${TARGET_GROUPS[primaryGroup]?.name || primaryGroup}.`,
+          decisionSuggestions: { tagCloud: parsed.tagCloud },
+          createdAt: now,
+          updatedAt: now,
+        };
+        await cvRepo.create(cvRecord);
+        savedCv = await cvRepo.getById(newCvId, user.id);
+      }
+
+      return Response.json({
+        success: true,
+        cv: savedCv,
+        parsed: {
+          ...parsed,
+          title,
+          targetRole: role,
+          primaryTargetGroup: primaryGroup,
+          totalTags: parsed.tagCloud.totalTags,
+        },
+      }, { status: 201 });
+    }
+
+    // 9b. User CV: Synchronized Tag Cloud Comparison (CV vs. JD / Market)
+    if (path === "/api/user/cvs/compare-tags" && request.method === "POST") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      const body = (await request.json().catch(() => ({}))) as Record<string, any>;
+
+      let cvContent = body.cv_content || body.cvContent || "";
+      let cvId = body.cv_id || body.cvId;
+
+      if (!cvContent && cvId && user) {
+        const cv = await cvRepo.getById(cvId, user.id);
+        if (cv) cvContent = cv.content;
+      }
+      if (!cvContent && user) {
+        const cvs = await cvRepo.listByUser(user.id);
+        if (cvs.length > 0 && cvs[0]) {
+          cvContent = cvs[0].content;
+          cvId = cvs[0].id;
+        }
+      }
+      if (!cvContent) {
+        cvContent = `# Software Engineer\n\n## Skills\nTypeScript, Node.js, Python, PostgreSQL, Docker, React, Cloudflare Workers`;
+      }
+
+      let job: Job | undefined = undefined;
+      const jobId = body.job_id || body.jobId;
+      if (jobId) {
+        const found = await jobRepo.getById(jobId);
+        if (found) job = found;
+      }
+
+      const targetGroup = (body.target_group || body.targetGroup) as TargetGroup | undefined;
+
+      const jobsRes = await jobRepo.listPaged({ page: 1, limit: 80, techOnly: true });
+      const report = rerankerService.generateRealtimeReport(jobsRes.items);
+
+      const comparison = cvTagCloudService.compareCvWithJd(cvContent, {
+        job,
+        targetGroup,
+        report,
+      });
+
+      return Response.json({
+        success: true,
+        cvId,
+        comparison,
+      });
+    }
+
+    // 9c. User CV: Get Tag Cloud for Specific Stored CV
+    if (path.startsWith("/api/user/cvs/") && path.endsWith("/tag-cloud") && request.method === "GET") {
+      const user = await getAuthenticatedUser(request, userRepo);
+      if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+      const cvId = path.replace("/api/user/cvs/", "").replace("/tag-cloud", "").trim();
+      const cv = await cvRepo.getById(cvId, user.id);
+      if (!cv) return Response.json({ error: "CV not found" }, { status: 404 });
+
+      const tagCloud = cvTagCloudService.analyzeCv(cv.content, { cvId: cv.id, title: cv.title });
+      return Response.json({ success: true, cvId: cv.id, tagCloud, analysis: tagCloud });
+    }
+
+    if (
+      path.startsWith("/api/user/cvs/") &&
+      !["/api/user/cvs/tailor", "/api/user/cvs/import", "/api/user/cvs/compare-tags", "/api/user/cvs/optimize-decision"].includes(path) &&
+      !path.endsWith("/tag-cloud")
+    ) {
       const cvId = path.replace("/api/user/cvs/", "").trim();
       const user = await getAuthenticatedUser(request, userRepo);
       if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
