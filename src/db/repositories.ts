@@ -1195,10 +1195,19 @@ export class JobRepository {
     const isRemote = Number(row["is_remote"]) === 1;
 
     let detectedRegion = detectUsRegion(location, locHint, remoteScope, isRemote);
-    if (Number(row["is_midwest_match"] ?? 0) === 1) {
+    if (
+      Number(row["is_midwest_match"] ?? 0) === 1 ||
+      Number(row["is_midwest"] ?? 0) === 1 ||
+      row["is_midwest"] === true ||
+      String(row["us_region"] ?? "").toLowerCase() === "midwest"
+    ) {
       detectedRegion = "midwest";
     }
-    const isMidwestMatch = Number(row["is_midwest_match"] ?? 0) === 1 || detectedRegion === "midwest";
+    const isMidwestMatch =
+      Number(row["is_midwest_match"] ?? 0) === 1 ||
+      Number(row["is_midwest"] ?? 0) === 1 ||
+      row["is_midwest"] === true ||
+      detectedRegion === "midwest";
 
     return {
       id: String(row["id"]),

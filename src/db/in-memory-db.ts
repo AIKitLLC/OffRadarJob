@@ -314,16 +314,12 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       });
 
       const isMidwestRow = (r: Record<string, unknown>) => {
-        const remoteScope = String(r["remote_scope"] ?? "");
-        const location = String(r["location"] ?? "");
-        const locationHint = String(r["location_hint"] ?? "");
-        return remoteScope.toLowerCase().includes("midwest") ||
-          location.toLowerCase().includes("midwest") ||
-          locationHint.toLowerCase().includes("midwest") ||
-          /\b(Illinois|Indiana|Wisconsin|Minnesota|Ohio|Michigan|Missouri|Iowa|Kansas|Nebraska|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Milwaukee|Saint Louis|Des Moines)\b/i.test(location) ||
-          /\b(Illinois|Indiana|Wisconsin|Minnesota|Ohio|Michigan|Missouri|Iowa|Kansas|Nebraska|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Milwaukee|Saint Louis|Des Moines)\b/i.test(locationHint) ||
-          /(?:,\s*|\s+)(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD)(?:\s+|,|$)/.test(location) ||
-          /(?:,\s*|\s+)(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD)(?:\s+|,|$)/.test(locationHint);
+        return detectUsRegion(
+          r["location"] ? String(r["location"]) : null,
+          r["location_hint"] ? String(r["location_hint"]) : null,
+          r["remote_scope"] ? String(r["remote_scope"]) : null,
+          Number(r["is_remote"] ?? 0) === 1
+        ) === "midwest";
       };
 
       const wherePart = extractWhereClause(q);
