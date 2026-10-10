@@ -1597,7 +1597,11 @@ export function renderDashboardHtml(): string {
       <!-- Live Match Score Meter Banner -->
       <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(56, 189, 248, 0.1)); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 12px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div style="flex: 1; min-width: 240px;">
-          <div style="font-size: 12px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;">Độ Phù Hợp Kỹ Năng (Tag Cloud Match)</div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 12px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;">Độ Phù Hợp Kỹ Năng</span>
+            <span id="sync-weighted-badge" style="font-size: 11px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 2px 8px; border-radius: 6px; font-weight: 700;">Weighted Fit: --%</span>
+            <span id="sync-ats-badge" style="font-size: 11px; background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); padding: 2px 8px; border-radius: 6px; font-weight: 700;">ATS: --/100</span>
+          </div>
           <div style="display: flex; align-items: baseline; gap: 12px; margin-top: 4px;">
             <span style="font-size: 32px; font-weight: 800; color: #34d399;" id="sync-match-score">0%</span>
             <span style="font-size: 13px; font-weight: 600; color: #cbd5e1;" id="sync-match-rating">Đang tải...</span>
@@ -1613,6 +1617,11 @@ export function renderDashboardHtml(): string {
             ⚡ Tối ưu với Decision API
           </button>
         </div>
+      </div>
+
+      <!-- Actionable Strategic Recommendation Box -->
+      <div id="sync-recommendation-box" style="display: none; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #e2e8f0; line-height: 1.5;">
+        <strong style="color: #38bdf8;">💡 Khuyến nghị chiến lược:</strong> <span id="sync-recommendation-summary"></span>
       </div>
 
       <!-- Category Breakdown Pills -->
@@ -3274,6 +3283,29 @@ export function renderDashboardHtml(): string {
       if (fillEl) fillEl.style.background = scoreColor;
       if (ratingEl) ratingEl.innerText = ratingText;
 
+      const weightedScore = comp.weightedFitScore !== undefined ? Math.round(comp.weightedFitScore) : score;
+      const weightedBadge = document.getElementById('sync-weighted-badge');
+      if (weightedBadge) {
+        weightedBadge.innerText = 'Weighted Fit: ' + weightedScore + '%';
+      }
+
+      const atsScore = comp.atsReadabilityScore !== undefined ? Math.round(comp.atsReadabilityScore) : 85;
+      const atsBadge = document.getElementById('sync-ats-badge');
+      if (atsBadge) {
+        atsBadge.innerText = 'ATS: ' + atsScore + '/100';
+      }
+
+      const recBox = document.getElementById('sync-recommendation-box');
+      const recSummary = document.getElementById('sync-recommendation-summary');
+      if (recBox && recSummary) {
+        if (comp.recommendationSummary) {
+          recBox.style.display = 'block';
+          recSummary.innerText = comp.recommendationSummary;
+        } else {
+          recBox.style.display = 'none';
+        }
+      }
+
       const elCountMatched = document.getElementById('count-matched-tags');
       const elCountMissing = document.getElementById('count-missing-tags');
       const elCountCvOnly = document.getElementById('count-cv-only-tags');
@@ -3347,7 +3379,12 @@ export function renderDashboardHtml(): string {
           const label = catLabels[cat] || cat;
           const count = catCounts[cat];
           const chipClass = 'chip-cat-' + cat;
-          return '<span class="tag-cloud-chip ' + chipClass + '" style="font-size: 11px;">' + label + ': <strong>' + count + '</strong></span>';
+          let catRatio = '';
+          if (comp.categoryMatchBreakdown && comp.categoryMatchBreakdown[cat]) {
+            const b = comp.categoryMatchBreakdown[cat];
+            catRatio = ' <small style="opacity: 0.85;">(' + b.matched + '/' + b.totalJd + ' khớp)</small>';
+          }
+          return '<span class="tag-cloud-chip ' + chipClass + '" style="font-size: 11px;">' + label + ': <strong>' + count + '</strong>' + catRatio + '</span>';
         }).join(' ');
 
         breakdownEl.innerHTML = '<span style="font-size: 11px; font-weight: 700; color: #cbd5e1; margin-right: 6px;">Phân bổ kỹ năng trong CV:</span>' + pillsHtml;

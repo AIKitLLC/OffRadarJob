@@ -45,16 +45,27 @@ export class CvTagCloudService {
     { name: "SQL", category: "languages", defaultWeight: 89 },
     { name: "Elixir", category: "languages", defaultWeight: 86 },
     { name: "Scala", category: "languages", defaultWeight: 78 },
+    { name: "Zig", category: "languages", defaultWeight: 88 },
+    { name: "Dart", category: "languages", defaultWeight: 80 },
+    { name: "Solidity", category: "languages", defaultWeight: 85 },
 
     // AI & LLM (Top Demand)
     { name: "Workers AI", category: "ai_ml", defaultWeight: 98, aliases: ["cloudflare ai", "workers-ai"] },
     { name: "LLM", category: "ai_ml", defaultWeight: 96, aliases: ["large language models", "large language model"] },
     { name: "Model Context Protocol", category: "ai_ml", defaultWeight: 97, aliases: ["mcp", "mcp server", "mcp tools"] },
     { name: "RAG", category: "ai_ml", defaultWeight: 94, aliases: ["retrieval-augmented generation", "retrieval augmented generation"] },
-    { name: "Vector Search", category: "ai_ml", defaultWeight: 93, aliases: ["vector db", "vector database", "vectorize", "pinecone", "chroma", "weaviate", "qdrant"] },
+    { name: "Vector Search", category: "ai_ml", defaultWeight: 93, aliases: ["vector db", "vector database", "pinecone", "chroma", "weaviate", "qdrant"] },
+    { name: "Cloudflare Vectorize", category: "ai_ml", defaultWeight: 95, aliases: ["vectorize", "cf vectorize"] },
     { name: "Embeddings", category: "ai_ml", defaultWeight: 91, aliases: ["text-embedding", "embedding models"] },
     { name: "Prompt Engineering", category: "ai_ml", defaultWeight: 89, aliases: ["prompt design", "few-shot"] },
     { name: "Autonomous Agents", category: "ai_ml", defaultWeight: 94, aliases: ["ai agents", "agentic workflows", "agent loops"] },
+    { name: "DeepSeek", category: "ai_ml", defaultWeight: 95, aliases: ["deepseek-r1", "deepseek-v3"] },
+    { name: "Ollama", category: "ai_ml", defaultWeight: 91 },
+    { name: "vLLM", category: "ai_ml", defaultWeight: 92 },
+    { name: "Hugging Face", category: "ai_ml", defaultWeight: 90, aliases: ["huggingface", "transformers"] },
+    { name: "LangGraph", category: "ai_ml", defaultWeight: 93 },
+    { name: "DSPy", category: "ai_ml", defaultWeight: 89 },
+    { name: "Whisper", category: "ai_ml", defaultWeight: 87 },
     { name: "PyTorch", category: "ai_ml", defaultWeight: 88 },
     { name: "TensorFlow", category: "ai_ml", defaultWeight: 80 },
     { name: "LangChain", category: "ai_ml", defaultWeight: 87 },
@@ -63,7 +74,9 @@ export class CvTagCloudService {
     { name: "Anthropic", category: "ai_ml", defaultWeight: 90, aliases: ["claude"] },
 
     // Cloud & Infrastructure
-    { name: "Cloudflare Workers", category: "cloud_infra", defaultWeight: 96, aliases: ["cloudflare", "workers kv", "d1", "vectorize", "wrangler"] },
+    { name: "Cloudflare Workers", category: "cloud_infra", defaultWeight: 96, aliases: ["cloudflare", "wrangler", "cf worker"] },
+    { name: "Cloudflare Queues", category: "cloud_infra", defaultWeight: 92, aliases: ["cf queues", "workers queues"] },
+    { name: "Cloudflare Pages", category: "cloud_infra", defaultWeight: 88, aliases: ["cf pages"] },
     { name: "Docker", category: "cloud_infra", defaultWeight: 90, aliases: ["containerization", "containers"] },
     { name: "Kubernetes", category: "cloud_infra", defaultWeight: 92, aliases: ["k8s"] },
     { name: "AWS", category: "cloud_infra", defaultWeight: 91, aliases: ["amazon web services", "s3", "lambda", "ec2"] },
@@ -75,6 +88,7 @@ export class CvTagCloudService {
     { name: "Serverless", category: "cloud_infra", defaultWeight: 90, aliases: ["edge computing", "edge functions"] },
 
     // Frameworks & Libraries
+    { name: "Hono", category: "frameworks", defaultWeight: 94, aliases: ["hono.js", "honojs"] },
     { name: "React", category: "frameworks", defaultWeight: 92, aliases: ["react.js", "reactjs"] },
     { name: "Next.js", category: "frameworks", defaultWeight: 93, aliases: ["nextjs"] },
     { name: "Node.js", category: "frameworks", defaultWeight: 91, aliases: ["nodejs", "node"] },
@@ -84,36 +98,63 @@ export class CvTagCloudService {
     { name: "NestJS", category: "frameworks", defaultWeight: 85, aliases: ["nest.js"] },
     { name: "Tailwind CSS", category: "frameworks", defaultWeight: 88, aliases: ["tailwind", "tailwindcss"] },
     { name: "Svelte", category: "frameworks", defaultWeight: 84, aliases: ["sveltekit"] },
+    { name: "Astro", category: "frameworks", defaultWeight: 89 },
+    { name: "Remix", category: "frameworks", defaultWeight: 87, aliases: ["remix.run"] },
+    { name: "SolidJS", category: "frameworks", defaultWeight: 84, aliases: ["solid.js"] },
+    { name: "tRPC", category: "frameworks", defaultWeight: 90 },
     { name: "Django", category: "frameworks", defaultWeight: 81 },
     { name: "Spring Boot", category: "frameworks", defaultWeight: 83, aliases: ["spring", "springboot"] },
     { name: "Flask", category: "frameworks", defaultWeight: 77 },
     { name: "ASP.NET", category: "frameworks", defaultWeight: 79, aliases: ["aspnet", ".net core"] },
+    { name: "React Native", category: "frameworks", defaultWeight: 89, aliases: ["react-native"] },
+    { name: "Flutter", category: "frameworks", defaultWeight: 88 },
+    { name: "SwiftUI", category: "frameworks", defaultWeight: 87 },
+    { name: "Jetpack Compose", category: "frameworks", defaultWeight: 86 },
 
     // Databases & Messaging
     { name: "PostgreSQL", category: "database", defaultWeight: 93, aliases: ["postgres", "pgsql"] },
+    { name: "Cloudflare D1", category: "database", defaultWeight: 94, aliases: ["d1 database", "cf d1", "d1"] },
+    { name: "Cloudflare KV", category: "database", defaultWeight: 90, aliases: ["workers kv", "cf kv"] },
     { name: "Redis", category: "database", defaultWeight: 90 },
     { name: "Kafka", category: "database", defaultWeight: 91, aliases: ["apache kafka"] },
     { name: "MySQL", category: "database", defaultWeight: 82 },
     { name: "MongoDB", category: "database", defaultWeight: 79, aliases: ["mongo"] },
     { name: "SQLite", category: "database", defaultWeight: 84, aliases: ["sqlite3"] },
+    { name: "DuckDB", category: "database", defaultWeight: 91 },
+    { name: "Polars", category: "database", defaultWeight: 90 },
+    { name: "Prisma", category: "database", defaultWeight: 88, aliases: ["prisma orm"] },
+    { name: "Drizzle ORM", category: "database", defaultWeight: 92, aliases: ["drizzle"] },
     { name: "DynamoDB", category: "database", defaultWeight: 85 },
     { name: "Elasticsearch", category: "database", defaultWeight: 83, aliases: ["elastic", "opensearch"] },
     { name: "RabbitMQ", category: "database", defaultWeight: 81 },
     { name: "ClickHouse", category: "database", defaultWeight: 88 },
+    { name: "Snowflake", category: "database", defaultWeight: 87 },
 
     // Architecture & Core Practices
-    { name: "Distributed Systems", category: "architecture", defaultWeight: 95, aliases: ["distributed computing", "consensus", "raft"] },
-    { name: "Microservices", category: "architecture", defaultWeight: 89, aliases: ["microservice architecture"] },
+    { name: "Distributed Systems", category: "architecture", defaultWeight: 95, aliases: ["distributed computing", "consensus", "raft", "hệ thống phân tán"] },
+    { name: "Durable Objects", category: "architecture", defaultWeight: 95, aliases: ["durable object"] },
+    { name: "Microservices", category: "architecture", defaultWeight: 89, aliases: ["microservice architecture", "kiến trúc microservices"] },
+    { name: "Clean Architecture", category: "architecture", defaultWeight: 90, aliases: ["hexagonal architecture", "onion architecture"] },
+    { name: "Domain-Driven Design", category: "architecture", defaultWeight: 89, aliases: ["ddd"] },
+    { name: "CQRS", category: "architecture", defaultWeight: 88 },
     { name: "REST APIs", category: "architecture", defaultWeight: 88, aliases: ["rest", "restful", "rest api"] },
     { name: "GraphQL", category: "architecture", defaultWeight: 85 },
     { name: "gRPC", category: "architecture", defaultWeight: 88, aliases: ["protobuf", "protocol buffers"] },
+    { name: "WebSockets", category: "architecture", defaultWeight: 87, aliases: ["websocket", "socket.io"] },
+    { name: "WebAssembly", category: "architecture", defaultWeight: 88, aliases: ["wasm"] },
     { name: "Event-Driven", category: "architecture", defaultWeight: 90, aliases: ["event-driven architecture", "pub/sub", "pubsub"] },
-    { name: "High Concurrency", category: "architecture", defaultWeight: 91, aliases: ["concurrency", "multithreading", "async", "asynchronous programming"] },
+    { name: "High Concurrency", category: "architecture", defaultWeight: 91, aliases: ["concurrency", "multithreading", "async", "asynchronous programming", "chịu tải cao", "xử lý đồng thời"] },
     { name: "0-to-1 Build", category: "architecture", defaultWeight: 92, aliases: ["0-to-1", "0 to 1", "mvp", "rapid prototyping"] },
-    { name: "Automated Testing", category: "architecture", defaultWeight: 87, aliases: ["unit testing", "integration testing", "tdd", "vitest", "jest"] },
+    { name: "Automated Testing", category: "architecture", defaultWeight: 87, aliases: ["unit testing", "integration testing", "tdd", "vitest", "jest", "kiểm thử tự động"] },
 
-    // Tools
+    // Tools & Observability
     { name: "Git", category: "tools", defaultWeight: 88, aliases: ["github", "gitlab"] },
+    { name: "OpenTelemetry", category: "tools", defaultWeight: 92, aliases: ["otel", "opentelemetry sdk"] },
+    { name: "Prometheus", category: "tools", defaultWeight: 86 },
+    { name: "Grafana", category: "tools", defaultWeight: 86 },
+    { name: "Bun", category: "tools", defaultWeight: 91 },
+    { name: "Deno", category: "tools", defaultWeight: 85 },
+    { name: "Zod", category: "tools", defaultWeight: 91 },
     { name: "Vite", category: "tools", defaultWeight: 86 },
     { name: "Webpack", category: "tools", defaultWeight: 75 },
     { name: "Postman", category: "tools", defaultWeight: 78 },
@@ -135,7 +176,9 @@ export class CvTagCloudService {
   public extractTagCloudFromText(content: string): SkillTag[] {
     if (!content || !content.trim()) return [];
 
-    const lowerText = ` ${content.toLowerCase()} `;
+    // Bounded input length prevents CPU starvation on massive documents
+    const safeContent = content.length > 100_000 ? content.slice(0, 100_000) : content;
+    const lowerText = ` ${safeContent.toLowerCase()} `;
     const tagsMap = new Map<string, SkillTag>();
 
     for (const def of CvTagCloudService.LEXICON) {
@@ -143,10 +186,32 @@ export class CvTagCloudService {
       let matchesCount = 0;
 
       for (const alias of namesToTest) {
+        // Special case for single-letter language "c":
+        // Guard against false positives like (c) copyright, c/o, c-suite, vitamin c, section c
+        if (alias === "c") {
+          const isFalsePositive =
+            lowerText.includes("(c)") ||
+            lowerText.includes("c/o") ||
+            lowerText.includes("c-level") ||
+            lowerText.includes("c-suite") ||
+            lowerText.includes("vitamin c");
+
+          const hasTechnicalC =
+            /\b(?:c\/c\+\+|c\s+language|c\s+programming|ansi\s+c|c99|c11|embedded\s+c)\b/i.test(lowerText) ||
+            /\bc\s*,\s*(?:c\+\+|c#|python|rust|go|java|assembly)\b/i.test(lowerText) ||
+            /\bc\s+and\s+(?:c\+\+|c#|python|rust|go|java|assembly)\b/i.test(lowerText) ||
+            /\b(?:proficient|experience|expert|programming|coded|written)\s+in\s+c\b/i.test(lowerText);
+
+          if (hasTechnicalC || (!isFalsePositive && /\bc\b/i.test(lowerText) && (lowerText.includes("c,") || lowerText.includes("c/")))) {
+            matchesCount += 1;
+          }
+          continue;
+        }
+
         // Safe regex escaping
         const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        // Word boundary or punctuation boundary
-        const regex = new RegExp(`(?:^|[\\s,;:.()/\\-\\[\\]])(${escaped})(?=[\\s,;:.()/\\-\\[\\]]|$)`, "gi");
+        // Word boundary or punctuation boundary including angle brackets
+        const regex = new RegExp(`(?:^|[\\s,;:.()/\\-\\[\\]<>])(${escaped})(?=[\\s,;:.()/\\-\\[\\]<>]|$)`, "gi");
         const found = lowerText.match(regex);
         if (found) {
           matchesCount += found.length;
@@ -275,7 +340,8 @@ export class CvTagCloudService {
 
     // Infer Role Title
     let extractedRole: string | undefined = undefined;
-    const roleMatches = content.match(/(?:title|role|position|experience as|profile):\s*([^\n\r]+)/i) ||
+    const roleMatches =
+      content.match(/(?:title|role|position|experience as|profile|vị trí|chức danh):\s*([^\n\r]+)/i) ||
       content.match(/^#\s+[^\n\-–—]+\s*[-–—]\s*([^\n\r]+)/m);
     if (roleMatches && roleMatches[1]) {
       extractedRole = roleMatches[1].trim();
@@ -435,10 +501,86 @@ export class CvTagCloudService {
     // Compute match percentage
     let matchPercentage = 0;
     if (jdTags.length > 0) {
-      const matchRatio = matchedTags.length / jdTags.length;
-      matchPercentage = Math.min(100, Math.max(10, Math.round(matchRatio * 100)));
+      if (matchedTags.length === 0) {
+        matchPercentage = 0;
+      } else {
+        const matchRatio = matchedTags.length / jdTags.length;
+        matchPercentage = Math.min(100, Math.max(10, Math.round(matchRatio * 100)));
+      }
     } else {
       matchPercentage = 75;
+    }
+
+    // Compute Importance-Weighted Fit Score
+    const totalJdWeight = jdTags.reduce((sum, t) => sum + t.weight, 0);
+    const matchedJdWeight = matchedTags.reduce((sum, t) => {
+      const jdTag = jdNamesMap.get(t.name.toLowerCase());
+      return sum + (jdTag ? jdTag.weight : t.weight);
+    }, 0);
+    const weightedFitScore = matchedTags.length === 0
+      ? 0
+      : (totalJdWeight > 0
+        ? Math.min(100, Math.max(10, Math.round((matchedJdWeight / totalJdWeight) * 100)))
+        : matchPercentage);
+
+    // Compute Category Match Breakdown
+    const ALL_CATEGORIES: SkillCategory[] = [
+      "languages",
+      "frameworks",
+      "cloud_infra",
+      "ai_ml",
+      "database",
+      "architecture",
+      "tools",
+      "other",
+    ];
+    const categoryMatchBreakdown: Record<SkillCategory, { matched: number; totalJd: number; percentage: number }> = {
+      languages: { matched: 0, totalJd: 0, percentage: 100 },
+      frameworks: { matched: 0, totalJd: 0, percentage: 100 },
+      cloud_infra: { matched: 0, totalJd: 0, percentage: 100 },
+      ai_ml: { matched: 0, totalJd: 0, percentage: 100 },
+      database: { matched: 0, totalJd: 0, percentage: 100 },
+      architecture: { matched: 0, totalJd: 0, percentage: 100 },
+      tools: { matched: 0, totalJd: 0, percentage: 100 },
+      other: { matched: 0, totalJd: 0, percentage: 100 },
+    };
+
+    for (const t of jdTags) {
+      categoryMatchBreakdown[t.category].totalJd += 1;
+    }
+    for (const t of matchedTags) {
+      categoryMatchBreakdown[t.category].matched += 1;
+    }
+    for (const cat of ALL_CATEGORIES) {
+      const data = categoryMatchBreakdown[cat];
+      data.percentage = data.totalJd > 0 ? Math.round((data.matched / data.totalJd) * 100) : 100;
+    }
+
+    // Compute ATS Readability & Structural Score
+    let atsScore = 82;
+    if (deprecatedTags.length > 0) {
+      atsScore -= deprecatedTags.length * 15;
+    }
+    if (matchedTags.length >= 5) {
+      atsScore += 8;
+    }
+    if (cvTags.length >= 8 && cvTags.length <= 35) {
+      atsScore += 6;
+    } else if (cvTags.length < 4) {
+      atsScore -= 15;
+    }
+    const atsReadabilityScore = Math.min(99, Math.max(20, atsScore));
+
+    // Dynamic Actionable Strategic Summary
+    let recommendationSummary = "";
+    if (matchPercentage >= 75) {
+      recommendationSummary = `CV có độ tương thích cao (${matchPercentage}% tiêu chuẩn, ${weightedFitScore}% Weighted Fit) với nhu cầu tuyển dụng. Tiếp tục giữ vững trọng tâm kiến trúc và tối ưu hóa bullet points đo lường thành tựu.`;
+    } else if (matchPercentage >= 50) {
+      const topMissing = missingTags.slice(0, 3).map((t) => t.name).join(", ");
+      recommendationSummary = `CV đạt mức độ khớp khá (${matchPercentage}%), nhưng còn thiếu một số kỹ năng trọng yếu: ${topMissing || "công nghệ thị trường"}. Hãy bổ sung các từ khóa này vào dự án thực tế để vượt qua vòng lọc ATS.`;
+    } else {
+      const topMissing = missingTags.slice(0, 4).map((t) => t.name).join(", ");
+      recommendationSummary = `CV đang có độ lệch đáng kể so với chân dung tuyển dụng mục tiêu. Khuyến nghị cập nhật ngay các công nghệ bắt buộc: ${topMissing || "stack cốt lõi"} và lược bỏ các kỹ thuật không còn phù hợp.`;
     }
 
     return {
@@ -449,6 +591,10 @@ export class CvTagCloudService {
       cvOnlyTags,
       deprecatedTags,
       matchPercentage,
+      weightedFitScore,
+      categoryMatchBreakdown,
+      atsReadabilityScore,
+      recommendationSummary,
       targetContext: {
         type: targetContextType,
         id: target.job?.id,
@@ -620,6 +766,10 @@ export class CvTagCloudService {
 
     // Remove excessive null bytes or control characters
     text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+
+    // Sanitize HTML block tags to newlines and strip inline tags
+    text = text.replace(/<(?:br|p|div|li|\/li|\/p|\/div)[^>]*>/gi, "\n");
+    text = text.replace(/<[^>]+>/g, " ");
 
     // If it looks like raw plain text without markdown headings, format into readable markdown
     if (!text.includes("#") && !text.includes("##")) {

@@ -230,15 +230,33 @@ Return ONLY valid JSON.`;
         rationale: "Nhà tuyển dụng junior/new grad cần bằng chứng code sạch và khả năng tự học thực tế hơn là danh sách công nghệ chung chung.",
         priority: "high",
       });
+    } else if (profile.id === "remote_first_boutique") {
+      additions.push({
+        category: "project_impact",
+        item: "Bổ sung tài liệu thiết kế kỹ thuật (RFC / ADR) và quy trình giao tiếp bất đồng bộ (Async-first)",
+        rationale: "Các công ty Remote-first đề cao ứng viên có khả năng tự chủ, viết tài liệu rõ ràng và tự quản lý công việc hiệu quả.",
+        priority: "high",
+      });
+      if (!cvLower.includes("performance") && !cvLower.includes("tối ưu")) {
+        additions.push({
+          category: "metric",
+          item: "Thêm số liệu về tính ổn định & tối ưu hiệu năng (e.g. 99.9% uptime, zero unhandled exceptions)",
+          rationale: "Khẳng định tư duy làm sản phẩm chỉn chu, ít phát sinh lỗi cần can thiệp khẩn cấp.",
+          priority: "medium",
+        });
+      }
     }
 
     // 3. Removals / Deprecations (Bớt)
     const OBSOLETE_TECH = [
       { pattern: "jquery", name: "jQuery", reason: "Công nghệ cũ, làm giảm ấn tượng về stack hiện đại." },
       { pattern: "svn", name: "Subversion (SVN)", reason: "Hệ thống quản lý phiên bản lỗi thời so với Git." },
+      { pattern: "cvs", name: "CVS", reason: "Hệ thống kiểm soát phiên bản đã lỗi thời so với Git." },
       { pattern: "angularjs", name: "AngularJS (1.x)", reason: "Framework đã hết vòng đời hỗ trợ." },
       { pattern: "php 5", name: "PHP 5.x", reason: "Phiên bản quá cũ, không phù hợp với chuẩn hiện tại." },
+      { pattern: "soap", name: "SOAP / XML-RPC", reason: "Giao thức cũ, nên thay thế bằng REST, gRPC hoặc GraphQL." },
       { pattern: "flash", name: "Adobe Flash", reason: "Đã bị loại bỏ hoàn toàn trên web hiện đại." },
+      { pattern: "bower", name: "Bower", reason: "Package manager cũ, nên chuyển sang npm/pnpm/yarn." },
     ];
 
     for (const obs of OBSOLETE_TECH) {
@@ -310,10 +328,22 @@ Return ONLY valid JSON.`;
     // Prune generic fillers & obsolete tech
     for (const rem of removals) {
       if (rem.category === "generic_filler" || rem.category === "outdated_tech") {
-        const keyword = rem.item.replace(/Lược bỏ(:|\s+cụm từ sáo rỗng:)/i, "").trim();
-        if (keyword) {
-          const regex = new RegExp(`\\b${keyword}\\b[,\\s]*`, "gi");
-          output = output.replace(regex, "");
+        const raw = rem.item.replace(/Lược bỏ(:|\s+cụm từ sáo rỗng:)/i, "").replace(/['"]/g, "").trim();
+        // Extract plain keywords or tokens (e.g. "Subversion (SVN)" -> ["Subversion", "SVN"])
+        const tokens = raw.match(/[a-zA-Z0-9#+.]+/g) || [];
+        for (const token of tokens) {
+          if (token.length >= 2) {
+            const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const regex = new RegExp(`\\b${escaped}\\b[,\\s]*`, "gi");
+            output = output.replace(regex, "");
+          }
+        }
+        // Also strip multi-word phrases (e.g. "hard worker", "team player")
+        const phraseClean = raw.split("/")[0]?.trim() || raw;
+        if (phraseClean) {
+          const phraseEscaped = phraseClean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const phraseRegex = new RegExp(`\\b${phraseEscaped}\\b[,\\s]*`, "gi");
+          output = output.replace(phraseRegex, "");
         }
       }
     }

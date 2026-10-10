@@ -545,6 +545,10 @@ export interface SynchronizedTagCloudComparison {
   cvOnlyTags: SkillTag[]; // Unique to candidate's CV
   deprecatedTags: SkillTag[]; // Outdated/legacy skills flagged for removal
   matchPercentage: number; // 0-100%
+  weightedFitScore?: number | undefined; // 0-100% importance-weighted match score
+  categoryMatchBreakdown?: Record<SkillCategory, { matched: number; totalJd: number; percentage: number }> | undefined;
+  atsReadabilityScore?: number | undefined; // 0-100% ATS readability & structural score
+  recommendationSummary?: string | undefined; // High-level actionable strategic summary
   targetContext: {
     type: "job" | "target_group" | "market";
     id?: string | undefined;
