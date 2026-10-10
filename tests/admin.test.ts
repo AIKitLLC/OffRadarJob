@@ -351,6 +351,9 @@ describe("Admin Control Center Suite", () => {
       expect(() => {
         new vm.Script(publicScriptMatch![1]!, { filename: "dashboard.js" });
       }).not.toThrow();
+
+      expect(publicScriptMatch![1]!).toContain("function escapeHtml");
+      expect(adminScriptMatch![1]!).toContain("function escapeHtml");
     });
   });
 });

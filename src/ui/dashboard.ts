@@ -1682,6 +1682,16 @@ export function renderDashboardHtml(): string {
   </div>
 
   <script>
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     let currentJobsPage = 1;
     let currentCompsPage = 1;
     let jobsPagination = { page: 1, limit: 30, total: 0, totalPages: 1 };
@@ -3619,6 +3629,7 @@ export function renderDashboardHtml(): string {
     window.addMissingSkillToCv = addMissingSkillToCv;
     window.triggerDecisionOptimizerFromSync = triggerDecisionOptimizerFromSync;
     window.sendCvToDecisionOptimizer = sendCvToDecisionOptimizer;
+    window.escapeHtml = escapeHtml;
 
     async function loadData() {
       try {
