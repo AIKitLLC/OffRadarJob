@@ -1,5 +1,6 @@
 # OffRadarJob (Off-Radar Job Gatherer) 🚀
 
+[![Live Production](https://img.shields.io/badge/Production-jobs.ai--kit.net-10b981.svg?style=flat&logo=cloudflare)](https://jobs.ai-kit.net)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020.svg)](https://workers.cloudflare.com/)
@@ -8,6 +9,15 @@
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
 
 > **Decoupled, edge-native agent pipeline for harvesting, reranking, and optimizing applications for hidden tech jobs at high-potential micro-companies, startups, and US-Midwest tech hubs.**
+
+---
+
+## 🌐 Live Production Site
+
+The platform is deployed live on Cloudflare's global edge network:
+- **🚀 Main Production Portal**: [https://jobs.ai-kit.net](https://jobs.ai-kit.net)
+- **⚡ Edge Worker Fallback**: [https://off-radar-jobs.tuannx87.workers.dev](https://off-radar-jobs.tuannx87.workers.dev)
+- **🤖 Telegram Bot**: [@OffRadarJobBot](https://t.me/OffRadarJobBot)
 
 ---
 
@@ -97,7 +107,7 @@ OffRadarJob exposes standard MCP tools for AI IDEs (Claude Desktop, Antigravity,
 - **AI Inference**: Cloudflare Workers AI (`@cf/meta/llama-3.3-70b-instruct`)
 - **Queue & Storage**: Cloudflare Queues, Vectorize
 - **Language**: TypeScript (Strict Mode, `exactOptionalPropertyTypes: true`)
-- **Test Framework**: Vitest (15 suites, 146+ automated unit and integration tests)
+- **Test Framework**: Vitest (17 suites, 178 automated unit, integration, and red-team tests)
 
 ---
 
@@ -128,15 +138,19 @@ for file in migrations/*.sql; do
 done
 ```
 
-### Running Locally
+### Running Locally & Deployment
 ```bash
+# Start local development server
 npm run dev
+# Open http://localhost:8787
+
+# Deploy to Cloudflare Production (https://jobs.ai-kit.net)
+npm run deploy
 ```
-Open `http://localhost:8787` to access the OffRadarJob Web Dashboard.
 
 ### Testing & Type Checking
 ```bash
-# Run full Vitest suite (146+ tests)
+# Run full Vitest suite (178 tests across 17 test files)
 npm test
 
 # Verify strict TypeScript types
