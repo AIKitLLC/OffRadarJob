@@ -834,7 +834,7 @@ export function renderDashboardHtml(): string {
 
     <div class="midwest-banner">
       <div class="midwest-banner-text">
-        <strong>🇺🇸 Toàn diện 5 Vùng Công nghệ Hoa Kỳ</strong> — Khai phá việc làm tech off-radar từ các micro-companies & boutique studios: 📍 <strong>Midwest</strong> (Chicago, Indy, Twin Cities) • 🌲 <strong>West</strong> (SF Bay, Seattle, Portland) • 🗽 <strong>Northeast</strong> (NYC, Boston, Philly) • ☀️ <strong>South</strong> (Austin, Atlanta, Raleigh) • 🏔️ <strong>Mountain</strong> (Denver, Salt Lake City).
+        <strong>🇺🇸 All 5 US Tech Regions</strong> — Discover off-radar tech jobs from vetted micro-companies & boutique studios: 📍 <strong>Midwest</strong> (Chicago, Indy, Twin Cities) • 🌲 <strong>West</strong> (SF Bay, Seattle, Portland) • 🗽 <strong>Northeast</strong> (NYC, Boston, Philly) • ☀️ <strong>South</strong> (Austin, Atlanta, Raleigh) • 🏔️ <strong>Mountain</strong> (Denver, Salt Lake City).
       </div>
       <span class="midwest-tag">⭐ US Nationwide + Midwest Priority</span>
     </div>
@@ -861,7 +861,7 @@ export function renderDashboardHtml(): string {
     <div class="region-pills-bar">
       <div class="region-pill active" id="pill-all" onclick="setRegionFilter('all')">
         <span class="pill-dot" style="background: #38bdf8;"></span>
-        <span>Toàn bộ US: <strong id="stat-reg-all">0</strong></span>
+        <span>All US: <strong id="stat-reg-all">0</strong></span>
       </div>
       <div class="region-pill" id="pill-midwest" onclick="setRegionFilter('midwest')">
         <span class="pill-dot" style="background: #f43f5e;"></span>
@@ -950,7 +950,7 @@ export function renderDashboardHtml(): string {
           <option value="People & HR">👥 People & HR</option>
         </select>
         <select id="region-filter" class="region-select" onchange="applyFilters()">
-          <option value="all" selected>🌐 Toàn bộ US & Remote (Tất cả 5 vùng)</option>
+          <option value="all" selected>🌐 All US & Remote (All 5 Regions)</option>
           <option value="midwest">📍 US-Midwest (IL, IN, WI, MN, OH...)</option>
           <option value="west">🌲 US-West (CA, WA, OR, NV...)</option>
           <option value="northeast">🗽 US-Northeast (NY, MA, PA, NJ...)</option>
@@ -959,7 +959,7 @@ export function renderDashboardHtml(): string {
           <option value="remote">🏠 100% Remote US</option>
         </select>
         <select id="state-filter" class="region-select" onchange="applyFilters()">
-          <option value="all">🇺🇸 All States (50 Bang & DC)</option>
+          <option value="all">🇺🇸 All States (50 States & DC)</option>
           <optgroup label="📍 US-Midwest">
             <option value="IL">Illinois (IL - Chicago)</option>
             <option value="IN">Indiana (IN - Indianapolis, Carmel)</option>
@@ -1009,12 +1009,12 @@ export function renderDashboardHtml(): string {
         <div class="sub-banner-content">
           <div class="sub-banner-icon">🔔</div>
           <div class="sub-banner-text">
-            <strong>Bản Tin Việc Làm Tuyển Thẳng Mỗi Sáng</strong>
-            <p id="sub-banner-desc">Nhận 5 jobs unlisted phù hợp nhất gửi tự động qua Telegram hoặc gọi từ AI Agent của bạn mỗi ngày.</p>
+            <strong>Daily Direct-Hire Morning Digest</strong>
+            <p id="sub-banner-desc">Receive top 5 curated unlisted jobs automatically via Telegram or query from your AI Agent daily.</p>
           </div>
         </div>
         <div class="sub-banner-actions" id="sub-banner-actions">
-          <button class="btn-sub-action" onclick="toggleDashboardSubscription()">⚡ Đăng Ký Nhận Tin Telegram</button>
+          <button class="btn-sub-action" onclick="toggleDashboardSubscription()">⚡ Subscribe via Telegram</button>
         </div>
       </div>
 
@@ -1074,7 +1074,7 @@ export function renderDashboardHtml(): string {
             <span>📈 High-Demand Keywords & Skills Velocity Across JDs:</span>
           </div>
           <button onclick="openSyncTagCloudModal()" class="header-btn" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 12px; padding: 4px 12px;">
-            ☁️ So sánh Tag Cloud Thị trường với CV của tôi
+            ☁️ Compare Market Tag Cloud with My CV
           </button>
         </div>
         <div id="rerank-trending-skills" style="display: flex; flex-wrap: wrap; gap: 8px;">
@@ -1091,7 +1091,7 @@ export function renderDashboardHtml(): string {
               <span style="font-size: 11px; background: rgba(168, 85, 247, 0.2); color: #c084fc; padding: 2px 8px; border-radius: 6px; font-weight: 600;">AI DECISION ENGINE</span>
             </h4>
             <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
-              Suggests precise additions (thêm) and removals (bớt) into your CV tailored to specific employer target groups.
+              Suggests precise additions and removals into your CV tailored to specific employer target groups.
             </p>
           </div>
         </div>
@@ -1099,7 +1099,7 @@ export function renderDashboardHtml(): string {
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">
-              1. Chọn Target Group (Nhóm nhà tuyển dụng mục tiêu):
+              1. Select Target Group (Employer Archetype):
             </label>
             <select id="decision-target-group" class="region-select" style="width: 100%; padding: 10px;">
               <option value="early_stage_startups">🚀 Early-Stage Startups & Stealth (Agility, Full-stack, MVP)</option>
@@ -1112,27 +1112,27 @@ export function renderDashboardHtml(): string {
           </div>
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">
-              2. Sử dụng CV Base:
+              2. Use Base CV:
             </label>
             <select id="decision-base-cv" class="region-select" style="width: 100%; padding: 10px;" onchange="onDecisionBaseCvChange()">
-              <option value="sample">📝 Mẫu CV chuẩn (Default Template)</option>
+              <option value="sample">📝 Standard CV Template (Default)</option>
             </select>
           </div>
         </div>
 
         <div style="margin-bottom: 16px;">
           <label style="display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">
-            Nội dung CV hiện tại (Markdown):
+            Current CV Content (Markdown):
           </label>
-          <textarea id="decision-cv-content" style="width: 100%; height: 130px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--card-border); border-radius: 8px; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 10px; resize: vertical;" placeholder="# Nguyễn Văn A - Software Engineer&#10;&#10;## Experience&#10;- Software Engineer building web apps...&#10;&#10;## Skills&#10;TypeScript, React, Python, Docker"></textarea>
+          <textarea id="decision-cv-content" style="width: 100%; height: 130px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--card-border); border-radius: 8px; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 10px; resize: vertical;" placeholder="# Jane Doe - Software Engineer&#10;&#10;## Experience&#10;- Software Engineer building web apps...&#10;&#10;## Skills&#10;TypeScript, React, Python, Docker"></textarea>
         </div>
 
         <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
           <button id="btn-run-decision" onclick="runDecisionOptimization()" class="region-select" style="background: linear-gradient(135deg, #38bdf8, #a855f7); color: #fff; font-weight: 700; border: none; padding: 10px 24px; cursor: pointer; border-radius: 8px;">
-            ⚡ Phân tích & Tối ưu bằng Decision API
+            ⚡ Analyze & Optimize with Decision API
           </button>
           <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer;">
-            <input type="checkbox" id="decision-save-checkbox" checked /> Tự động lưu phiên bản mới vào kho CV của tôi
+            <input type="checkbox" id="decision-save-checkbox" checked /> Automatically save new version to My CVs
           </label>
         </div>
 
@@ -1141,28 +1141,28 @@ export function renderDashboardHtml(): string {
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 16px;">
             <!-- Match Score Box -->
             <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--card-border); border-radius: 10px; padding: 16px;">
-              <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Dự báo điểm khớp hồ sơ (Match Score)</div>
+              <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Projected Match Score</div>
               <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 8px;">
                 <span style="font-size: 28px; font-weight: 800; color: #94a3b8;" id="decision-current-score">55%</span>
                 <span style="font-size: 18px; color: var(--text-muted);">➔</span>
                 <span style="font-size: 32px; font-weight: 800; color: #34d399;" id="decision-projected-score">94%</span>
               </div>
-              <div style="font-size: 12px; color: #34d399; margin-top: 4px;">🚀 Tăng khả năng qua vòng lọc sơ loại của target group!</div>
+              <div style="font-size: 12px; color: #34d399; margin-top: 4px;">🚀 Significantly boosts interview conversion for this target group!</div>
             </div>
 
             <!-- Strategy Box -->
             <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--card-border); border-radius: 10px; padding: 16px;">
-              <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Chiến lược định vị hồ sơ</div>
+              <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Positioning Strategy</div>
               <p style="font-size: 13px; color: #cbd5e1; margin-top: 8px; line-height: 1.5;" id="decision-strategy-text"></p>
             </div>
           </div>
 
-          <!-- Additions (Thêm) & Removals (Bớt) Cards -->
+          <!-- Additions & Removals Cards -->
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
             <!-- Additions -->
             <div style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 16px;">
               <h5 style="color: #34d399; font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                <span>✅ NÊN THÊM VÀO CV (Additions):</span>
+                <span>✅ RECOMMENDED ADDITIONS:</span>
               </h5>
               <div id="decision-additions-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
             </div>
@@ -1170,7 +1170,7 @@ export function renderDashboardHtml(): string {
             <!-- Removals -->
             <div style="background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 16px;">
               <h5 style="color: #f87171; font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                <span>❌ NÊN LƯỢC BỚT KHỎI CV (Removals):</span>
+                <span>❌ RECOMMENDED REMOVALS:</span>
               </h5>
               <div id="decision-removals-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
             </div>
@@ -1179,7 +1179,7 @@ export function renderDashboardHtml(): string {
           <!-- Optimized CV Preview -->
           <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--card-border); border-radius: 10px; padding: 16px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <span style="font-size: 13px; font-weight: 700; color: #fff;">📄 Nội dung CV hoàn chỉnh sau tối ưu (Markdown):</span>
+              <span style="font-size: 13px; font-weight: 700; color: #fff;">📄 Optimized CV Content (Markdown):</span>
               <button onclick="copyOptimizedCv()" class="region-select" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); cursor: pointer; padding: 4px 12px; font-size: 12px;">
                 📋 Copy CV Markdown
               </button>
@@ -1193,11 +1193,11 @@ export function renderDashboardHtml(): string {
       <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 20px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
           <h4 style="font-size: 16px; font-weight: 700; color: #fff;">
-            🏆 Bảng xếp hạng Real-Time Job Descriptions (Top Micro-Companies)
+            🏆 Real-Time Job Description Leaderboard (Top Micro-Companies)
           </h4>
           <div style="display: flex; gap: 8px;">
             <select id="rerank-group-filter" class="region-select" onchange="onRerankGroupFilterChange()">
-              <option value="all">Tất cả Target Groups</option>
+              <option value="all">All Target Groups</option>
               <option value="early_stage_startups">🚀 Early-Stage Startups</option>
               <option value="scaleups_growth">💎 Scale-Ups</option>
               <option value="ai_first_innovators">🤖 AI-First Innovators</option>
@@ -1226,19 +1226,19 @@ export function renderDashboardHtml(): string {
     <div class="modal-content" style="max-width: 480px; text-align: center;">
       <div class="modal-header" style="justify-content: space-between;">
         <h3 style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 22px;">✈️</span> Đăng nhập qua Telegram Bot
+          <span style="font-size: 22px;">✈️</span> Log in via Telegram Bot
         </h3>
         <button class="modal-close-btn" onclick="closeModal('modal-login')">✕</button>
       </div>
 
       <p style="font-size: 13px; color: var(--text-muted); margin: 0 0 16px 0; text-align: left; line-height: 1.5;">
-        Xác thực 1 chạm qua <strong>Telegram Bot</strong> để tự động nhận <strong>API Token MCP cá nhân</strong> miễn phí (dùng cho Cursor, Claude Desktop, Antigravity) và mở khóa tính năng lưu trữ nhiều bản CV theo từng Job JD.
+        One-click authentication via <strong>Telegram Bot</strong> to automatically receive your free <strong>Personal MCP API Token</strong> (for Cursor, Claude Desktop, Antigravity) and unlock multi-version CV storage tailored per JD.
       </p>
 
       <!-- Primary Action: Open Bot Button -->
       <div style="margin-bottom: 16px;">
         <a id="tg-bot-link" href="#" target="_blank" rel="noopener noreferrer" class="tg-bot-btn" onclick="onOpenBotClicked()">
-          <span style="font-size: 20px;">✈️</span> Mở Telegram Bot để Đăng Nhập
+          <span style="font-size: 20px;">✈️</span> Open Telegram Bot to Log In
         </a>
       </div>
 
@@ -1247,10 +1247,10 @@ export function renderDashboardHtml(): string {
         <div class="radar-spinner"></div>
         <div>
           <div id="tg-sync-title" style="font-weight: 600; font-size: 13px; color: #38bdf8;">
-            Đang khởi tạo phiên kết nối bot...
+            Initializing bot connection session...
           </div>
           <div id="tg-sync-subtitle" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
-            Sau khi mở bot, bạn chỉ cần bấm nút [Start] là xong!
+            After opening the bot, simply press the [Start] button!
           </div>
         </div>
       </div>
@@ -1258,7 +1258,7 @@ export function renderDashboardHtml(): string {
       <!-- Divider with QR option -->
       <div style="display: flex; align-items: center; margin: 18px 0 14px 0; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
         <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
-        <span style="padding: 0 10px; color: var(--text-muted);">Hoặc quét mã QR bằng điện thoại</span>
+        <span style="padding: 0 10px; color: var(--text-muted);">Or scan the QR code with your phone</span>
         <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
       </div>
 
@@ -1270,9 +1270,9 @@ export function renderDashboardHtml(): string {
 
       <!-- Instant 1-click Demo / Test Fallback -->
       <div style="padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 11px; color: var(--text-muted);">Không tiện mở Telegram lúc này?</span>
+        <span style="font-size: 11px; color: var(--text-muted);">Can't access Telegram right now?</span>
         <button onclick="quickDemoLogin()" class="quick-demo-btn" id="btn-quick-demo">
-          ⚡ Đăng nhập 1 chạm (Demo)
+          ⚡ One-click Demo Login
         </button>
       </div>
     </div>
@@ -1378,7 +1378,7 @@ export function renderDashboardHtml(): string {
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
         <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
-          Quản lý CV gốc, các phiên bản tùy biến và phân tích <strong>Tag Cloud</strong> đồng bộ với JD.
+          Manage master CVs, customized versions, and analyze <strong>Tag Clouds</strong> synchronized with employer JDs.
         </p>
         <div style="display: flex; gap: 8px;">
           <button onclick="toggleImportCvSection()" class="header-btn" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">📁 Import File CV</button>
@@ -1390,22 +1390,22 @@ export function renderDashboardHtml(): string {
       <div id="cv-import-section" style="display: none; background: #0b1120; border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 10px; padding: 16px; flex-direction: column; gap: 12px;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <h4 style="font-size: 14px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
-            <span>📁</span> Import File & Phân Tích Tag Cloud Đồng Bộ
+            <span>📁</span> Import Document & Synchronized Tag Cloud Analysis
           </h4>
           <span style="font-size: 11px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 8px; border-radius: 6px;">PDF • DOCX • TXT • MD • JSON</span>
         </div>
         <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
-          Kéo thả file CV của bạn hoặc chọn file để hệ thống tự động bóc tách kỹ năng, tính trọng số và hiển thị Tag Cloud đồng bộ với JD.
+          Drag & drop your resume file or browse to extract skills, compute weights, and display a synchronized Tag Cloud.
         </p>
 
         <!-- Dropzone -->
         <div id="cv-file-dropzone" class="file-dropzone" onclick="document.getElementById('cv-file-input').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
           <div style="font-size: 32px; margin-bottom: 8px;">📄</div>
           <div style="font-size: 13px; font-weight: 600; color: #e2e8f0;" id="dropzone-label">
-            Kéo thả file CV vào đây hoặc <span style="color: var(--primary); text-decoration: underline;">bấm để duyệt file</span>
+            Drop your CV file here or <span style="color: var(--primary); text-decoration: underline;">click to browse</span>
           </div>
           <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-            Hỗ trợ PDF, Microsoft Word (.docx), Markdown (.md), Text (.txt), JSON (.json)
+            Supports PDF, Microsoft Word (.docx), Markdown (.md), Plain Text (.txt), and JSON (.json)
           </div>
           <input type="file" id="cv-file-input" accept=".pdf,.docx,.txt,.md,.json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,application/json" onchange="handleCvFileChosen(event)" />
         </div>
@@ -1423,12 +1423,12 @@ export function renderDashboardHtml(): string {
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div>
-            <label style="font-size: 11px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Tên phiên bản CV (tùy chọn):</label>
-            <input type="text" id="import-cv-title" placeholder="VD: Master Fullstack 2026" style="width: 100%;" />
+            <label style="font-size: 11px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">CV Version Title (optional):</label>
+            <input type="text" id="import-cv-title" placeholder="e.g. Master Fullstack 2026" style="width: 100%;" />
           </div>
           <div>
-            <label style="font-size: 11px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Target Role (tùy chọn):</label>
-            <input type="text" id="import-cv-role" placeholder="VD: Senior Backend Engineer" style="width: 100%;" />
+            <label style="font-size: 11px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 4px;">Target Role (optional):</label>
+            <input type="text" id="import-cv-role" placeholder="e.g. Senior Backend Engineer" style="width: 100%;" />
           </div>
         </div>
 
@@ -1445,22 +1445,22 @@ export function renderDashboardHtml(): string {
         </div>
 
         <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 4px;">
-          <button onclick="toggleImportCvSection()" class="header-btn-secondary">Đóng</button>
+          <button onclick="toggleImportCvSection()" class="header-btn-secondary">Close</button>
           <button id="btn-upload-import-cv" onclick="uploadAndAnalyzeCvFile()" class="header-btn-primary" style="background: linear-gradient(135deg, #0284c7, #9333ea);">
-            ⚡ Upload & Trích xuất Tag Cloud
+            ⚡ Upload & Extract Tag Cloud
           </button>
         </div>
 
         <!-- Import Result Preview Box -->
         <div id="import-result-preview" style="display: none; background: #060911; border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; flex-direction: column; gap: 8px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 12px; font-weight: 700; color: #34d399;" id="import-result-title">✅ Phân tích Tag Cloud thành công</span>
+            <span style="font-size: 12px; font-weight: 700; color: #34d399;" id="import-result-title">✅ Tag Cloud Analyzed Successfully</span>
             <span style="font-size: 11px; color: var(--text-muted);" id="import-result-stats"></span>
           </div>
           <div id="import-result-tags" class="tag-cloud-wrapper" style="max-height: 120px; overflow-y: auto; padding: 4px 0;"></div>
           <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px;">
             <button id="btn-open-sync-from-import" class="header-btn" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 12px;">
-              ☁️ Mở Synchronized Tag Cloud Studio
+              ☁️ Open Synchronized Tag Cloud Studio
             </button>
           </div>
         </div>
@@ -1568,16 +1568,16 @@ export function renderDashboardHtml(): string {
       <!-- Controls: CV Selector & Target Mode -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #0b1120; border: 1px solid var(--card-border); border-radius: 10px; padding: 14px;">
         <div>
-          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 6px;">📄 Phiên bản CV cần phân tích:</label>
+          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 6px;">📄 CV Version to Analyze:</label>
           <select id="sync-cv-select" class="region-select" style="width: 100%;" onchange="onSyncCvSelectionChange()">
             <!-- Populated dynamically -->
           </select>
         </div>
         <div>
-          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 6px;">🎯 Mục tiêu so sánh (JD / Archetype / Thị trường):</label>
+          <label style="font-size: 12px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 6px;">🎯 Comparison Target (JD / Archetype / Market):</label>
           <select id="sync-target-select" class="region-select" style="width: 100%;" onchange="runSynchronizedTagCloudComparison()">
-            <optgroup label="🌐 Thị trường Tech Toàn diện">
-              <option value="market">Thị trường Off-Radar Real-time Index (Tất cả JDs)</option>
+            <optgroup label="🌐 Comprehensive Tech Market">
+              <option value="market">Real-time Off-Radar Tech Market Index (All JDs)</option>
             </optgroup>
             <optgroup label="🏢 Target Group Archetype">
               <option value="group:early_stage_startups">🚀 Early-Stage Startups & Stealth (Agility, Full-stack, MVP)</option>
@@ -1587,7 +1587,7 @@ export function renderDashboardHtml(): string {
               <option value="group:new_grad_junior">🌱 High-Potential Junior & New Grad (Core CS Fundamentals)</option>
               <option value="group:remote_first_boutique">🌍 Remote-First Boutique Micro-Companies (Asynchronous)</option>
             </optgroup>
-            <optgroup id="sync-target-jobs-group" label="💼 Job Cụ thể Đang Tuyển Dụng">
+            <optgroup id="sync-target-jobs-group" label="💼 Specific Open Job Descriptions">
               <!-- Populated dynamically -->
             </optgroup>
           </select>
@@ -1598,13 +1598,13 @@ export function renderDashboardHtml(): string {
       <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(56, 189, 248, 0.1)); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 12px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div style="flex: 1; min-width: 240px;">
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span style="font-size: 12px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;">Độ Phù Hợp Kỹ Năng</span>
+            <span style="font-size: 12px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em;">Skill Compatibility</span>
             <span id="sync-weighted-badge" style="font-size: 11px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 2px 8px; border-radius: 6px; font-weight: 700;">Weighted Fit: --%</span>
             <span id="sync-ats-badge" style="font-size: 11px; background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); padding: 2px 8px; border-radius: 6px; font-weight: 700;">ATS: --/100</span>
           </div>
           <div style="display: flex; align-items: baseline; gap: 12px; margin-top: 4px;">
             <span style="font-size: 32px; font-weight: 800; color: #34d399;" id="sync-match-score">0%</span>
-            <span style="font-size: 13px; font-weight: 600; color: #cbd5e1;" id="sync-match-rating">Đang tải...</span>
+            <span style="font-size: 13px; font-weight: 600; color: #cbd5e1;" id="sync-match-rating">Calculating...</span>
           </div>
           <div class="score-meter-bar" style="margin-top: 8px; height: 8px;">
             <div id="sync-score-meter-fill" class="score-meter-fill" style="width: 0%; background: #10b981;"></div>
@@ -1612,21 +1612,21 @@ export function renderDashboardHtml(): string {
         </div>
 
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-          <button onclick="runSynchronizedTagCloudComparison()" class="header-btn" style="padding: 8px 14px; font-size: 13px;">🔄 Phân tích lại</button>
+          <button onclick="runSynchronizedTagCloudComparison()" class="header-btn" style="padding: 8px 14px; font-size: 13px;">🔄 Re-analyze</button>
           <button onclick="triggerDecisionOptimizerFromSync()" class="header-btn-primary" style="background: linear-gradient(135deg, #a855f7, #38bdf8); padding: 8px 14px; font-size: 13px;">
-            ⚡ Tối ưu với Decision API
+            ⚡ Optimize with Decision API
           </button>
         </div>
       </div>
 
       <!-- Actionable Strategic Recommendation Box -->
       <div id="sync-recommendation-box" style="display: none; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #e2e8f0; line-height: 1.5;">
-        <strong style="color: #38bdf8;">💡 Khuyến nghị chiến lược:</strong> <span id="sync-recommendation-summary"></span>
+        <strong style="color: #38bdf8;">💡 Strategic Recommendation:</strong> <span id="sync-recommendation-summary"></span>
       </div>
 
       <!-- Category Breakdown Pills -->
       <div id="sync-category-breakdown-bar" style="display: flex; flex-wrap: wrap; gap: 8px; background: #0b1120; border: 1px solid var(--card-border); border-radius: 8px; padding: 10px 14px; align-items: center;">
-        <span style="font-size: 11px; color: var(--text-muted);">Phân bố nhóm kỹ năng: Đang tính toán...</span>
+        <span style="font-size: 11px; color: var(--text-muted);">Skill Category Breakdown: Calculating...</span>
       </div>
 
       <!-- 4-Box Matrix of Tag Clouds -->
@@ -1635,12 +1635,12 @@ export function renderDashboardHtml(): string {
         <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div style="font-size: 13px; font-weight: 700; color: #34d399; display: flex; align-items: center; gap: 6px;">
-              <span>✅</span> Kỹ Năng Đã Khớp Hoàn Hảo (<span id="count-matched-tags">0</span>)
+              <span>✅</span> Perfect Skill Matches (<span id="count-matched-tags">0</span>)
             </div>
             <span style="font-size: 10px; color: #6ee7b7; text-transform: uppercase;">CV & JD Match</span>
           </div>
           <p style="font-size: 11px; color: var(--text-muted); margin: 0;">
-            Các kỹ năng xuất hiện đồng thời trong CV của bạn và yêu cầu của JD mục tiêu.
+            Skills present simultaneously in your CV and required by the target JD.
           </p>
           <div id="sync-matched-tags" class="tag-cloud-wrapper" style="min-height: 80px;"></div>
         </div>
@@ -1649,12 +1649,12 @@ export function renderDashboardHtml(): string {
         <div style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div style="font-size: 13px; font-weight: 700; color: #fbbf24; display: flex; align-items: center; gap: 6px;">
-              <span>⚠️</span> Kỹ Năng Trọng Yếu Còn Thiếu (<span id="count-missing-tags">0</span>)
+              <span>⚠️</span> High-Demand Missing Skills (<span id="count-missing-tags">0</span>)
             </div>
-            <span style="font-size: 10px; color: #fcd34d; text-transform: uppercase;">Cần Bổ Sung</span>
+            <span style="font-size: 10px; color: #fcd34d; text-transform: uppercase;">Action Needed</span>
           </div>
           <p style="font-size: 11px; color: var(--text-muted); margin: 0;">
-            Kỹ năng JD đòi hỏi nhưng CV chưa có. Bấm <strong>+ Thêm</strong> để bổ sung ngay vào CV!
+            Skills demanded by JD but missing in CV. Click <strong>+ Add</strong> to inject directly into your CV!
           </p>
           <div id="sync-missing-tags" class="tag-cloud-wrapper" style="min-height: 80px;"></div>
         </div>
@@ -1663,12 +1663,12 @@ export function renderDashboardHtml(): string {
         <div style="background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div style="font-size: 13px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
-              <span>⭐</span> Thế Mạnh Độc Đáo Của CV (<span id="count-cv-only-tags">0</span>)
+              <span>⭐</span> Unique CV Strengths (<span id="count-cv-only-tags">0</span>)
             </div>
             <span style="font-size: 10px; color: #93c5fd; text-transform: uppercase;">CV Superpowers</span>
           </div>
           <p style="font-size: 11px; color: var(--text-muted); margin: 0;">
-            Kỹ năng đặc sắc bạn sở hữu vượt ngoài yêu cầu cơ bản của JD, tạo lợi thế cạnh tranh.
+            Distinctive strengths you possess beyond the JD requirements, giving you a competitive edge.
           </p>
           <div id="sync-cv-only-tags" class="tag-cloud-wrapper" style="min-height: 80px;"></div>
         </div>
@@ -1677,12 +1677,12 @@ export function renderDashboardHtml(): string {
         <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div style="font-size: 13px; font-weight: 700; color: #f87171; display: flex; align-items: center; gap: 6px;">
-              <span>🚫</span> Công Nghệ Cũ Nên Lược Bớt (<span id="count-deprecated-tags">0</span>)
+              <span>🚫</span> Legacy Tech to Prune (<span id="count-deprecated-tags">0</span>)
             </div>
             <span style="font-size: 10px; color: #fca5a5; text-transform: uppercase;">Legacy Flag</span>
           </div>
           <p style="font-size: 11px; color: var(--text-muted); margin: 0;">
-            Các công nghệ cổ điển (jQuery, SVN, PHP 5...) có thể làm giảm điểm đánh giá hiện đại.
+            Obsolete technologies (jQuery, SVN, PHP 5...) that may detract from modern engineering evaluation.
           </p>
           <div id="sync-deprecated-tags" class="tag-cloud-wrapper" style="min-height: 80px;"></div>
         </div>
@@ -2340,12 +2340,12 @@ export function renderDashboardHtml(): string {
       const baseCvId = document.getElementById('decision-base-cv')?.value;
 
       if (!content) {
-        alert('Vui lòng nhập hoặc chọn nội dung CV cần tối ưu!');
+        alert('Please enter or select CV content to optimize!');
         return;
       }
 
       btn.disabled = true;
-      btn.innerText = '⏳ Đang chạy Cloudflare Decision API...';
+      btn.innerText = '⏳ Running Cloudflare Decision API...';
 
       try {
         const payload = {
@@ -2363,7 +2363,7 @@ export function renderDashboardHtml(): string {
 
         if (res.status === 401) {
           openLoginModal();
-          throw new Error('Vui lòng đăng nhập qua Telegram Bot để lưu và tối ưu CV!');
+          throw new Error('Please log in via Telegram Bot to save and optimize CVs!');
         }
 
         if (!res.ok) {
@@ -2389,7 +2389,7 @@ export function renderDashboardHtml(): string {
               '<div style="font-weight: 700; color: #6ee7b7; font-size: 13px;">' + escapeHtml(a.item) + '</div>' +
               '<div style="color: var(--text-muted); font-size: 11px; margin-top: 2px;">💡 ' + escapeHtml(a.rationale) + '</div>' +
             '</div>';
-          }).join('') || '<div style="color: var(--text-muted); font-size: 12px;">Hồ sơ đã bao quát tốt các kĩ năng của nhóm này.</div>';
+          }).join('') || '<div style="color: var(--text-muted); font-size: 12px;">Profile already covers key skills for this segment well.</div>';
         }
 
         // Removals
@@ -2400,7 +2400,7 @@ export function renderDashboardHtml(): string {
               '<div style="font-weight: 700; color: #fca5a5; font-size: 13px;">' + escapeHtml(r.item) + '</div>' +
               '<div style="color: var(--text-muted); font-size: 11px; margin-top: 2px;">⚠️ ' + escapeHtml(r.rationale) + '</div>' +
             '</div>';
-          }).join('') || '<div style="color: var(--text-muted); font-size: 12px;">Không phát hiện công nghệ lỗi thời hoặc từ ngữ thừa.</div>';
+          }).join('') || '<div style="color: var(--text-muted); font-size: 12px;">No deprecated technologies or redundant fluff detected.</div>';
         }
 
         // Output markdown
@@ -2413,7 +2413,7 @@ export function renderDashboardHtml(): string {
         alert(err.message);
       } finally {
         btn.disabled = false;
-        btn.innerText = '⚡ Phân tích & Tối ưu bằng Decision API';
+        btn.innerText = '⚡ Analyze & Optimize with Decision API';
       }
     }
 
@@ -2421,7 +2421,7 @@ export function renderDashboardHtml(): string {
       const output = document.getElementById('decision-optimized-output')?.value;
       if (!output) return;
       navigator.clipboard.writeText(output).then(() => {
-        alert('Đã sao chép nội dung CV tối ưu vào Clipboard!');
+        alert('Optimized CV content copied to Clipboard!');
       });
     }
 
@@ -2520,8 +2520,8 @@ export function renderDashboardHtml(): string {
       const botLink = document.getElementById('tg-bot-link');
       const qrImg = document.getElementById('tg-qr-img');
 
-      if (syncTitle) syncTitle.innerText = 'Đang khởi tạo kết nối với Telegram Bot...';
-      if (syncSubtitle) syncSubtitle.innerText = 'Vui lòng chờ trong giây lát...';
+      if (syncTitle) syncTitle.innerText = 'Initializing connection to Telegram Bot...';
+      if (syncSubtitle) syncSubtitle.innerText = 'Please wait a moment...';
 
       try {
         const res = await fetch('/api/auth/telegram/session');
@@ -2530,23 +2530,23 @@ export function renderDashboardHtml(): string {
 
         if (botLink) {
           botLink.href = data.deepLink;
-          botLink.innerHTML = '<span style="font-size: 20px;">✈️</span> Mở Bot @' + data.botUsername + ' để Đăng Nhập';
+          botLink.innerHTML = '<span style="font-size: 20px;">✈️</span> Open Bot @' + data.botUsername + ' to Log In';
         }
         if (qrImg) {
           qrImg.src = data.qrUrl;
         }
-        if (syncTitle) syncTitle.innerText = 'Đang chờ bạn nhấn [Start] trong Telegram...';
-        if (syncSubtitle) syncSubtitle.innerText = 'Sau khi mở bot @' + data.botUsername + ', hãy nhấn nút [Start]';
+        if (syncTitle) syncTitle.innerText = 'Waiting for you to press [Start] in Telegram...';
+        if (syncSubtitle) syncSubtitle.innerText = 'After opening @' + data.botUsername + ', press the [Start] button';
 
         startTgPolling();
       } catch (err) {
-        if (syncTitle) syncTitle.innerText = 'Lỗi kết nối bot: ' + err.message;
+        if (syncTitle) syncTitle.innerText = 'Bot connection error: ' + err.message;
       }
     }
 
     function onOpenBotClicked() {
       const syncTitle = document.getElementById('tg-sync-title');
-      if (syncTitle) syncTitle.innerHTML = '⚡ Đang đợi bạn nhấn [Start] trên Telegram...';
+      if (syncTitle) syncTitle.innerHTML = '⚡ Waiting for you to press [Start] in Telegram...';
     }
 
     function startTgPolling() {
@@ -2570,7 +2570,7 @@ export function renderDashboardHtml(): string {
           if (data.status === 'authenticated' && data.user) {
             stopTgPolling();
             const syncTitle = document.getElementById('tg-sync-title');
-            if (syncTitle) syncTitle.innerHTML = '🎉 <span style="color: #34d399;">Đăng nhập thành công! Đang chuyển hướng...</span>';
+            if (syncTitle) syncTitle.innerHTML = '🎉 <span style="color: #34d399;">Login successful! Redirecting...</span>';
             
             currentUser = data.user;
             setAuthToken(data.token || data.user.apiToken);
@@ -2591,7 +2591,7 @@ export function renderDashboardHtml(): string {
     async function quickDemoLogin() {
       const btn = document.getElementById('btn-quick-demo');
       if (btn) {
-        btn.innerText = 'Đang xử lý...';
+        btn.innerText = 'Processing...';
         btn.disabled = true;
       }
       try {
@@ -2622,7 +2622,7 @@ export function renderDashboardHtml(): string {
         alert('Quick demo failed: ' + err.message);
       } finally {
         if (btn) {
-          btn.innerText = '⚡ Đăng nhập 1 chạm (Demo)';
+          btn.innerText = '⚡ One-click Demo Login';
           btn.disabled = false;
         }
       }
@@ -2671,19 +2671,19 @@ export function renderDashboardHtml(): string {
       if (!actions) return;
 
       if (!currentUser) {
-        if (desc) desc.innerText = 'Nhận 5 jobs unlisted phù hợp nhất gửi tự động qua Telegram hoặc gọi từ AI Agent của bạn mỗi ngày.';
-        actions.innerHTML = '<button class="btn-sub-action" onclick="openLoginModal()">✈️ Đăng Ký Nhận Tin Telegram</button>';
+        if (desc) desc.innerText = 'Receive top 5 curated unlisted jobs automatically via Telegram or query from your AI Agent daily.';
+        actions.innerHTML = '<button class="btn-sub-action" onclick="openLoginModal()">✈️ Subscribe via Telegram</button>';
         return;
       }
 
       if (currentUserSubscription && currentUserSubscription.isActive) {
         const role = currentUserSubscription.targetRoles && currentUserSubscription.targetRoles.length > 0 ? currentUserSubscription.targetRoles[0] : 'All Roles';
         const region = currentUserSubscription.regions && currentUserSubscription.regions.length > 0 ? currentUserSubscription.regions[0].toUpperCase() : 'MIDWEST';
-        if (desc) desc.innerHTML = 'Đang kích hoạt: Nhận bản tin tự động <strong>02:00 UTC</strong> qua Telegram Bot (' + escapeHtml(role) + ' / ' + escapeHtml(region) + ').';
-        actions.innerHTML = '<button class="btn-sub-action active" onclick="toggleDashboardSubscription()">⏸ Tạm Dừng Nhận Tin</button>';
+        if (desc) desc.innerHTML = 'Active: Receiving daily digest at <strong>02:00 UTC</strong> via Telegram Bot (' + escapeHtml(role) + ' / ' + escapeHtml(region) + ').';
+        actions.innerHTML = '<button class="btn-sub-action active" onclick="toggleDashboardSubscription()">⏸ Pause Daily Digest</button>';
       } else {
-        if (desc) desc.innerText = 'Đăng ký nhận top 5 việc làm chất lượng cao từ công ty unlisted mỗi ngày gửi thẳng về Telegram của bạn.';
-        actions.innerHTML = '<button class="btn-sub-action" onclick="toggleDashboardSubscription()">⚡ Bật Nhận Bản Tin Hàng Ngày</button>';
+        if (desc) desc.innerText = 'Subscribe to receive top 5 unlisted high-growth tech jobs straight to your Telegram daily.';
+        actions.innerHTML = '<button class="btn-sub-action" onclick="toggleDashboardSubscription()">⚡ Enable Daily Digest</button>';
       }
     }
 
@@ -2705,7 +2705,7 @@ export function renderDashboardHtml(): string {
           renderSubscriptionBanner();
         }
       } catch (err) {
-        alert('Lỗi cập nhật đăng ký: ' + err.message);
+        alert('Failed to update subscription: ' + err.message);
       }
     }
 
@@ -2867,7 +2867,7 @@ export function renderDashboardHtml(): string {
 
           const decisionSelect = document.getElementById('decision-base-cv');
           if (decisionSelect) {
-            let opts = '<option value="sample">📝 Mẫu CV chuẩn (Default Template)</option>';
+            let opts = '<option value="sample">📝 Standard CV Template (Default)</option>';
             for (const cv of userCvsList) {
               opts += '<option value="' + cv.id + '">' + escapeHtml(cv.title) + '</option>';
             }
@@ -2964,7 +2964,7 @@ export function renderDashboardHtml(): string {
       if (!container) return;
 
       if (userCvsList.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">Chưa có phiên bản CV nào được lưu. Bạn có thể bấm "📁 Import File CV", "+ Add New CV" hoặc dùng "✨ Tailor CV" trên bất kỳ Job nào.</p>';
+        container.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px;">No saved CV versions yet. Click "📁 Import File CV", "+ Add New CV" or use "✨ Tailor CV" on any Job.</p>';
         return;
       }
 
@@ -2979,19 +2979,19 @@ export function renderDashboardHtml(): string {
         const displaySkills = allSkills.slice(0, 10);
         const remainder = allSkills.length - displaySkills.length;
         const skillsChips = displaySkills.map(s => '<span class="tag tag-cat" style="font-size: 11px;">' + escapeHtml(s) + '</span>').join(' ') +
-          (remainder > 0 ? (' <span class="tag" style="opacity: 0.6; font-size: 10px;">+' + remainder + ' khác</span>') : '');
+          (remainder > 0 ? (' <span class="tag" style="opacity: 0.6; font-size: 10px;">+' + remainder + ' more</span>') : '');
 
         return '<div class="cv-card-item">' +
           '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap;">' +
             '<div>' +
               '<h4 style="font-size: 15px; font-weight: 700; color: #fff;">' + escapeHtml(cv.title) + '</h4>' +
-              '<div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Lưu ngày ' + date + ' ' + (cv.jobId ? '• Liên kết Job ' + escapeHtml(cv.jobId) : '') + '</div>' +
+              '<div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Saved on ' + date + ' ' + (cv.jobId ? '• Linked to Job ' + escapeHtml(cv.jobId) : '') + '</div>' +
             '</div>' +
             '<div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">' +
               scoreBadge +
               '<button class="header-btn" data-cvid="' + cv.id + '" onclick="openSyncTagCloudModal(this.dataset.cvid)" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 11px; padding: 4px 10px;">☁️ Tag Cloud & JD Sync</button>' +
               '<button class="header-btn" data-cvid="' + cv.id + '" onclick="sendCvToDecisionOptimizer(this.dataset.cvid)" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); font-size: 11px; padding: 4px 10px;">⚡ Decision API</button>' +
-              '<button class="header-btn-secondary" data-cvid="' + cv.id + '" onclick="deleteCv(this.dataset.cvid)" style="color: #f87171; font-size: 11px; padding: 4px 8px;">🗑️ Xóa</button>' +
+              '<button class="header-btn-secondary" data-cvid="' + cv.id + '" onclick="deleteCv(this.dataset.cvid)" style="color: #f87171; font-size: 11px; padding: 4px 8px;">🗑️ Delete</button>' +
             '</div>' +
           '</div>' +
           '<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">' +
@@ -3001,7 +3001,7 @@ export function renderDashboardHtml(): string {
           '</div>' +
           '<div style="margin-top: 6px;">' +
             '<details style="font-size: 12px; color: var(--text-muted);">' +
-              '<summary style="cursor: pointer; color: var(--primary);">Xem nội dung Markdown chi tiết</summary>' +
+              '<summary style="cursor: pointer; color: var(--primary);">View Markdown Content</summary>' +
               '<div class="code-snippet" style="margin-top: 8px; max-height: 200px; overflow-y: auto;">' + cv.content.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +
             '</details>' +
           '</div>' +
@@ -3083,13 +3083,13 @@ export function renderDashboardHtml(): string {
 
     async function uploadAndAnalyzeCvFile() {
       if (!selectedCvFile) {
-        alert('Vui lòng chọn hoặc kéo thả một file CV (PDF, DOCX, TXT, MD, hoặc JSON) để tiếp tục.');
+        alert('Please select or drop a CV file (PDF, DOCX, TXT, MD, or JSON) to continue.');
         return;
       }
       const btn = document.getElementById('btn-upload-import-cv');
       const prevText = btn ? btn.innerText : '';
       if (btn) {
-        btn.innerText = '⏳ Đang phân tích file & trích xuất Tag Cloud...';
+        btn.innerText = '⏳ Analyzing file & extracting Tag Cloud...';
         btn.disabled = true;
       }
 
@@ -3125,7 +3125,7 @@ export function renderDashboardHtml(): string {
           previewEl.style.display = 'flex';
           const statsEl = document.getElementById('import-result-stats');
           if (statsEl) {
-            statsEl.innerText = data.parsed.totalTags + ' kỹ năng nhận diện (' + (data.extractedTextLength || data.parsed.content.length) + ' ký tự text)';
+            statsEl.innerText = data.parsed.totalTags + ' skills recognized (' + (data.extractedTextLength || data.parsed.content.length) + ' characters of text)';
           }
           const tagsEl = document.getElementById('import-result-tags');
           if (tagsEl && data.parsed.tagCloud && data.parsed.tagCloud.tags) {
@@ -3145,10 +3145,10 @@ export function renderDashboardHtml(): string {
 
         await fetchUserCvs();
       } catch (err) {
-        alert('Lỗi import CV: ' + err.message);
+        alert('Error importing CV: ' + err.message);
       } finally {
         if (btn) {
-          btn.innerText = prevText || '⚡ Upload & Trích xuất Tag Cloud';
+          btn.innerText = prevText || '⚡ Upload & Extract Tag Cloud';
           btn.disabled = false;
         }
       }
@@ -3158,7 +3158,7 @@ export function renderDashboardHtml(): string {
     function openSyncTagCloudModal(cvId) {
       if (!currentUser) {
         openLoginModal();
-        alert('Vui lòng đăng nhập với Telegram để sử dụng Synchronized Tag Cloud Studio.');
+        alert('Please log in via Telegram to use Synchronized Tag Cloud Studio.');
         return;
       }
 
@@ -3173,7 +3173,7 @@ export function renderDashboardHtml(): string {
       if (!select) return;
 
       if (userCvsList.length === 0) {
-        select.innerHTML = '<option value="">(Chưa có CV nào - vui lòng tạo hoặc import CV)</option>';
+        select.innerHTML = '<option value="">(No CVs yet - please create or import a CV)</option>';
         return;
       }
 
@@ -3197,7 +3197,7 @@ export function renderDashboardHtml(): string {
         const data = await res.json();
         const jobs = data.items || [];
         if (jobs.length === 0) {
-          optgroup.innerHTML = '<option value="" disabled>(Không có job khả dụng)</option>';
+          optgroup.innerHTML = '<option value="" disabled>(No active jobs available)</option>';
           return;
         }
 
@@ -3267,16 +3267,16 @@ export function renderDashboardHtml(): string {
       if (fillEl) fillEl.style.width = score + '%';
 
       let scoreColor = '#f87171';
-      let ratingText = '🚨 Mức độ lệch cao: Cần tùy biến lại theo nhóm mục tiêu';
+      let ratingText = '🚨 Significant Divergence: Realign for target archetype';
       if (score >= 75) {
         scoreColor = '#34d399';
-        ratingText = '🎯 Xuất sắc: CV rất phù hợp với nhu cầu tuyển dụng';
+        ratingText = '🎯 Excellent: Strong alignment with hiring requirements';
       } else if (score >= 55) {
         scoreColor = '#38bdf8';
-        ratingText = '⚡ Khá tốt: Khớp phần lớn công nghệ cốt lõi';
+        ratingText = '⚡ High: Matches majority of core technologies';
       } else if (score >= 35) {
         scoreColor = '#fbbf24';
-        ratingText = '⚠️ Trung bình: Cần bổ sung các kỹ năng trọng yếu';
+        ratingText = '⚠️ Moderate: Missing several critical required skills';
       }
 
       if (scoreEl) scoreEl.style.color = scoreColor;
@@ -3323,7 +3323,7 @@ export function renderDashboardHtml(): string {
               const countStr = t.frequency > 1 ? ' <small style="opacity: 0.7;">(×' + t.frequency + ')</small>' : '';
               return '<span class="tag-cloud-chip chip-status-matched">✅ ' + escapeHtml(t.name) + countStr + '</span>';
             }).join(' ')
-          : '<span style="font-size: 11px; color: var(--text-muted);">(Chưa có kỹ năng khớp nào)</span>';
+          : '<span style="font-size: 11px; color: var(--text-muted);">(No matching skills yet)</span>';
       }
 
       const missingEl = document.getElementById('sync-missing-tags');
@@ -3332,12 +3332,12 @@ export function renderDashboardHtml(): string {
           ? comp.missingTags.map(function(t) {
               const safeName = escapeHtml(t.name);
               const growthBadge = t.marketGrowth ? ' <small style="color: #34d399; font-weight: 700;">' + t.marketGrowth + '</small>' : '';
-              return '<span class="tag-cloud-chip chip-status-missing" data-skill="' + safeName + '" onclick="addMissingSkillToCv(this.dataset.skill)" title="Bấm để bổ sung kỹ năng này vào CV">' +
+              return '<span class="tag-cloud-chip chip-status-missing" data-skill="' + safeName + '" onclick="addMissingSkillToCv(this.dataset.skill)" title="Click to add this skill to your CV">' +
                 '⚡ ' + safeName + growthBadge +
-                '<button style="background: rgba(245, 158, 11, 0.4); border: none; color: #fff; border-radius: 4px; padding: 1px 6px; font-size: 10px; margin-left: 6px; cursor: pointer; font-weight: 700;">+ Thêm</button>' +
+                '<button style="background: rgba(245, 158, 11, 0.4); border: none; color: #fff; border-radius: 4px; padding: 1px 6px; font-size: 10px; margin-left: 6px; cursor: pointer; font-weight: 700;">+ Add</button>' +
                 '</span>';
             }).join(' ')
-          : '<span style="font-size: 11px; color: #34d399;">🎉 Tuyệt vời! Không còn kỹ năng cốt lõi nào bị thiếu sót.</span>';
+          : '<span style="font-size: 11px; color: #34d399;">🎉 Excellent! No core skills are missing.</span>';
       }
 
       const cvOnlyEl = document.getElementById('sync-cv-only-tags');
@@ -3346,16 +3346,16 @@ export function renderDashboardHtml(): string {
           ? comp.cvOnlyTags.map(t => {
               return '<span class="tag-cloud-chip chip-status-cv_only">⭐ ' + escapeHtml(t.name) + '</span>';
             }).join(' ')
-          : '<span style="font-size: 11px; color: var(--text-muted);">(Không có kỹ năng riêng biệt nào)</span>';
+          : '<span style="font-size: 11px; color: var(--text-muted);">(No unique skills detected)</span>';
       }
 
       const deprecatedEl = document.getElementById('sync-deprecated-tags');
       if (deprecatedEl) {
         deprecatedEl.innerHTML = (comp.deprecatedTags || []).length > 0
           ? comp.deprecatedTags.map(t => {
-              return '<span class="tag-cloud-chip chip-status-deprecated" title="Công nghệ cũ nên xem xét bỏ">🚫 ' + escapeHtml(t.name) + '</span>';
+              return '<span class="tag-cloud-chip chip-status-deprecated" title="Legacy technology; consider pruning">🚫 ' + escapeHtml(t.name) + '</span>';
             }).join(' ')
-          : '<span style="font-size: 11px; color: #34d399;">✨ CV sạch đẹp! Không phát hiện công nghệ lỗi thời/cũ.</span>';
+          : '<span style="font-size: 11px; color: #34d399;">✨ Clean profile! No legacy or outdated tech detected.</span>';
       }
 
       const breakdownEl = document.getElementById('sync-category-breakdown-bar');
@@ -3365,14 +3365,14 @@ export function renderDashboardHtml(): string {
           catCounts[t.category] = (catCounts[t.category] || 0) + 1;
         }
         const catLabels = {
-          languages: 'Ngôn ngữ',
+          languages: 'Languages',
           frameworks: 'Frameworks',
           cloud_infra: 'Cloud & Infra',
           database: 'Database',
           ai_ml: 'AI / ML',
-          architecture: 'Kiến trúc',
+          architecture: 'Architecture',
           tools: 'Tools & DevOps',
-          other: 'Khác'
+          other: 'Other'
         };
 
         const pillsHtml = Object.keys(catCounts).map(cat => {
@@ -3382,12 +3382,12 @@ export function renderDashboardHtml(): string {
           let catRatio = '';
           if (comp.categoryMatchBreakdown && comp.categoryMatchBreakdown[cat]) {
             const b = comp.categoryMatchBreakdown[cat];
-            catRatio = ' <small style="opacity: 0.85;">(' + b.matched + '/' + b.totalJd + ' khớp)</small>';
+            catRatio = ' <small style="opacity: 0.85;">(' + b.matched + '/' + b.totalJd + ' matched)</small>';
           }
           return '<span class="tag-cloud-chip ' + chipClass + '" style="font-size: 11px;">' + label + ': <strong>' + count + '</strong>' + catRatio + '</span>';
         }).join(' ');
 
-        breakdownEl.innerHTML = '<span style="font-size: 11px; font-weight: 700; color: #cbd5e1; margin-right: 6px;">Phân bổ kỹ năng trong CV:</span>' + pillsHtml;
+        breakdownEl.innerHTML = '<span style="font-size: 11px; font-weight: 700; color: #cbd5e1; margin-right: 6px;">Skill Category Breakdown:</span>' + pillsHtml;
       }
     }
 
@@ -3430,7 +3430,7 @@ export function renderDashboardHtml(): string {
         // Immediately refresh comparison to show the skill moved from Missing to Matched!
         await runSynchronizedTagCloudComparison();
       } catch (err) {
-        alert('Lỗi khi thêm kỹ năng: ' + err.message);
+        alert('Error adding skill: ' + err.message);
       }
     }
 

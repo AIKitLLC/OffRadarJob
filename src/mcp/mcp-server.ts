@@ -395,7 +395,7 @@ export class McpServerHandler {
       },
       {
         name: "optimize_cv_with_decision_api",
-        description: "Run Cloudflare Decision API / Workers AI on candidate CV to generate concrete additions (thêm) and removals (bớt) tailored to distinct employer target groups. Yields revised markdown CV, key rationale, and projected match score.",
+        description: "Run Cloudflare Decision API / Workers AI on candidate CV to generate concrete additions and removals tailored to distinct employer target groups. Yields revised markdown CV, key rationale, and projected match score.",
         inputSchema: {
           type: "object",
           properties: {

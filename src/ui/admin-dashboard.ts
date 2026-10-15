@@ -416,19 +416,19 @@ export function renderAdminDashboardHtml(): string {
         <div class="stat-value" id="stat-jobs-found">0</div>
       </div>
       <div class="stat-card" style="border-left: 3px solid var(--primary);">
-        <div class="stat-label">⏱️ Lần quét gần nhất</div>
+        <div class="stat-label">⏱️ Last Crawl</div>
         <div class="stat-value" style="font-size: 18px; font-weight: 700; color: var(--primary);" id="stat-last-crawl">--</div>
       </div>
       <div class="stat-card success" style="border-left: 3px solid var(--success);">
-        <div class="stat-label">🔄 Cập nhật 24h</div>
+        <div class="stat-label">🔄 24h Updates</div>
         <div class="stat-value" id="stat-updated-24h">0</div>
       </div>
       <div class="stat-card accent" style="border-left: 3px solid var(--accent);">
-        <div class="stat-label">🆕 Việc mới 24h</div>
+        <div class="stat-label">🆕 24h New Jobs</div>
         <div class="stat-value" id="stat-created-24h">0</div>
       </div>
       <div class="stat-card" style="border-left: 3px solid #38bdf8;">
-        <div class="stat-label">🔔 Subscribers nhận tin</div>
+        <div class="stat-label">🔔 Active Subscribers</div>
         <div class="stat-value" style="font-size: 19px; font-weight: 700; color: #38bdf8;" id="stat-subscribers">0 active</div>
       </div>
     </div>
@@ -440,17 +440,17 @@ export function renderAdminDashboardHtml(): string {
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
           <div>
             <div style="font-size: 14px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px;">
-              <span>⏰ Lịch cập nhật dữ liệu tự động (Cloudflare Cron Triggers)</span>
-              <span class="pill pill-completed" style="font-size: 11px;">HOẠT ĐỘNG LIÊN TỤC</span>
+              <span>⏰ Automated Ingestion Schedule (Cloudflare Cron Triggers)</span>
+              <span class="pill pill-completed" style="font-size: 11px;">ALWAYS ACTIVE</span>
             </div>
             <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.6;">
-              • <strong>Quét xoay vòng hàng ngày (Daily Sweep):</strong> <code>02:00 UTC</code> mỗi ngày (quét candidate seeds & harvest Hacker News/GitHub).<br>
-              • <strong>Quét toàn diện hàng tuần (Weekly Sweep):</strong> <code>03:00 UTC</code> Thứ Hai hàng tuần (re-crawl toàn bộ 940+ công ty).<br>
-              • <strong>Trạng thái dữ liệu:</strong> Tự động bổ sung công ty mới và kiểm tra trạng thái việc làm đóng/mở hàng ngày.
+              • <strong>Daily Sweep:</strong> <code>02:00 UTC</code> daily (candidate seeds & harvest Hacker News/GitHub).<br>
+              • <strong>Weekly Sweep:</strong> <code>03:00 UTC</code> every Monday (re-crawl entire 940+ company database).<br>
+              • <strong>Data Freshness:</strong> Automatically registers new companies and validates open/closed job statuses daily.
             </div>
           </div>
           <div style="display: flex; gap: 10px; align-items: center;">
-            <button class="btn btn-sm" onclick="switchTab('dispatch')">⚡ Kích hoạt Quét thêm</button>
+            <button class="btn btn-sm" onclick="switchTab('dispatch')">⚡ Trigger Extra Ingest</button>
             <button class="btn btn-secondary btn-sm" onclick="refreshAllData()">🔄 Refresh</button>
           </div>
         </div>
@@ -502,7 +502,7 @@ export function renderAdminDashboardHtml(): string {
           <span class="pill pill-running">🔥 Zero-API-Key Free Ingest</span>
         </div>
         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-          Tự động khai thác dữ liệu các công ty siêu nhỏ, boutique tech studios & indie makers từ các nguồn mở (Hacker News 'Who is Hiring' Algolia API & GitHub Open Repositories 880+ công ty), sau đó dùng chính website chính thức để Agent quét và bóc tách việc làm trực tiếp.
+          Automatically harvest unlisted micro-companies, boutique tech studios & indie makers from open sources (Hacker News 'Who is Hiring' Algolia API & GitHub Open Repositories 880+ companies), then dispatch Agents to crawl and parse jobs directly from company career sites.
         </p>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 8px;">
@@ -512,10 +512,10 @@ export function renderAdminDashboardHtml(): string {
               🟠 Hacker News "Who is Hiring?"
             </div>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-              Bóc tách thread tuyển dụng mới nhất trên Hacker News. Trích xuất tên công ty, website, tech stack, email liên hệ và link ứng tuyển trực tiếp.
+              Parse the latest Hacker News hiring thread. Extract company name, website, tech stack, hiring email, and direct application links.
             </p>
             <div class="form-row" style="margin-bottom: 0;">
-              <input type="number" id="hn-harvest-limit" class="form-input" value="20" min="5" max="50" style="max-width: 80px;" title="Số lượng công ty">
+              <input type="number" id="hn-harvest-limit" class="form-input" value="20" min="5" max="50" style="max-width: 80px;" title="Target company count">
               <button class="btn btn-sm" style="background: #f97316; color: #fff;" onclick="triggerHarvest('hn')">⚡ Harvest Hacker News</button>
             </div>
           </div>
@@ -526,10 +526,10 @@ export function renderAdminDashboardHtml(): string {
               🐙 GitHub Open Directories
             </div>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-              Đọc danh bạ 880+ công ty remote & boutique studios (remoteintech & established-remote). Nạp thông tin và kích hoạt Agent vào website quét việc làm.
+              Ingest from curated directories of 880+ remote & boutique studios (remoteintech & established-remote). Enqueue companies and dispatch Agents to crawl.
             </p>
             <div class="form-row" style="margin-bottom: 0;">
-              <input type="number" id="gh-harvest-limit" class="form-input" value="25" min="5" max="50" style="max-width: 80px;" title="Số lượng công ty">
+              <input type="number" id="gh-harvest-limit" class="form-input" value="25" min="5" max="50" style="max-width: 80px;" title="Target company count">
               <button class="btn btn-sm" style="background: #0284c7; color: #fff;" onclick="triggerHarvest('github')">🐙 Harvest GitHub Repos</button>
             </div>
           </div>
@@ -540,10 +540,10 @@ export function renderAdminDashboardHtml(): string {
               🚀 Multi-Source & Direct Crawl
             </div>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-              Kết hợp đồng thời cả Hacker News & GitHub. Nạp đồng loạt công ty vào database và điều phối Agent cào website song song.
+              Combine both Hacker News & GitHub repositories. Ingest companies in parallel and dispatch background crawler agents.
             </p>
             <div class="form-row" style="margin-bottom: 0;">
-              <input type="number" id="all-harvest-limit" class="form-input" value="30" min="10" max="60" style="max-width: 80px;" title="Tổng số công ty">
+              <input type="number" id="all-harvest-limit" class="form-input" value="30" min="10" max="60" style="max-width: 80px;" title="Total company count">
               <button class="btn btn-sm" style="background: #a855f7; color: #fff;" onclick="triggerHarvest('all')">🚀 Harvest All Sources</button>
             </div>
           </div>
@@ -559,7 +559,7 @@ export function renderAdminDashboardHtml(): string {
               </span>
             </div>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-              Quét tự động 41 doanh nghiệp vừa & nhỏ (2,800+ jobs) thuộc 9 ngành: Y tế/Biotech, Năng lượng sạch, Robotics/Phần cứng, Fintech, Logistics, E-commerce, FoodTech, EdTech, HRTech.
+              Automatically crawl 41 curated US SMBs (2,800+ jobs) across 9 sectors: Health/Biotech, Cleantech, Robotics/Hardware, Fintech, Logistics, E-commerce, FoodTech, EdTech, HRTech.
             </p>
             <div class="form-row" style="margin-bottom: 0;">
               <button class="btn btn-sm" style="background: #10b981; color: #fff; width: 100%;" onclick="triggerHarvest('smb')">⚡ Harvest 41 Cross-Industry SMBs Now</button>
@@ -615,7 +615,7 @@ export function renderAdminDashboardHtml(): string {
           <div class="preset-card" style="border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.05);">
             <div>
               <div class="preset-title">🇺🇸 6. Grand All-US SMB Sweep (90+ Companies)</div>
-              <div class="preset-desc">Kích hoạt quét đồng loạt toàn bộ 90+ công ty vừa và nhỏ trên khắp nước Mỹ vào Cloudflare Queues / Background Runner.</div>
+              <div class="preset-desc">Trigger simultaneous ingestion across all 90+ curated US small & medium companies into Cloudflare Queues / Background Runner.</div>
             </div>
             <button class="btn btn-sm" style="background: #38bdf8; color: #0f172a;" onclick="triggerPreset('all_us')">🇺🇸 Run All-US Grand Sweep 🚀</button>
           </div>
@@ -667,17 +667,17 @@ export function renderAdminDashboardHtml(): string {
           </div>
         </div>
         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-          Lần đầu tiên nạp dữ liệu, bạn có thể kích hoạt <strong>Initial Bulk Blast</strong> để quét đồng loạt toàn bộ các công ty vừa và nhỏ trên khắp nước Mỹ. Sau đó, hệ thống sẽ tự động quét định kỳ <strong>1 tuần 1 lần</strong> (mỗi Thứ Hai lúc 03:00 UTC) để cập nhật công việc mới mà không cần thao tác lại.
+          For the first dataset ingestion, you can trigger <strong>Initial Bulk Blast</strong> to scan all curated small & medium companies across the US. Afterward, the system automatically sweeps <strong>weekly</strong> (every Monday at 03:00 UTC) to refresh jobs without manual intervention.
         </p>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
           <!-- Card 1: Initial Simultaneous Bulk Sweep -->
           <div style="background: rgba(13, 20, 36, 0.6); padding: 16px; border-radius: 10px; border: 1px solid var(--card-border);">
             <div style="font-size: 14px; font-weight: 700; color: #38bdf8; margin-bottom: 6px;">
-              🚀 Lần đầu: Initial Simultaneous Bulk Blast
+              🚀 First Run: Initial Simultaneous Bulk Blast
             </div>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-              Quét đồng loạt toàn bộ tất cả công ty đang có trong database. Tự động chia nhỏ thành các batch song song trên Cloudflare Queues để cào nhanh nhất có thể.
+              Sweep all active companies in the database concurrently. Automatically shards work into parallel batches on Cloudflare Queues for maximum speed.
             </p>
             <button class="btn btn-sm" style="background: #0284c7; color: #fff;" onclick="triggerBulkSweepAll()">🚀 Run Initial Bulk Blast (All Companies)</button>
           </div>
@@ -688,7 +688,7 @@ export function renderAdminDashboardHtml(): string {
               ☁️ Queue 90+ US Curated Targets
             </div>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-              Đẩy toàn bộ 90+ công ty vừa và nhỏ đã kiểm duyệt (Midwest, Texas, East Coast, West Coast) vào hàng đợi để các Agent cào ngầm liên tục.
+              Push all 90+ curated companies (Midwest, Texas, East Coast, West Coast) into the background queue for asynchronous crawling.
             </p>
             <button class="btn btn-sm" style="background: #8b5cf6; color: #fff;" onclick="triggerBulkSeed()">🚀 Queue 90+ US Targets</button>
           </div>
@@ -696,16 +696,16 @@ export function renderAdminDashboardHtml(): string {
           <!-- Card 3: Autonomous CLI Feeder -->
           <div style="background: rgba(13, 20, 36, 0.6); padding: 16px; border-radius: 10px; border: 1px solid var(--card-border);">
             <div style="font-size: 14px; font-weight: 700; color: #10b981; margin-bottom: 6px;">
-              💻 Chạy nền Terminal / VPS dài tiếng
+              💻 Long-Running Terminal / VPS Runner
             </div>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
-              Chạy trực tiếp từ terminal hoặc VPS với pacing lịch sự (rate-limit protection):
+              Run directly from your local terminal or VPS with courteous rate-limit protection:
             </p>
             <div class="code-text" style="padding: 6px 10px; display: block; overflow-x: auto; color: #34d399;">
               npm run feed:continuous -- --duration=3 --interval=15
             </div>
             <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
-              Quét liên tục trong 3 giờ với giãn cách 15s giữa mỗi wave.
+              Continuous crawl over 3 hours with a 15s courteous delay between waves.
             </div>
           </div>
 
@@ -720,7 +720,7 @@ export function renderAdminDashboardHtml(): string {
               </span>
             </div>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-              Quét lại toàn bộ các công ty và direct ATS boards hàng tuần (Cloudflare Cron <code>0 3 * * 1</code> + 1/7 rolling partition). Tự động cập nhật jobs mới và giữ dữ liệu tươi mới.
+              Re-crawl all companies and direct ATS boards weekly (Cloudflare Cron <code>0 3 * * 1</code> + 1/7 rolling partition). Automatically detects new and closed roles.
             </p>
             <button class="btn btn-sm" style="background: #0284c7; color: #fff; width: 100%;" onclick="triggerWeeklySweep()">🔄 Run Weekly Continuous Scan Now</button>
           </div>
@@ -810,27 +810,27 @@ export function renderAdminDashboardHtml(): string {
       <div style="background: linear-gradient(135deg, rgba(0, 136, 204, 0.12), rgba(56, 189, 248, 0.05)); border: 1px solid rgba(0, 136, 204, 0.3); border-radius: 12px; padding: 18px 20px; margin-bottom: 24px;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
           <div style="font-size: 24px;">✈️</div>
-          <div style="font-size: 16px; font-weight: 700; color: #fff;">Hướng Dẫn Cấu Hình Telegram Bot Trực Tiếp (Không Cần Dùng Terminal)</div>
+          <div style="font-size: 16px; font-weight: 700; color: #fff;">Direct Telegram Bot Configuration Guide (No Terminal Required)</div>
         </div>
         <p style="font-size: 13px; color: #bae6fd; margin-bottom: 12px; line-height: 1.5;">
-          Bạn có thể thiết lập Bot Token, Bot Username và phân quyền Admin ngay tại trang này. Dữ liệu được lưu trữ tự động vào cơ sở dữ liệu Cloudflare D1.
+          You can configure Bot Token, Bot Username, and Admin Permissions directly on this page. Configuration is persisted securely in Cloudflare D1.
         </p>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; font-size: 12px; color: #e0f2fe;">
           <div style="background: rgba(13, 20, 36, 0.6); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.15);">
-            <strong style="color: #38bdf8;">1. Tạo Bot với @BotFather</strong><br/>
-            Mở Telegram chat với <code>@BotFather</code>, gõ <code>/newbot</code> và sao chép mã <strong>HTTP API Token</strong>.
+            <strong style="color: #38bdf8;">1. Create Bot via @BotFather</strong><br/>
+            Open a chat with <code>@BotFather</code> on Telegram, send <code>/newbot</code>, and copy your <strong>HTTP API Token</strong>.
           </div>
           <div style="background: rgba(13, 20, 36, 0.6); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.15);">
-            <strong style="color: #38bdf8;">2. Dán Token & Lưu Cấu Hình</strong><br/>
-            Điền Bot Token & Bot Username vào form bên dưới rồi bấm <strong>💾 Lưu Cấu Hình</strong>.
+            <strong style="color: #38bdf8;">2. Paste Token & Save Configuration</strong><br/>
+            Enter your Bot Token and Bot Username in the form below, then click <strong>💾 Save Configuration</strong>.
           </div>
           <div style="background: rgba(13, 20, 36, 0.6); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.15);">
-            <strong style="color: #38bdf8;">3. Kích Hoạt Webhook</strong><br/>
-            Bấm nút <strong>🔗 Kích Hoạt Webhook</strong> để Telegram tự động gửi cập nhật tới Cloudflare Worker.
+            <strong style="color: #38bdf8;">3. Activate Webhook</strong><br/>
+            Click <strong>🔗 Activate Webhook</strong> so Telegram automatically sends webhook updates to your Cloudflare Worker.
           </div>
           <div style="background: rgba(13, 20, 36, 0.6); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.15);">
-            <strong style="color: #38bdf8;">4. Trải Nghiệm & Quản Trị</strong><br/>
-            Chat <code>/start</code> hoặc <code>/admin</code> với bot để quản lý crawler, tra cứu job và nhận thông báo.
+            <strong style="color: #38bdf8;">4. Explore & Administrate</strong><br/>
+            Chat <code>/start</code> or <code>/admin</code> with your bot to trigger crawlers, search jobs, and receive alerts.
           </div>
         </div>
       </div>
@@ -839,8 +839,8 @@ export function renderAdminDashboardHtml(): string {
         <!-- Card 1: Configuration Form -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">⚙️ Thiết Lập Telegram Bot & Webhook (D1 Storage)</div>
-            <button class="btn btn-secondary btn-sm" onclick="loadTelegramConfig()">🔄 Tải lại</button>
+            <div class="card-title">⚙️ Telegram Bot & Webhook Setup (D1 Storage)</div>
+            <button class="btn btn-secondary btn-sm" onclick="loadTelegramConfig()">🔄 Reload</button>
           </div>
           <div style="padding: 20px;">
             <div class="form-group">
@@ -849,30 +849,30 @@ export function renderAdminDashboardHtml(): string {
                 <span id="cfg-token-status" style="margin-left: 8px; font-weight: normal; font-size: 11px; color: #38bdf8;"></span>
               </label>
               <div style="display: flex; gap: 8px;">
-                <input type="password" id="cfg-bot-token" class="form-input" placeholder="Dán token từ @BotFather: 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" autocomplete="off" />
+                <input type="password" id="cfg-bot-token" class="form-input" placeholder="Paste token from @BotFather: 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" autocomplete="off" />
                 <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTokenVisibility('cfg-bot-token', this)">👁️</button>
               </div>
               <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-                Token sẽ được bảo mật và mã hóa hiển thị dạng <code>123456...abcd</code> khi đã lưu.
+                Tokens are encrypted and masked as <code>123456...abcd</code> once saved.
               </div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
               <div class="form-group">
                 <label class="form-label" for="cfg-bot-username">Bot Username:</label>
-                <input type="text" id="cfg-bot-username" class="form-input" placeholder="Ví dụ: OffRadarJobBot" />
+                <input type="text" id="cfg-bot-username" class="form-input" placeholder="e.g. OffRadarJobBot" />
               </div>
               <div class="form-group">
                 <label class="form-label" for="cfg-admin-chat">Admin Alert Chat ID:</label>
-                <input type="text" id="cfg-admin-chat" class="form-input" placeholder="Ví dụ: 99887766 hoặc @channel" />
+                <input type="text" id="cfg-admin-chat" class="form-input" placeholder="e.g. 99887766 or @channel" />
               </div>
             </div>
 
             <div class="form-group">
-              <label class="form-label" for="cfg-admin-usernames">Admin Usernames (phân cách bằng dấu phẩy):</label>
+              <label class="form-label" for="cfg-admin-usernames">Admin Usernames (comma-separated):</label>
               <input type="text" id="cfg-admin-usernames" class="form-input" placeholder="tuannx87, dev_lead, second_admin" />
               <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-                Những username này khi chat với Bot sẽ được tự động nhận diện quyền Quản trị viên (Admin).
+                These usernames will automatically be recognized as Administrators when interacting with the Bot.
               </div>
             </div>
 
@@ -886,14 +886,14 @@ export function renderAdminDashboardHtml(): string {
                 <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTokenVisibility('cfg-admin-token', this)">👁️</button>
               </div>
               <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-                Token bí mật dùng để đăng nhập Web Admin (<code>?token=...</code>) và xác thực lệnh <code>/admin auth &lt;token&gt;</code>.
+                Secret access token used for Web Admin login (<code>?token=...</code>) and bot command <code>/admin auth &lt;token&gt;</code>.
               </div>
             </div>
 
             <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
-              <button class="btn btn-primary" onclick="saveTelegramConfig()">💾 Lưu Cấu Hình</button>
-              <button class="btn btn-secondary" onclick="setupTgWebhook()">🔗 Kích Hoạt Webhook</button>
-              <button class="btn btn-secondary" onclick="checkWebhookInfo()">🔍 Kiểm Tra Webhook Info</button>
+              <button class="btn btn-primary" onclick="saveTelegramConfig()">💾 Save Configuration</button>
+              <button class="btn btn-secondary" onclick="setupTgWebhook()">🔗 Activate Webhook</button>
+              <button class="btn btn-secondary" onclick="checkWebhookInfo()">🔍 Check Webhook Info</button>
             </div>
 
             <!-- Webhook Diagnostic Status Card -->
@@ -910,7 +910,7 @@ export function renderAdminDashboardHtml(): string {
         <!-- Card 2: Test Notification & Live Status -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">🔔 Trạng Thái Kết Nối & Test Alert</div>
+            <div class="card-title">🔔 Connection Status & Test Alert</div>
           </div>
           <div style="padding: 20px;">
             <!-- Current Status Overview -->
@@ -924,33 +924,33 @@ export function renderAdminDashboardHtml(): string {
 
             <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; font-size: 13px; line-height: 1.6; margin-bottom: 18px;">
               <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span style="color: var(--text-muted);">Admin Handles Đã Cấu Hình:</span>
+                <span style="color: var(--text-muted);">Configured Admin Handles:</span>
                 <strong style="color: #f59e0b;" id="tg-configured-admins">@tuannx87</strong>
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span style="color: var(--text-muted);">Admin IDs Đã Cấu Hình:</span>
+                <span style="color: var(--text-muted);">Configured Admin IDs:</span>
                 <strong style="color: #a78bfa;" id="tg-configured-ids">None (Any ID with username or token)</strong>
               </div>
               <div style="display: flex; justify-content: space-between;">
                 <span style="color: var(--text-muted);">Target Alert Chat ID:</span>
-                <strong style="color: #10b981;" id="tg-alert-chat">Chưa cấu hình</strong>
+                <strong style="color: #10b981;" id="tg-alert-chat">Unconfigured</strong>
               </div>
             </div>
 
-            <h4 style="font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 8px;">Gửi Tin Nhắn Kiểm Tra (Test Notification)</h4>
+            <h4 style="font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 8px;">Send Test Notification</h4>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-              Gửi trực tiếp tin nhắn qua Telegram Bot để xác nhận API Token và Chat ID hoạt động chính xác.
+              Send a direct test alert via Telegram Bot to verify API Token and Chat ID deliverability.
             </p>
             <div class="form-group">
-              <input type="text" id="input-test-alert-msg" class="form-input" placeholder="Nhập nội dung thông báo kiểm tra..." value="🚀 [OffRadarJob Alert] Hệ thống crawler & bot hoạt động bình thường." />
+              <input type="text" id="input-test-alert-msg" class="form-input" placeholder="Enter test alert message..." value="🚀 [OffRadarJob Alert] Crawler system & bot operating normally." />
             </div>
             <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-              <input type="text" id="input-test-alert-chat" class="form-input" placeholder="Chat ID nhận (để trống nếu dùng Admin Chat ID mặc định)" style="font-size: 12px;" />
-              <button class="btn btn-primary" onclick="sendTestAlert()">📢 Gửi Test</button>
+              <input type="text" id="input-test-alert-chat" class="form-input" placeholder="Recipient Chat ID (leave blank to use default Admin Chat ID)" style="font-size: 12px;" />
+              <button class="btn btn-primary" onclick="sendTestAlert()">📢 Send Test</button>
             </div>
 
             <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 12px; font-size: 12px; color: #bae6fd;">
-              💡 <strong>Lưu ý:</strong> Để Bot có thể gửi tin nhắn cho bạn hoặc nhóm, bạn cần mở cuộc trò chuyện với bot và bấm <strong>/start</strong> trước ít nhất một lần.
+              💡 <strong>Note:</strong> To allow the Bot to send messages to your user or group, you must open a conversation with the bot and send <strong>/start</strong> at least once first.
             </div>
           </div>
         </div>
@@ -990,27 +990,27 @@ export function renderAdminDashboardHtml(): string {
         <div style="padding: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
           <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
             <div style="font-weight: 700; color: #38bdf8; font-size: 14px; margin-bottom: 6px;">📊 /stats</div>
-            <div style="font-size: 12px; color: var(--text-muted);">Xem báo cáo realtime số lượng jobs, companies, tỷ lệ Midwest và crawl tasks gần nhất.</div>
+            <div style="font-size: 12px; color: var(--text-muted);">View real-time report on jobs, companies, Midwest ratio, and recent crawl tasks.</div>
           </div>
           <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
             <div style="font-weight: 700; color: #10b981; font-size: 14px; margin-bottom: 6px;">🕷️ /crawl &lt;url&gt;</div>
-            <div style="font-size: 12px; color: var(--text-muted);">Kích hoạt crawl ngay 1 career page URL (tự động phân tích, profile & trích xuất jobs).</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Trigger immediate crawl of a career page URL (auto-profile & extract jobs).</div>
           </div>
           <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
             <div style="font-weight: 700; color: #f59e0b; font-size: 14px; margin-bottom: 6px;">⚡ /sweep</div>
-            <div style="font-size: 12px; color: var(--text-muted);">Kích hoạt quét đồng loạt top seed companies trong background queue.</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Trigger batch sweep of top seed companies in background queue.</div>
           </div>
           <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
             <div style="font-weight: 700; color: #a78bfa; font-size: 14px; margin-bottom: 6px;">🌾 /harvest [hn|github|all]</div>
-            <div style="font-size: 12px; color: var(--text-muted);">Thu thập danh sách công ty & jobs từ Hacker News hoặc GitHub repositories.</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Harvest company & job listings from Hacker News or GitHub repositories.</div>
           </div>
           <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
             <div style="font-weight: 700; color: #ec4899; font-size: 14px; margin-bottom: 6px;">👥 /users</div>
-            <div style="font-size: 12px; color: var(--text-muted);">Thống kê tổng số người dùng, số lượng Admins và 5 người dùng mới nhất.</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Inspect total user count, admin count, and 5 most recent users.</div>
           </div>
           <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
             <div style="font-weight: 700; color: #3b82f6; font-size: 14px; margin-bottom: 6px;">🔗 /adminlink</div>
-            <div style="font-size: 12px; color: var(--text-muted);">Tạo magic URL đăng nhập 1 chạm vào Web Admin Control Center.</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Generate one-click magic URL for Web Admin Control Center.</div>
           </div>
         </div>
       </div>
@@ -1182,10 +1182,10 @@ export function renderAdminDashboardHtml(): string {
           if (lastEl) {
             if (f.latestLastSeen) {
               const minsAgo = Math.max(0, Math.round((Date.now() - f.latestLastSeen) / 60000));
-              lastEl.textContent = minsAgo < 60 ? minsAgo + 'm trước' : Math.round(minsAgo / 60) + 'h trước';
+              lastEl.textContent = minsAgo < 60 ? minsAgo + 'm ago' : Math.round(minsAgo / 60) + 'h ago';
               lastEl.title = new Date(f.latestLastSeen).toISOString();
             } else {
-              lastEl.textContent = 'Chưa có';
+              lastEl.textContent = 'None yet';
             }
           }
           const upEl = document.getElementById('stat-updated-24h');
@@ -1196,7 +1196,7 @@ export function renderAdminDashboardHtml(): string {
 
         if (data.subscribers) {
           const subEl = document.getElementById('stat-subscribers');
-          if (subEl) subEl.textContent = (data.subscribers.active || 0) + ' active (' + (data.subscribers.total || 0) + ' tổng)';
+          if (subEl) subEl.textContent = (data.subscribers.active || 0) + ' active (' + (data.subscribers.total || 0) + ' total)';
         }
 
         document.getElementById('tab-tasks-count').textContent = data.tasks?.total ?? 0;
@@ -1440,7 +1440,7 @@ export function renderAdminDashboardHtml(): string {
     }
 
     async function triggerBulkSweepAll() {
-      if (!confirm("Kích hoạt Initial Bulk Blast quét đồng loạt TOÀN BỘ tất cả các công ty đang có trong database?")) return;
+      if (!confirm("Trigger Initial Bulk Blast to sweep ALL companies currently stored in the database?")) return;
       showToast("Dispatching simultaneous sweep across ALL companies...");
       const res = await apiFetch('/api/admin/tasks/bulk-sweep-all', {
         method: 'POST',
@@ -1565,12 +1565,12 @@ export function renderAdminDashboardHtml(): string {
           const tokenStatus = document.getElementById('cfg-token-status');
           if (tokenInput && tokenStatus) {
             if (cfg.hasBotToken) {
-              tokenInput.placeholder = 'Đã lưu: ' + cfg.botTokenMasked + ' (Nhập mới nếu muốn thay đổi)';
-              tokenStatus.textContent = '✅ Đã cấu hình (' + cfg.botTokenMasked + ')';
+              tokenInput.placeholder = 'Saved: ' + cfg.botTokenMasked + ' (Enter new value to update)';
+              tokenStatus.textContent = '✅ Configured (' + cfg.botTokenMasked + ')';
               tokenStatus.style.color = '#10b981';
             } else {
-              tokenInput.placeholder = 'Dán token từ @BotFather: 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ';
-              tokenStatus.textContent = '⚠️ Chưa cấu hình';
+              tokenInput.placeholder = 'Paste token from @BotFather: 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ';
+              tokenStatus.textContent = '⚠️ Unconfigured';
               tokenStatus.style.color = '#f59e0b';
             }
           }
@@ -1587,8 +1587,8 @@ export function renderAdminDashboardHtml(): string {
           const adminTokenInput = document.getElementById('cfg-admin-token');
           const adminTokenStatus = document.getElementById('cfg-admin-token-status');
           if (adminTokenInput && adminTokenStatus && cfg.adminTokenMasked) {
-            adminTokenInput.placeholder = 'Đã lưu: ' + cfg.adminTokenMasked + ' (Nhập mới nếu muốn đổi)';
-            adminTokenStatus.textContent = '✅ Đã cấu hình (' + cfg.adminTokenMasked + ')';
+            adminTokenInput.placeholder = 'Saved: ' + cfg.adminTokenMasked + ' (Enter new value to change)';
+            adminTokenStatus.textContent = '✅ Configured (' + cfg.adminTokenMasked + ')';
             adminTokenStatus.style.color = '#10b981';
           }
         }
@@ -1605,7 +1605,7 @@ export function renderAdminDashboardHtml(): string {
         const adminChatId = document.getElementById('cfg-admin-chat').value.trim();
         const adminTokenVal = document.getElementById('cfg-admin-token').value.trim();
 
-        showToast("Đang lưu cấu hình vào Cloudflare D1...");
+        showToast("Saving configuration to Cloudflare D1...");
         const res = await apiFetch('/api/admin/telegram/config', {
           method: 'POST',
           body: {
@@ -1619,17 +1619,17 @@ export function renderAdminDashboardHtml(): string {
 
         const data = await res.json();
         if (res.ok && data.success) {
-          showToast("✅ Đã lưu cấu hình Telegram thành công!");
+          showToast("✅ Telegram configuration saved successfully!");
           document.getElementById('cfg-bot-token').value = '';
           document.getElementById('cfg-admin-token').value = '';
           await loadTelegramConfig();
           await loadTelegramData();
           checkWebhookInfo();
         } else {
-          showToast("Lỗi lưu cấu hình: " + (data.error || "Không thể cập nhật"));
+          showToast("Save error: " + (data.error || "Unable to update"));
         }
       } catch (err) {
-        showToast("Lỗi kết nối khi lưu cấu hình.");
+        showToast("Network error saving configuration.");
       }
     }
 
@@ -1643,27 +1643,27 @@ export function renderAdminDashboardHtml(): string {
       badge.textContent = 'Checking...';
       badge.style.background = 'rgba(56, 189, 248, 0.2)';
       badge.style.color = '#38bdf8';
-      details.innerHTML = 'Đang truy vấn Telegram API...';
+      details.innerHTML = 'Querying Telegram API...';
 
       try {
         const res = await apiFetch('/api/telegram/webhook-info');
         const data = await res.json();
         if (!res.ok || !data.ok) {
-          badge.textContent = 'Lỗi kết nối';
+          badge.textContent = 'Connection Error';
           badge.style.background = 'rgba(239, 68, 68, 0.2)';
           badge.style.color = '#ef4444';
-          details.innerHTML = '❌ ' + escapeHtml(data.error || data.description || 'Không thể liên lạc với Telegram Bot API. Vui lòng kiểm tra Bot Token.');
+          details.innerHTML = '❌ ' + escapeHtml(data.error || data.description || 'Unable to connect to Telegram Bot API. Please check your Bot Token.');
           return;
         }
 
         const info = data.result || {};
         const hasUrl = !!info.url;
-        badge.textContent = hasUrl ? 'Active' : 'Chưa gắn Webhook';
+        badge.textContent = hasUrl ? 'Active' : 'No Webhook Set';
         badge.style.background = hasUrl ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)';
         badge.style.color = hasUrl ? '#10b981' : '#f59e0b';
 
         let html = '';
-        html += '<div>• <strong>Webhook URL:</strong> ' + (info.url ? '<code>' + escapeHtml(info.url) + '</code>' : '<span style="color:#f59e0b;">Chưa thiết lập (Bấm nút "Kích Hoạt Webhook")</span>') + '</div>';
+        html += '<div>• <strong>Webhook URL:</strong> ' + (info.url ? '<code>' + escapeHtml(info.url) + '</code>' : '<span style="color:#f59e0b;">Not set (Click "Activate Webhook" button)</span>') + '</div>';
         html += '<div>• <strong>Custom Certificate:</strong> ' + (info.has_custom_certificate ? 'Yes' : 'No (Cloudflare SSL)') + '</div>';
         html += '<div>• <strong>Pending Updates:</strong> ' + (info.pending_update_count || 0) + '</div>';
         if (info.ip_address) {
@@ -1671,14 +1671,14 @@ export function renderAdminDashboardHtml(): string {
         }
         if (info.last_error_date) {
           const errDate = new Date(info.last_error_date * 1000).toLocaleString();
-          html += '<div style="color: #ef4444; margin-top: 4px;">• <strong>Lỗi gần nhất:</strong> ' + escapeHtml(info.last_error_message || 'N/A') + ' (' + errDate + ')</div>';
+          html += '<div style="color: #ef4444; margin-top: 4px;">• <strong>Latest Error:</strong> ' + escapeHtml(info.last_error_message || 'N/A') + ' (' + errDate + ')</div>';
         } else {
-          html += '<div style="color: #10b981; margin-top: 4px;">• <strong>Trạng thái:</strong> Hoạt động bình thường, không có lỗi.</div>';
+          html += '<div style="color: #10b981; margin-top: 4px;">• <strong>Status:</strong> Healthy, zero errors.</div>';
         }
         details.innerHTML = html;
       } catch (err) {
         badge.textContent = 'Error';
-        details.innerHTML = '❌ Lỗi mạng khi kiểm tra Webhook info.';
+        details.innerHTML = '❌ Network error checking Webhook info.';
       }
     }
 
@@ -1704,7 +1704,7 @@ export function renderAdminDashboardHtml(): string {
           document.getElementById('tg-bot-handle').textContent = '@' + data.botUsername;
           document.getElementById('tg-configured-admins').textContent = data.configuredAdmins.map(a => '@' + a).join(', ') || 'None';
           document.getElementById('tg-configured-ids').textContent = data.configuredAdminIds.join(', ') || 'None (Any ID with username or token)';
-          document.getElementById('tg-alert-chat').textContent = data.adminChatId || 'Chưa cấu hình';
+          document.getElementById('tg-alert-chat').textContent = data.adminChatId || 'Unconfigured';
           document.getElementById('tg-webhook-status').textContent = data.hasBotToken ? '✅ Bot Token Configured' : '⚠️ Token Not Configured';
         }
         await loadTelegramUsers();

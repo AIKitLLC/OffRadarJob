@@ -168,10 +168,10 @@ HTML, CSS, JavaScript, jQuery, Subversion (SVN)`;
       expect(result.currentMatchScore).toBeLessThan(75);
       expect(result.projectedMatchScore).toBeGreaterThanOrEqual(85);
 
-      // Check Additions (Thêm)
+      // Check Additions (Add skill / additions)
       expect(result.additions.length).toBeGreaterThan(0);
       const additionItems = result.additions.map((a) => a.item);
-      expect(additionItems.some((item) => item.includes("Thêm kĩ năng") || item.includes("MVP"))).toBe(true);
+      expect(additionItems.some((item) => item.includes("Add skill") || item.includes("Thêm kĩ năng") || item.includes("MVP"))).toBe(true);
 
       // Check Removals (Bớt)
       expect(result.removals.length).toBeGreaterThan(0);

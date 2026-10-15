@@ -170,8 +170,8 @@ Return ONLY valid JSON.`;
     for (const skill of missingSkills.slice(0, 4)) {
       additions.push({
         category: "skill",
-        item: `Thêm kĩ năng: ${skill}`,
-        rationale: `Xuất hiện thường xuyên trong 70%+ job descriptions của nhóm ${profile.name}. Giúp tăng độ khớp ATS.`,
+        item: `Add skill: ${skill}`,
+        rationale: `Frequently demanded in 70%+ of job descriptions for ${profile.name}. Enhances ATS match rate.`,
         priority: "high",
       });
     }
@@ -181,67 +181,67 @@ Return ONLY valid JSON.`;
       if (!cvLower.includes("mvp") && !cvLower.includes("0-to-1")) {
         additions.push({
           category: "project_impact",
-          item: "Bổ sung kinh nghiệm đưa sản phẩm từ 0-to-1 / MVP launch",
-          rationale: "Các startup giai đoạn đầu cực kì chuộng các kỹ sư dám tự chủ, tự tay dựng MVP và ra mắt người dùng nhanh chóng.",
+          item: "Highlight 0-to-1 product ownership & MVP launch experience",
+          rationale: "Early-stage startups prioritize autonomous engineers who build, ship, and iterate quickly from zero to one.",
           priority: "high",
         });
       }
       additions.push({
         category: "metric",
-        item: "Thêm số liệu về tốc độ triển khai (e.g. ship tính năng trong 48h, tối ưu deployment)",
-        rationale: "Minh chứng khả năng làm việc với nhịp độ cao mà không cần quy trình rườm rà.",
+        item: "Add delivery velocity metrics (e.g., shipped core features in 48h, cut deployment cycles)",
+        rationale: "Demonstrates high execution velocity without needing heavy bureaucracy.",
         priority: "medium",
       });
     } else if (profile.id === "scaleups_growth") {
       if (!cvLower.includes("throughput") && !cvLower.includes("latency") && !cvLower.includes("scale")) {
         additions.push({
           category: "metric",
-          item: "Thêm số liệu về tải và độ trễ (e.g. xử lý 50K+ RPM, giảm latency p99 xuống <50ms)",
-          rationale: "Scale-up tìm kiếm bằng chứng bạn đã từng giải quyết bài toán tải lớn và tối ưu hệ thống thực tế.",
+          item: "Include throughput and latency metrics (e.g., processed 50K+ RPM, reduced p99 latency <50ms)",
+          rationale: "Scale-ups look for concrete proof of handling high concurrency and distributed systems optimization.",
           priority: "high",
         });
       }
       additions.push({
         category: "architecture_keyword",
-        item: "Nhấn mạnh kiến trúc Microservices / Event-Driven / Kafka / Caching",
-        rationale: "Hệ thống quy mô vừa và lớn đòi hỏi hiểu biết sâu về phân tán và đảm bảo tính sẵn sàng cao.",
+        item: "Emphasize Microservices / Event-Driven / Kafka / Distributed Caching architectures",
+        rationale: "Mid-to-large scale systems require deep knowledge of fault tolerance and high availability.",
         priority: "medium",
       });
     } else if (profile.id === "ai_first_innovators") {
       if (!cvLower.includes("llm") && !cvLower.includes("prompt") && !cvLower.includes("rag")) {
         additions.push({
           category: "architecture_keyword",
-          item: "Bổ sung dự án tích hợp LLM / RAG / Workers AI / Model Context Protocol (MCP)",
-          rationale: "Các công ty AI-first ưu tiên ứng viên đã từng làm việc trực tiếp với model inference, agent workflows và tool calling.",
+          item: "Add production LLM / RAG / Workers AI / Model Context Protocol (MCP) integrations",
+          rationale: "AI-first companies favor candidates with hands-on experience in model inference, agent workflows, and tool calling.",
           priority: "high",
         });
       }
     } else if (profile.id === "midwest_regional") {
       additions.push({
         category: "project_impact",
-        item: "Nêu bật tính ổn định và duy trì lâu dài của kiến trúc mã nguồn (Clean Architecture, Unit Testing)",
-        rationale: "Các doanh nghiệp công nghệ vùng Midwest đánh giá rất cao kỹ sư có tư duy thực dụng, mã nguồn dễ bảo trì và gắn bó.",
+        item: "Highlight architectural stability, clean code, and automated testing (Clean Architecture, Unit Testing)",
+        rationale: "Midwest regional engineering teams value pragmatic engineering, maintainable codebases, and long-term commitment.",
         priority: "high",
       });
     } else if (profile.id === "new_grad_junior") {
       additions.push({
         category: "project_impact",
-        item: "Bổ sung liên kết GitHub / live demo cho các dự án cá nhân & capstone project",
-        rationale: "Nhà tuyển dụng junior/new grad cần bằng chứng code sạch và khả năng tự học thực tế hơn là danh sách công nghệ chung chung.",
+        item: "Include GitHub repository links and live demos for personal projects & capstones",
+        rationale: "Junior and early-career hiring teams prioritize clean code and self-directed shipping ability over generic technology lists.",
         priority: "high",
       });
     } else if (profile.id === "remote_first_boutique") {
       additions.push({
         category: "project_impact",
-        item: "Bổ sung tài liệu thiết kế kỹ thuật (RFC / ADR) và quy trình giao tiếp bất đồng bộ (Async-first)",
-        rationale: "Các công ty Remote-first đề cao ứng viên có khả năng tự chủ, viết tài liệu rõ ràng và tự quản lý công việc hiệu quả.",
+        item: "Add technical design documentation (RFC / ADR) and async-first communication practices",
+        rationale: "Remote-first engineering organizations value candidates with exceptional autonomy and clear written communication.",
         priority: "high",
       });
       if (!cvLower.includes("performance") && !cvLower.includes("tối ưu")) {
         additions.push({
           category: "metric",
-          item: "Thêm số liệu về tính ổn định & tối ưu hiệu năng (e.g. 99.9% uptime, zero unhandled exceptions)",
-          rationale: "Khẳng định tư duy làm sản phẩm chỉn chu, ít phát sinh lỗi cần can thiệp khẩn cấp.",
+          item: "Add reliability & performance metrics (e.g., 99.9% uptime, zero unhandled production exceptions)",
+          rationale: "Signals high craft attention to detail and robust production engineering.",
           priority: "medium",
         });
       }
@@ -249,21 +249,21 @@ Return ONLY valid JSON.`;
 
     // 3. Removals / Deprecations (Bớt)
     const OBSOLETE_TECH = [
-      { pattern: "jquery", name: "jQuery", reason: "Công nghệ cũ, làm giảm ấn tượng về stack hiện đại." },
-      { pattern: "svn", name: "Subversion (SVN)", reason: "Hệ thống quản lý phiên bản lỗi thời so với Git." },
-      { pattern: "cvs", name: "CVS", reason: "Hệ thống kiểm soát phiên bản đã lỗi thời so với Git." },
-      { pattern: "angularjs", name: "AngularJS (1.x)", reason: "Framework đã hết vòng đời hỗ trợ." },
-      { pattern: "php 5", name: "PHP 5.x", reason: "Phiên bản quá cũ, không phù hợp với chuẩn hiện tại." },
-      { pattern: "soap", name: "SOAP / XML-RPC", reason: "Giao thức cũ, nên thay thế bằng REST, gRPC hoặc GraphQL." },
-      { pattern: "flash", name: "Adobe Flash", reason: "Đã bị loại bỏ hoàn toàn trên web hiện đại." },
-      { pattern: "bower", name: "Bower", reason: "Package manager cũ, nên chuyển sang npm/pnpm/yarn." },
+      { pattern: "jquery", name: "jQuery", reason: "Legacy technology; replace with modern TypeScript/React or modern Web APIs." },
+      { pattern: "svn", name: "Subversion (SVN)", reason: "Outdated version control system compared to modern Git workflows." },
+      { pattern: "cvs", name: "CVS", reason: "Obsolete revision control system; omit in favor of modern Git." },
+      { pattern: "angularjs", name: "AngularJS (1.x)", reason: "End-of-life framework; replace with modern React, Vue, or current Angular." },
+      { pattern: "php 5", name: "PHP 5.x", reason: "Unsupported legacy version; highlight modern PHP 8+ or modern backend stacks." },
+      { pattern: "soap", name: "SOAP / XML-RPC", reason: "Legacy protocol; prioritize REST, gRPC, or GraphQL." },
+      { pattern: "flash", name: "Adobe Flash", reason: "Completely deprecated from the modern web platform." },
+      { pattern: "bower", name: "Bower", reason: "Deprecated package manager; use npm, pnpm, or yarn instead." },
     ];
 
     for (const obs of OBSOLETE_TECH) {
       if (cvLower.includes(obs.pattern)) {
         removals.push({
           category: "outdated_tech",
-          item: `Lược bỏ: ${obs.name}`,
+          item: `Remove: ${obs.name}`,
           rationale: obs.reason,
           priority: "high",
         });
@@ -272,17 +272,17 @@ Return ONLY valid JSON.`;
 
     // Buzzword filler removals
     const GENERIC_BUZZWORDS = [
-      { pattern: "hard worker", name: "'Hard worker' / 'Chăm chỉ'", reason: "Từ sáo rỗng, hãy thay bằng kết quả dự án cụ thể." },
-      { pattern: "team player", name: "'Team player' / 'Làm việc nhóm tốt'", reason: "Không có giá trị phân loại, nên thay bằng số dự án cross-team đã lead." },
-      { pattern: "go-getter", name: "'Go-getter'", reason: "Khẩu hiệu văn phòng, không chứng minh được năng lực kỹ thuật." },
-      { pattern: "detail oriented", name: "'Detail oriented'", reason: "Thể hiện qua test coverage hoặc code quality thay vì ghi chung chung." },
+      { pattern: "hard worker", name: "'Hard worker'", reason: "Cliché filler phrase; replace with quantified project accomplishments." },
+      { pattern: "team player", name: "'Team player'", reason: "Non-differentiating buzzword; highlight cross-functional projects led." },
+      { pattern: "go-getter", name: "'Go-getter'", reason: "Vague corporate cliché; demonstrate technical initiative with concrete deliverables." },
+      { pattern: "detail oriented", name: "'Detail oriented'", reason: "Demonstrate this via test coverage and architectural rigor instead." },
     ];
 
     for (const bw of GENERIC_BUZZWORDS) {
       if (cvLower.includes(bw.pattern)) {
         removals.push({
           category: "generic_filler",
-          item: `Lược bỏ cụm từ sáo rỗng: ${bw.name}`,
+          item: `Remove cliché phrase: ${bw.name}`,
           rationale: bw.reason,
           priority: "medium",
         });
@@ -297,7 +297,7 @@ Return ONLY valid JSON.`;
     );
     const projectedMatchScore = Math.min(98, Math.max(currentMatchScore + 20, 92));
 
-    const targetGroupStrategy = `Chiến lược tối ưu cho nhóm [${profile.name}]: Tập trung làm nổi bật ${profile.keyAttributes.slice(0, 2).join(" & ")}, đưa các từ khóa then chốt (${demandedSkills.slice(0, 3).join(", ")}) lên 30% đầu CV, đồng thời lược bỏ các kỹ thuật không liên quan để tạo ấn tượng sắc bén ngay trong 6 giây duyệt đầu tiên.`;
+    const targetGroupStrategy = `Optimization strategy for [${profile.name}]: Focus on highlighting ${profile.keyAttributes.slice(0, 2).join(" & ")}, elevating key keywords (${demandedSkills.slice(0, 3).join(", ")}) into the top third of your CV, and pruning legacy tooling to maximize recruiter impact within the initial 6-second scan.`;
 
     const optimizedCvContent = this.synthesizeOptimizedCv(cvContent, additions, removals, profile);
 
@@ -328,7 +328,7 @@ Return ONLY valid JSON.`;
     // Prune generic fillers & obsolete tech
     for (const rem of removals) {
       if (rem.category === "generic_filler" || rem.category === "outdated_tech") {
-        const raw = rem.item.replace(/Lược bỏ(:|\s+cụm từ sáo rỗng:)/i, "").replace(/['"]/g, "").trim();
+        const raw = rem.item.replace(/(?:Remove|Lược bỏ)(?::|\s+cliché phrase:|\s+cụm từ sáo rỗng:)/i, "").replace(/['"]/g, "").trim();
         // Extract plain keywords or tokens (e.g. "Subversion (SVN)" -> ["Subversion", "SVN"])
         const tokens = raw.match(/[a-zA-Z0-9#+.]+/g) || [];
         for (const token of tokens) {
@@ -351,7 +351,7 @@ Return ONLY valid JSON.`;
     // Prepend or enrich Skills section with additions
     const skillsToAdd = additions
       .filter((a) => a.category === "skill")
-      .map((a) => a.item.replace(/Thêm kĩ năng:\s*/i, "").trim())
+      .map((a) => a.item.replace(/(?:Add skill|Thêm kĩ năng):\s*/i, "").trim())
       .filter(Boolean);
 
     if (skillsToAdd.length > 0) {

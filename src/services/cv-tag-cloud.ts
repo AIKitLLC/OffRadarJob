@@ -574,13 +574,13 @@ export class CvTagCloudService {
     // Dynamic Actionable Strategic Summary
     let recommendationSummary = "";
     if (matchPercentage >= 75) {
-      recommendationSummary = `CV có độ tương thích cao (${matchPercentage}% tiêu chuẩn, ${weightedFitScore}% Weighted Fit) với nhu cầu tuyển dụng. Tiếp tục giữ vững trọng tâm kiến trúc và tối ưu hóa bullet points đo lường thành tựu.`;
+      recommendationSummary = `CV exhibits high compatibility (${matchPercentage}% standard, ${weightedFitScore}% weighted fit) with hiring requirements. Continue strengthening architectural impact and quantified achievement metrics.`;
     } else if (matchPercentage >= 50) {
       const topMissing = missingTags.slice(0, 3).map((t) => t.name).join(", ");
-      recommendationSummary = `CV đạt mức độ khớp khá (${matchPercentage}%), nhưng còn thiếu một số kỹ năng trọng yếu: ${topMissing || "công nghệ thị trường"}. Hãy bổ sung các từ khóa này vào dự án thực tế để vượt qua vòng lọc ATS.`;
+      recommendationSummary = `CV achieves moderate alignment (${matchPercentage}%), but lacks key high-demand skills: ${topMissing || "market technologies"}. Add these keywords in concrete project bullets to pass ATS parsing.`;
     } else {
       const topMissing = missingTags.slice(0, 4).map((t) => t.name).join(", ");
-      recommendationSummary = `CV đang có độ lệch đáng kể so với chân dung tuyển dụng mục tiêu. Khuyến nghị cập nhật ngay các công nghệ bắt buộc: ${topMissing || "stack cốt lõi"} và lược bỏ các kỹ thuật không còn phù hợp.`;
+      recommendationSummary = `CV exhibits significant divergence from the target hiring archetype. Strongly recommend incorporating required core technologies: ${topMissing || "core stack"} and removing obsolete tooling.`;
     }
 
     return {

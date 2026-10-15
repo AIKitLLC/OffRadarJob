@@ -194,7 +194,7 @@ Xây dựng pipeline suy luận AI với Workers AI, Model Context Protocol và 
       expect(comp.missingTags.length).toBe(0);
       expect(comp.matchedTags.length).toBe(5);
       expect(comp.atsReadabilityScore).toBeGreaterThanOrEqual(85);
-      expect(comp.recommendationSummary).toContain("độ tương thích cao");
+      expect(comp.recommendationSummary).toContain("high compatibility");
     });
 
     it("should handle 0% match cleanly with appropriate weighted fit and missing tags", () => {
@@ -205,7 +205,7 @@ Xây dựng pipeline suy luận AI với Workers AI, Model Context Protocol và 
       expect(comp.weightedFitScore).toBe(0);
       expect(comp.matchedTags.length).toBe(0);
       expect(comp.missingTags.length).toBe(5);
-      expect(comp.recommendationSummary).toContain("độ lệch đáng kể");
+      expect(comp.recommendationSummary).toContain("significant divergence");
     });
 
     it("should penalize ATS score when deprecated skills are detected", () => {
