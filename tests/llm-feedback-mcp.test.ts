@@ -1,3 +1,4 @@
+import { tgEnv, signTelegramLogin, TG_WEBHOOK_HEADERS, TEST_BOT_TOKEN, TEST_WEBHOOK_SECRET } from "./helpers/telegram.js";
 import { describe, it, expect, beforeEach } from "vitest";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 import {
@@ -31,13 +32,13 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
       new Request("http://localhost/api/auth/telegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(signTelegramLogin({
           username: "ai_career_user",
           first_name: "Dev",
           id: 888999,
-        }),
+        })),
       }),
-      { DB: db } as any,
+      tgEnv({ DB: db }),
       mockCtx
     );
     const authData = (await authRes.json()) as any;
@@ -89,7 +90,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const data = (await res.json()) as any;
@@ -111,7 +112,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const data = (await res.json()) as any;
@@ -144,7 +145,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const data = (await res.json()) as any;
@@ -174,7 +175,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const data = (await res.json()) as any;
@@ -199,7 +200,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       const data = (await res.json()) as any;
       expect(data.error).toBeDefined();
       expect(data.error.code).toBe(-32602);
@@ -221,7 +222,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       const data = (await res.json()) as any;
       const tool = data.result.tools.find((t: any) => t.name === "submit_llm_feedback");
       expect(tool).toBeDefined();
@@ -256,7 +257,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const data = (await res.json()) as any;
@@ -299,7 +300,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const paged = await feedbackRepo.listPaged({ type: "user_preference" });
@@ -314,7 +315,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
     it("should require auth to get or post user feedbacks", async () => {
       const getRes = await worker.fetch(
         new Request("http://localhost/api/user/feedbacks"),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(getRes.status).toBe(401);
@@ -325,7 +326,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ comment: "Test feedback" }),
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(postRes.status).toBe(401);
@@ -348,7 +349,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
             suggested_action: "Add RSS feed for daily digests",
           }),
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect([200, 201]).toContain(postRes.status);
@@ -361,7 +362,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
         new Request("http://localhost/api/user/feedbacks", {
           headers: { Authorization: `Bearer ${testToken}` },
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(getRes.status).toBe(200);
@@ -404,7 +405,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
     it("should reject unauthorized requests to /api/admin/feedbacks", async () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/admin/feedbacks"),
-        { DB: db, ...adminEnv } as any,
+        tgEnv({ DB: db, ...adminEnv }),
         mockCtx
       );
       expect(res.status).toBe(401);
@@ -413,7 +414,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
     it("should allow admin to list feedbacks with stats", async () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/admin/feedbacks", { headers: { "x-admin-token": adminToken } }),
-        { DB: db, ...adminEnv } as any,
+        tgEnv({ DB: db, ...adminEnv }),
         mockCtx
       );
       expect(res.status).toBe(200);
@@ -438,7 +439,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
           },
           body: JSON.stringify({ id: targetId, status: "actioned" }),
         }),
-        { DB: db, ...adminEnv } as any,
+        tgEnv({ DB: db, ...adminEnv }),
         mockCtx
       );
       expect(statusRes.status).toBe(200);
@@ -456,7 +457,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
           },
           body: JSON.stringify({ id: targetId }),
         }),
-        { DB: db, ...adminEnv } as any,
+        tgEnv({ DB: db, ...adminEnv }),
         mockCtx
       );
       expect(deleteRes.status).toBe(200);
@@ -478,7 +479,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
 
       const webhookReq = new Request("http://localhost/api/telegram/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: TG_WEBHOOK_HEADERS,
         body: JSON.stringify({
           update_id: 1001,
           message: {
@@ -492,7 +493,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
 
       const res = await worker.fetch(
         webhookReq,
-        { DB: db, ...adminEnv } as any,
+        tgEnv({ DB: db, ...adminEnv }),
         mockCtx
       );
       expect(res.status).toBe(200);

@@ -1,3 +1,4 @@
+import { tgEnv, signTelegramLogin, TG_WEBHOOK_HEADERS, TEST_BOT_TOKEN, TEST_WEBHOOK_SECRET } from "./helpers/telegram.js";
 import { describe, it, expect, beforeEach } from "vitest";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 import { UserRepository, JobRepository, CompanyRepository, CrawlTaskRepository, SystemSettingsRepository } from "../src/db/repositories.js";
@@ -16,8 +17,8 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
   const mockEnv = {
     DB: undefined as any,
     TELEGRAM_BOT_USERNAME: "OffRadarJobBot",
-    TELEGRAM_ADMIN_USERNAMES: "tuannx87,lead_dev",
     TELEGRAM_ADMIN_IDS: "99887766,11223344",
+    TELEGRAM_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET,
     ADMIN_TOKEN: TEST_ADMIN_TOKEN,
   };
 
@@ -37,12 +38,19 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
   });
 
   describe("isTelegramAdmin Authorization Function", () => {
-    it("should authorize users matching configured usernames (case-insensitive and with @)", () => {
-      expect(isTelegramAdmin(mockEnv as any, { id: 1, username: "tuannx87" })).toBe(true);
-      expect(isTelegramAdmin(mockEnv as any, { id: 1, username: "@tuannx87" })).toBe(true);
-      expect(isTelegramAdmin(mockEnv as any, { id: 1, username: "TUANNX87" })).toBe(true);
-      expect(isTelegramAdmin(mockEnv as any, { id: 1, username: "lead_dev" })).toBe(true);
-      expect(isTelegramAdmin(mockEnv as any, { id: 1, username: "random_guy" })).toBe(false);
+    it("never authorizes by username, including the former default admin username", () => {
+      const envWithUsernames = { ...mockEnv, TELEGRAM_ADMIN_USERNAMES: "tuannx87,lead_dev" };
+      expect(isTelegramAdmin(envWithUsernames as any, { id: 1, username: "tuannx87" })).toBe(false);
+      expect(isTelegramAdmin(envWithUsernames as any, { id: 1, username: "lead_dev" })).toBe(false);
+      expect(isTelegramAdmin({ DB: db } as any, { id: 1, username: "tuannx87" })).toBe(false);
+      // A username that looks like an admin ID is still not an ID match.
+      expect(isTelegramAdmin(mockEnv as any, { id: 1, username: "99887766" })).toBe(false);
+    });
+
+    it("ignores non-numeric TELEGRAM_ADMIN_IDS entries", () => {
+      const env = { ...mockEnv, TELEGRAM_ADMIN_IDS: "tuannx87, 424242 ,@x" };
+      expect(isTelegramAdmin(env as any, { id: 424242 })).toBe(true);
+      expect(isTelegramAdmin(env as any, { id: "tuannx87" as any })).toBe(false);
     });
 
     it("should authorize users matching configured numeric Telegram IDs", () => {
@@ -58,11 +66,25 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
   });
 
   describe("Telegram Webhook - /start and Admin Recognition", () => {
-    it("should automatically assign admin role to configured admin upon /start", async () => {
+    it("/start never writes role=admin based on a username", async () => {
+      const res = await worker.fetch(
+        new Request("http://localhost/api/telegram/webhook", {
+          method: "POST",
+          headers: TG_WEBHOOK_HEADERS,
+          body: JSON.stringify({ message: { from: { id: 77777, first_name: "Tuan", username: "tuannx87" }, chat: { id: 77777 }, text: "/start" } }),
+        }),
+        { ...mockEnv, TELEGRAM_ADMIN_USERNAMES: "tuannx87" } as any,
+        mockCtx
+      );
+      expect(((await res.json()) as any).isAdmin).toBe(false);
+      expect((await userRepo.findByTelegramId("77777"))?.role).toBe("user");
+    });
+
+    it("recognizes a TELEGRAM_ADMIN_IDS admin on /start without persisting role=admin", async () => {
       const payload = {
         message: {
-          from: { id: 77777, first_name: "Tuan", username: "tuannx87" },
-          chat: { id: 77777 },
+          from: { id: 99887766, first_name: "Tuan", username: "tuannx87" },
+          chat: { id: 99887766 },
           text: "/start",
         },
       };
@@ -70,7 +92,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/telegram/webhook", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: TG_WEBHOOK_HEADERS,
           body: JSON.stringify(payload),
         }),
         mockEnv as any,
@@ -81,9 +103,9 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       const data = (await res.json()) as any;
       expect(data.isAdmin).toBe(true);
 
-      const stored = await userRepo.findByTelegramId("77777");
+      const stored = await userRepo.findByTelegramId("99887766");
       expect(stored).toBeDefined();
-      expect(stored?.role).toBe("admin");
+      expect(stored?.role).toBe("user");
     });
 
     it("should assign user role to normal users", async () => {
@@ -98,7 +120,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/telegram/webhook", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: TG_WEBHOOK_HEADERS,
           body: JSON.stringify(payload),
         }),
         mockEnv as any,
@@ -119,7 +141,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       worker.fetch(
         new Request("http://localhost/api/telegram/webhook", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: TG_WEBHOOK_HEADERS,
           body: JSON.stringify({ message: { from: { id, first_name: "X" }, chat: { id }, text: `/admin auth ${token}` } }),
         }),
         mockEnv as any,
@@ -148,7 +170,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/telegram/webhook", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: TG_WEBHOOK_HEADERS,
           body: JSON.stringify(payload),
         }),
         mockEnv as any,
@@ -172,7 +194,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/telegram/webhook", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: TG_WEBHOOK_HEADERS,
           body: JSON.stringify(payload),
         }),
         mockEnv as any,
@@ -202,7 +224,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/telegram/webhook", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: TG_WEBHOOK_HEADERS,
           body: JSON.stringify(payload),
         }),
         mockEnv as any,
@@ -217,8 +239,8 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
     it("should execute /crawl command from admin user and insert task into D1", async () => {
       const payload = {
         message: {
-          from: { id: 77777, first_name: "Tuan", username: "tuannx87" },
-          chat: { id: 77777 },
+          from: { id: 99887766, first_name: "Tuan", username: "tuannx87" },
+          chat: { id: 99887766 },
           text: "/crawl https://basecamp.com/about/jobs",
         },
       };
@@ -226,7 +248,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/telegram/webhook", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: TG_WEBHOOK_HEADERS,
           body: JSON.stringify(payload),
         }),
         mockEnv as any,
@@ -248,8 +270,8 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
     it("should respond to /stats command", async () => {
       const payload = {
         message: {
-          from: { id: 77777, first_name: "Tuan", username: "tuannx87" },
-          chat: { id: 77777 },
+          from: { id: 99887766, first_name: "Tuan", username: "tuannx87" },
+          chat: { id: 99887766 },
           text: "/stats",
         },
       };
@@ -257,7 +279,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/telegram/webhook", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: TG_WEBHOOK_HEADERS,
           body: JSON.stringify(payload),
         }),
         mockEnv as any,
@@ -272,8 +294,8 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
     it("should respond to /users command for admin", async () => {
       const payload = {
         message: {
-          from: { id: 77777, first_name: "Tuan", username: "tuannx87" },
-          chat: { id: 77777 },
+          from: { id: 99887766, first_name: "Tuan", username: "tuannx87" },
+          chat: { id: 99887766 },
           text: "/users",
         },
       };
@@ -281,7 +303,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/telegram/webhook", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: TG_WEBHOOK_HEADERS,
           body: JSON.stringify(payload),
         }),
         mockEnv as any,
@@ -296,8 +318,8 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
     it("should generate admin magic link via /adminlink for admin", async () => {
       const payload = {
         message: {
-          from: { id: 77777, first_name: "Tuan", username: "tuannx87" },
-          chat: { id: 77777 },
+          from: { id: 99887766, first_name: "Tuan", username: "tuannx87" },
+          chat: { id: 99887766 },
           text: "/adminlink",
         },
       };
@@ -305,7 +327,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/telegram/webhook", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: TG_WEBHOOK_HEADERS,
           body: JSON.stringify(payload),
         }),
         mockEnv as any,
@@ -354,8 +376,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.botUsername).toBe("OffRadarJobBot");
-      expect(data.configuredAdmins).toContain("tuannx87");
-      expect(data.configuredAdmins).toContain("lead_dev");
+      expect(data.configuredAdmins).not.toContain("tuannx87");
       expect(data.configuredAdminIds).toContain("99887766");
       expect(data.totalUsers).toBe(2);
       expect(data.totalAdmins).toBe(1);
@@ -438,7 +459,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       expect(data.hasBotToken).toBe(true);
       expect(data.botTokenMasked).toMatch(/^987654\.\.\.KLMN$/);
       expect(data.botUsername).toBe("MyAwesomeBot");
-      expect(data.adminUsernames).toBe("master_boss, co_founder");
+      expect(data.adminUsernames).toBe(""); // usernames no longer grant admin
       expect(data.adminChatId).toBe("-100123456789");
     });
 
@@ -454,6 +475,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
             botToken: "111222333:NEW_DYNAMIC_TOKEN_XYZ",
             botUsername: "@BrandNewBot",
             adminUsernames: "new_super_admin, tuannx87",
+            adminIds: "123123123",
             adminChatId: "998877",
             adminToken: "secret-master-token-999",
           }),
@@ -481,7 +503,10 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       expect(statusRes.status).toBe(200);
       const statusData = (await statusRes.json()) as any;
       expect(statusData.botUsername).toBe("BrandNewBot"); // stripped @
-      expect(statusData.configuredAdmins).toContain("new_super_admin");
+      // Admin identity is not editable from D1: only the TELEGRAM_ADMIN_IDS secret/var counts.
+      expect(statusData.configuredAdmins).not.toContain("new_super_admin");
+      expect(statusData.configuredAdminIds).not.toContain("123123123");
+      expect(data.updatedKeys).not.toContain("telegram_admin_ids");
       expect(statusData.hasBotToken).toBe(true);
 
       // A token posted to the config endpoint must NOT become a valid admin token.
@@ -496,9 +521,9 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
     });
 
     it("should return helpful error if webhook setup is called without bot token", async () => {
-      const emptyEnv = { DB: db };
+      const emptyEnv = { DB: db, ADMIN_TOKEN: TEST_ADMIN_TOKEN };
       const res = await worker.fetch(
-        new Request("http://localhost/api/telegram/setup-webhook"),
+        new Request("http://localhost/api/telegram/setup-webhook", { headers: { "x-admin-token": TEST_ADMIN_TOKEN } }),
         emptyEnv as any,
         mockCtx
       );

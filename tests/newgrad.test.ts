@@ -1,3 +1,4 @@
+import { tgEnv, signTelegramLogin, TG_WEBHOOK_HEADERS, TEST_BOT_TOKEN, TEST_WEBHOOK_SECRET } from "./helpers/telegram.js";
 import { describe, it, expect, beforeEach } from "vitest";
 import { inferSeniority } from "../src/harvesters/public-source-harvester.js";
 import { JobExtractorAgent } from "../src/agents/job-extractor-agent.js";
@@ -142,7 +143,8 @@ describe("New Grad & Early Career Expansion Suite", () => {
         DB: db,
         ADMIN_TOKEN: "test-admin-secret",
         TELEGRAM_BOT_TOKEN: "test-bot-token",
-        TELEGRAM_ADMIN_USERNAMES: "tuannx87",
+        TELEGRAM_ADMIN_IDS: "999",
+        TELEGRAM_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET,
       };
 
       const harvester = new NewGradHarvester();
@@ -152,7 +154,7 @@ describe("New Grad & Early Career Expansion Suite", () => {
     it("should respond to /newgrad with top new grad opportunities", async () => {
       const req = new Request("http://localhost/api/telegram/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: TG_WEBHOOK_HEADERS,
         body: JSON.stringify({
           message: {
             from: { id: 112233, first_name: "FreshGrad", username: "fresh_dev" },
@@ -172,7 +174,7 @@ describe("New Grad & Early Career Expansion Suite", () => {
     it("should filter by /newgrad midwest", async () => {
       const req = new Request("http://localhost/api/telegram/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: TG_WEBHOOK_HEADERS,
         body: JSON.stringify({
           message: {
             from: { id: 112233, first_name: "FreshGrad", username: "fresh_dev" },
@@ -192,7 +194,7 @@ describe("New Grad & Early Career Expansion Suite", () => {
     it("should allow admin to trigger /harvest newgrad", async () => {
       const req = new Request("http://localhost/api/telegram/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: TG_WEBHOOK_HEADERS,
         body: JSON.stringify({
           message: {
             from: { id: 999, first_name: "Tuan", username: "tuannx87" },
@@ -257,7 +259,7 @@ describe("New Grad & Early Career Expansion Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, {} as any);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), {} as any);
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.result?.content).toBeDefined();
@@ -289,7 +291,7 @@ describe("New Grad & Early Career Expansion Suite", () => {
         }),
       });
 
-      const searchRes = await worker.fetch(searchReq, { DB: db } as any, {} as any);
+      const searchRes = await worker.fetch(searchReq, tgEnv({ DB: db }), {} as any);
       const searchData = (await searchRes.json()) as any;
       const firstJob = JSON.parse(searchData.result.content[0].text).jobs[0];
 
@@ -312,7 +314,7 @@ describe("New Grad & Early Career Expansion Suite", () => {
         }),
       });
 
-      const cvRes = await worker.fetch(cvReq, { DB: db } as any, {} as any);
+      const cvRes = await worker.fetch(cvReq, tgEnv({ DB: db }), {} as any);
       expect(cvRes.status).toBe(200);
       const cvData = (await cvRes.json()) as any;
       const parsedCv = JSON.parse(cvData.result.content[0].text);

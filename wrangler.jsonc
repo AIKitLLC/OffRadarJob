@@ -70,7 +70,6 @@
   },
   "vars": {
     "TELEGRAM_BOT_USERNAME": "OffRadarJobBot",
-    "TELEGRAM_ADMIN_USERNAMES": "tuannx87",
   },
   "triggers": {
     "crons": [

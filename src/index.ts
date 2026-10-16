@@ -56,9 +56,17 @@ export interface Env {
   ADMIN_TOKEN?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_BOT_USERNAME?: string;
-  TELEGRAM_ADMIN_USERNAMES?: string;
+  /** Comma-separated numeric Telegram user IDs that have bot admin rights. */
   TELEGRAM_ADMIN_IDS?: string;
   TELEGRAM_ADMIN_CHAT_ID?: string;
+  /** Secret Telegram echoes in X-Telegram-Bot-Api-Secret-Token on every webhook call. Required. */
+  TELEGRAM_WEBHOOK_SECRET?: string;
+  /** Max age (seconds) of a Telegram Login Widget auth_date. Default 86400. */
+  TELEGRAM_AUTH_MAX_AGE_SECONDS?: string;
+  /** "true" re-enables the deprecated /mcp?token= query auth. Default off. */
+  MCP_ALLOW_QUERY_TOKEN?: string;
+  /** "true" enables the demo-only /api/auth/telegram/confirm-session endpoint. Default off. */
+  ENABLE_DEMO_CONFIRM_SESSION?: string;
   DISCOVERY_QUEUE?: {
     send(message: unknown): Promise<void>;
   };
@@ -224,7 +232,6 @@ export async function verifyAdminSession(env: Pick<Env, "ADMIN_TOKEN"> | undefin
 export interface EffectiveConfig {
   telegramBotToken: string;
   telegramBotUsername: string;
-  telegramAdminUsernames: string;
   telegramAdminIds: string;
   telegramAdminChatId: string;
   adminToken: string;
@@ -235,8 +242,8 @@ export async function getEffectiveConfig(env: Env, settingsRepo?: SystemSettings
   return {
     telegramBotToken: dynamicMap["telegram_bot_token"] || env.TELEGRAM_BOT_TOKEN || "",
     telegramBotUsername: dynamicMap["telegram_bot_username"] || env.TELEGRAM_BOT_USERNAME || "OffRadarJobBot",
-    telegramAdminUsernames: dynamicMap["telegram_admin_usernames"] || env.TELEGRAM_ADMIN_USERNAMES || "tuannx87",
-    telegramAdminIds: dynamicMap["telegram_admin_ids"] || env.TELEGRAM_ADMIN_IDS || "",
+    // Bot admin identity comes only from the TELEGRAM_ADMIN_IDS secret/var (numeric IDs), never D1 settings.
+    telegramAdminIds: env.TELEGRAM_ADMIN_IDS || "",
     telegramAdminChatId: dynamicMap["telegram_admin_chat_id"] || env.TELEGRAM_ADMIN_CHAT_ID || "",
     // Admin token comes ONLY from the ADMIN_TOKEN Cloudflare secret (never D1 settings, never a default).
     adminToken: "",
@@ -314,6 +321,20 @@ export async function isAuthorized(request: Request, _url?: URL, env?: Env): Pro
   return ok;
 }
 
+/** Parse TELEGRAM_ADMIN_IDS into numeric Telegram user IDs; non-numeric entries are ignored. */
+export function parseTelegramAdminIds(raw: string | undefined): Set<string> {
+  return new Set(
+    (raw || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => /^\d{1,20}$/.test(s))
+  );
+}
+
+/**
+ * Bot admin check: numeric Telegram user ID listed in TELEGRAM_ADMIN_IDS, or a user already
+ * granted role=admin via `/admin auth`. Usernames are never used (they can be changed/claimed).
+ */
 export function isTelegramAdmin(
   env: Env,
   from: { id: number | string; username?: string },
@@ -321,25 +342,18 @@ export function isTelegramAdmin(
   config?: EffectiveConfig
 ): boolean {
   if (userRole === "admin") return true;
+  const id = String(from.id ?? "").trim();
+  if (!/^\d{1,20}$/.test(id)) return false;
+  return parseTelegramAdminIds(config?.telegramAdminIds || env.TELEGRAM_ADMIN_IDS).has(id);
+}
 
-  const adminIdsStr = config?.telegramAdminIds || env.TELEGRAM_ADMIN_IDS || "";
-  const adminIds = adminIdsStr
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  if (adminIds.includes(String(from.id).toLowerCase())) return true;
-
-  if (from.username) {
-    const rawUsername = from.username.replace(/^@/, "").toLowerCase().trim();
-    const adminUsernamesStr = config?.telegramAdminUsernames || env.TELEGRAM_ADMIN_USERNAMES || "tuannx87";
-    const adminUsernames = adminUsernamesStr
-      .split(",")
-      .map((s) => s.replace(/^@/, "").toLowerCase().trim())
-      .filter(Boolean);
-    if (adminUsernames.includes(rawUsername)) return true;
-  }
-
-  return false;
+/** Constant-time check of the X-Telegram-Bot-Api-Secret-Token header. Fails closed when unset. */
+export async function verifyTelegramWebhookSecret(request: Request, env: Pick<Env, "TELEGRAM_WEBHOOK_SECRET">): Promise<boolean> {
+  const expected = (env.TELEGRAM_WEBHOOK_SECRET ?? "").trim();
+  if (expected.length < 16) return false;
+  const provided = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
+  if (!provided) return false;
+  return timingSafeEqualStr(provided, expected);
 }
 
 export async function sendTelegramMessage(
@@ -387,41 +401,56 @@ export async function notifyTelegramAdmin(
   }
 }
 
-async function verifyTelegramAuth(data: Record<string, string>, botToken: string): Promise<boolean> {
-  const checkHash = data["hash"];
-  if (!checkHash) return false;
+export const TELEGRAM_AUTH_DEFAULT_MAX_AGE_SECONDS = 24 * 60 * 60;
+
+/**
+ * Verify Telegram Login Widget data: HMAC-SHA256(data_check_string, key = SHA256(bot_token)),
+ * compared in constant time, plus auth_date freshness. Always requires hash and auth_date.
+ */
+export async function verifyTelegramAuth(
+  data: Record<string, unknown>,
+  botToken: string,
+  maxAgeSeconds = TELEGRAM_AUTH_DEFAULT_MAX_AGE_SECONDS,
+  nowMs = Date.now()
+): Promise<boolean> {
+  if (!botToken) return false;
+  const checkHash = typeof data["hash"] === "string" ? (data["hash"] as string).toLowerCase() : "";
+  if (!/^[0-9a-f]{64}$/.test(checkHash)) return false;
+
+  const authDate = Number(data["auth_date"]);
+  if (!Number.isFinite(authDate) || authDate <= 0) return false;
+  const nowSec = Math.floor(nowMs / 1000);
+  if (nowSec - authDate > maxAgeSeconds || authDate - nowSec > 60) return false;
 
   const dataCheckArr: string[] = [];
   for (const key of Object.keys(data).sort()) {
-    if (key !== "hash" && data[key] !== undefined && data[key] !== null) {
-      dataCheckArr.push(`${key}=${data[key]}`);
-    }
+    const v = data[key];
+    if (key === "hash" || v === undefined || v === null) continue;
+    if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") return false;
+    dataCheckArr.push(`${key}=${v}`);
   }
-  const dataCheckString = dataCheckArr.join("\n");
-
   const enc = new TextEncoder();
   const secretKeyHash = await crypto.subtle.digest("SHA-256", enc.encode(botToken));
-
-  const hmacKey = await crypto.subtle.importKey(
-    "raw",
-    secretKeyHash,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const signature = await crypto.subtle.sign("HMAC", hmacKey, enc.encode(dataCheckString));
-  const hex = Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-
-  return hex === checkHash;
+  const hmacKey = await crypto.subtle.importKey("raw", secretKeyHash, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", hmacKey, enc.encode(dataCheckArr.join("\n")));
+  return timingSafeEqualStr(toHex(new Uint8Array(signature)), checkHash);
 }
 
-async function getAuthenticatedUser(request: Request, userRepo: UserRepository): Promise<User | null> {
-  const authHeader = request.headers.get("Authorization") || request.headers.get("x-api-token");
-  let token = authHeader ? authHeader.replace("Bearer ", "").trim() : null;
+function telegramAuthMaxAge(env: Env): number {
+  const n = Number(env.TELEGRAM_AUTH_MAX_AGE_SECONDS);
+  return Number.isFinite(n) && n > 0 ? n : TELEGRAM_AUTH_DEFAULT_MAX_AGE_SECONDS;
+}
 
-  if (!token) {
+async function getAuthenticatedUser(
+  request: Request,
+  userRepo: UserRepository,
+  opts: { allowQueryToken?: boolean } = {}
+): Promise<User | null> {
+  const authHeader = request.headers.get("Authorization") || request.headers.get("x-api-token");
+  let token = authHeader ? authHeader.replace(/^Bearer\s+/i, "").trim() : null;
+
+  // Deprecated: ?token= in the URL (leaks into logs/history). Only when explicitly enabled.
+  if (!token && opts.allowQueryToken) {
     const url = new URL(request.url);
     token = url.searchParams.get("token");
   }
@@ -838,6 +867,9 @@ export default {
 
     // 6b. Telegram Bot Webhook: Handles user auth, deep-linking & Admin operations
     if (path === "/api/telegram/webhook" && request.method === "POST") {
+      if (!(await verifyTelegramWebhookSecret(request, env))) {
+        return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      }
       try {
         const update = (await request.json()) as Record<string, any>;
         const msg = update.message;
@@ -860,7 +892,8 @@ export default {
 
           const now = Date.now();
           const apiToken = existingUser?.apiToken || `orp_${crypto.randomUUID().replace(/-/g, "")}`;
-          const role = isAdmin ? "admin" : (existingUser?.role || "user");
+          // /start never grants admin; admin is TELEGRAM_ADMIN_IDS (evaluated live) or `/admin auth`.
+          const role = existingUser?.role || "user";
 
           const userRecord: User = {
             id: existingUser?.id || `usr_${tgId}`,
@@ -1541,6 +1574,7 @@ export default {
 
     // 6c. Quick Confirm Session (for 1-click testing or local demo without Telegram app)
     if (path === "/api/auth/telegram/confirm-session" && request.method === "POST") {
+      if (env.ENABLE_DEMO_CONFIRM_SESSION !== "true") return new Response("Not Found", { status: 404 });
       try {
         const body = (await request.json()) as Record<string, any>;
         const token = String(body.token || "").trim();
@@ -1600,16 +1634,25 @@ export default {
       }
     }
 
-    // 6d. Telegram Webhook Setup Helper
-    if (path === "/api/telegram/setup-webhook" && request.method === "GET") {
+    // 6d. Telegram Webhook Setup Helper (admin only; registers the webhook secret with Telegram)
+    if (path === "/api/telegram/setup-webhook" && (request.method === "GET" || request.method === "POST")) {
+      if (!(await isAuthorized(request, url, env))) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
       const botToken = effectiveConfig.telegramBotToken;
       if (!botToken) {
-        return Response.json({
-          error: "TELEGRAM_BOT_TOKEN not configured yet. Please configure it in the Admin Dashboard (Tab 🤖 Telegram Bot & Admins)."
-        }, { status: 400 });
+        return Response.json({ error: "TELEGRAM_BOT_TOKEN not configured yet." }, { status: 400 });
+      }
+      const webhookSecret = (env.TELEGRAM_WEBHOOK_SECRET ?? "").trim();
+      if (webhookSecret.length < 16) {
+        return Response.json({ error: "TELEGRAM_WEBHOOK_SECRET secret is not configured (min 16 chars)." }, { status: 400 });
       }
       const webhookUrl = `${url.origin}/api/telegram/webhook`;
-      const res = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
+      const res = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: webhookUrl, secret_token: webhookSecret }),
+      });
       const data = await res.json();
       return Response.json({ webhookUrl, result: data });
     }
@@ -1618,17 +1661,19 @@ export default {
     if (path === "/api/auth/telegram" && request.method === "POST") {
       try {
         const body = (await request.json()) as Record<string, any>;
-        const tgId = String(body.id || body.telegram_id || (body.username ? `tg_${body.username}` : ""));
-        if (!tgId) {
-          return Response.json({ error: "Missing Telegram ID or username" }, { status: 400 });
-        }
-
         const botToken = effectiveConfig.telegramBotToken;
-        if (botToken && body.hash) {
-          const isValid = await verifyTelegramAuth(body, botToken);
-          if (!isValid) {
-            return Response.json({ error: "Invalid Telegram authentication signature" }, { status: 403 });
-          }
+        if (!botToken) {
+          return Response.json({ error: "Telegram login is not configured" }, { status: 503 });
+        }
+        if (!body || typeof body.hash !== "string" || !body.hash) {
+          return Response.json({ error: "Missing Telegram authentication hash" }, { status: 401 });
+        }
+        if (!(await verifyTelegramAuth(body, botToken, telegramAuthMaxAge(env)))) {
+          return Response.json({ error: "Invalid or expired Telegram authentication" }, { status: 403 });
+        }
+        const tgId = String(body.id ?? "");
+        if (!/^\d{1,20}$/.test(tgId)) {
+          return Response.json({ error: "Missing Telegram ID" }, { status: 400 });
         }
 
         const now = Date.now();
@@ -2085,7 +2130,7 @@ export default {
 
     // 10. MCP (Model Context Protocol) Endpoints for AI Agents (Cursor, Claude Desktop, Antigravity)
     if (path === "/mcp" && request.method === "POST") {
-      const user = await getAuthenticatedUser(request, userRepo);
+      const user = await getAuthenticatedUser(request, userRepo, { allowQueryToken: env.MCP_ALLOW_QUERY_TOKEN === "true" });
       if (!user) {
         return Response.json(
           {
@@ -2093,7 +2138,7 @@ export default {
             id: null,
             error: {
               code: -32000,
-              message: "Unauthorized. Please authenticate with Telegram or provide ?token=orp_... in MCP URL.",
+              message: "Unauthorized. Send your token as an Authorization: Bearer orp_... header.",
             },
           },
           { status: 401 }
@@ -2106,12 +2151,13 @@ export default {
     }
 
     if (path === "/mcp/sse" && request.method === "GET") {
-      const user = await getAuthenticatedUser(request, userRepo);
+      const user = await getAuthenticatedUser(request, userRepo, { allowQueryToken: env.MCP_ALLOW_QUERY_TOKEN === "true" });
       if (!user) {
-        return new Response("Unauthorized. Please provide ?token=orp_... query parameter for MCP SSE.", { status: 401 });
+        return new Response("Unauthorized. Send your token as an Authorization: Bearer orp_... header.", { status: 401 });
       }
 
-      const endpointUrl = `/mcp?token=${encodeURIComponent(user.apiToken)}`;
+      // The client keeps sending its Authorization header; the token is never placed in a URL.
+      const endpointUrl = `/mcp`;
       return new Response(`event: endpoint\ndata: ${endpointUrl}\n\n`, {
         headers: {
           "Content-Type": "text/event-stream",
@@ -2804,14 +2850,8 @@ export default {
         userRepo.count(),
         userRepo.count("admin"),
       ]);
-      const configuredAdmins = (effectiveConfig.telegramAdminUsernames || "tuannx87")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const configuredAdminIds = (effectiveConfig.telegramAdminIds || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const configuredAdminIds = [...parseTelegramAdminIds(effectiveConfig.telegramAdminIds)];
+      const configuredAdmins = configuredAdminIds;
 
       return Response.json({
         botUsername: effectiveConfig.telegramBotUsername || "OffRadarJobBot",
@@ -2842,7 +2882,7 @@ export default {
         hasBotToken: !!token,
         botTokenMasked: maskedToken,
         botUsername: effectiveConfig.telegramBotUsername || "OffRadarJobBot",
-        adminUsernames: effectiveConfig.telegramAdminUsernames || "tuannx87",
+        adminUsernames: "",
         adminIds: effectiveConfig.telegramAdminIds || "",
         adminChatId: effectiveConfig.telegramAdminChatId || "",
         adminTokenMasked: maskedAdminToken,
@@ -2873,12 +2913,7 @@ export default {
       if (body.botUsername !== undefined) {
         toSave["telegram_bot_username"] = body.botUsername.trim().replace(/^@/, "");
       }
-      if (body.adminUsernames !== undefined) {
-        toSave["telegram_admin_usernames"] = body.adminUsernames.trim();
-      }
-      if (body.adminIds !== undefined) {
-        toSave["telegram_admin_ids"] = body.adminIds.trim();
-      }
+      // Admin usernames/IDs are not stored in D1: bot admins come only from the TELEGRAM_ADMIN_IDS secret/var.
       if (body.adminChatId !== undefined) {
         toSave["telegram_admin_chat_id"] = body.adminChatId.trim();
       }

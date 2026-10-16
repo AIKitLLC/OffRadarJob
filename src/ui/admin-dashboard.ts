@@ -925,7 +925,7 @@ export function renderAdminDashboardHtml(): string {
             <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; font-size: 13px; line-height: 1.6; margin-bottom: 18px;">
               <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                 <span style="color: var(--text-muted);">Configured Admin Handles:</span>
-                <strong style="color: #f59e0b;" id="tg-configured-admins">@tuannx87</strong>
+                <strong style="color: #f59e0b;" id="tg-configured-admins">(none)</strong>
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                 <span style="color: var(--text-muted);">Configured Admin IDs:</span>

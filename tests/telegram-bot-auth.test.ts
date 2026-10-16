@@ -1,3 +1,4 @@
+import { tgEnv, signTelegramLogin, TG_WEBHOOK_HEADERS, TEST_BOT_TOKEN, TEST_WEBHOOK_SECRET } from "./helpers/telegram.js";
 import { describe, it, expect, beforeEach } from "vitest";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 import { UserRepository } from "../src/db/repositories.js";
@@ -20,7 +21,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
 
   it("should initialize a new authentication session with deep link and QR code", async () => {
     const req = new Request("http://localhost/api/auth/telegram/session");
-    const res = await worker.fetch(req, { DB: db, TELEGRAM_BOT_USERNAME: "OffRadarJobBot" } as any, mockCtx);
+    const res = await worker.fetch(req, tgEnv({ DB: db, TELEGRAM_BOT_USERNAME: "OffRadarJobBot" }), mockCtx);
 
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
@@ -34,7 +35,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
 
     // Initial status poll should be pending
     const pollReq = new Request(`http://localhost/api/auth/telegram/session?token=${data.sessionToken}`);
-    const pollRes = await worker.fetch(pollReq, { DB: db } as any, mockCtx);
+    const pollRes = await worker.fetch(pollReq, tgEnv({ DB: db }), mockCtx);
     expect(pollRes.status).toBe(200);
     const pollData = (await pollRes.json()) as any;
     expect(pollData.status).toBe("pending");
@@ -42,7 +43,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
 
   it("should return 404 expired for non-existent session token", async () => {
     const pollReq = new Request("http://localhost/api/auth/telegram/session?token=auth_nonexistent");
-    const pollRes = await worker.fetch(pollReq, { DB: db } as any, mockCtx);
+    const pollRes = await worker.fetch(pollReq, tgEnv({ DB: db }), mockCtx);
     expect(pollRes.status).toBe(404);
     const pollData = (await pollRes.json()) as any;
     expect(pollData.status).toBe("expired");
@@ -52,7 +53,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
     // 1. Create session
     const initRes = await worker.fetch(
       new Request("http://localhost/api/auth/telegram/session"),
-      { DB: db } as any,
+      tgEnv({ DB: db }),
       mockCtx
     );
     const { sessionToken } = (await initRes.json()) as any;
@@ -82,11 +83,11 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
 
     const webhookReq = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: TG_WEBHOOK_HEADERS,
       body: JSON.stringify(tgWebhookUpdate),
     });
 
-    const webhookRes = await worker.fetch(webhookReq, { DB: db } as any, mockCtx);
+    const webhookRes = await worker.fetch(webhookReq, tgEnv({ DB: db }), mockCtx);
     expect(webhookRes.status).toBe(200);
     const webhookData = (await webhookRes.json()) as any;
     expect(webhookData.ok).toBe(true);
@@ -101,7 +102,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
 
     // 3. Poll session: should now be authenticated and return Set-Cookie
     const pollReq = new Request(`http://localhost/api/auth/telegram/session?token=${sessionToken}`);
-    const pollRes = await worker.fetch(pollReq, { DB: db } as any, mockCtx);
+    const pollRes = await worker.fetch(pollReq, tgEnv({ DB: db }), mockCtx);
     expect(pollRes.status).toBe(200);
 
     const pollData = (await pollRes.json()) as any;
@@ -118,7 +119,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
     const meReq = new Request("http://localhost/api/user/me", {
       headers: { Cookie: `user_token=${storedUser?.apiToken}` },
     });
-    const meRes = await worker.fetch(meReq, { DB: db } as any, mockCtx);
+    const meRes = await worker.fetch(meReq, tgEnv({ DB: db }), mockCtx);
     expect(meRes.status).toBe(200);
     const meData = (await meRes.json()) as any;
     expect(meData.user.telegramId).toBe("99887766");
@@ -128,7 +129,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
     // 1. Create session
     const initRes = await worker.fetch(
       new Request("http://localhost/api/auth/telegram/session"),
-      { DB: db } as any,
+      tgEnv({ DB: db }),
       mockCtx
     );
     const { sessionToken } = (await initRes.json()) as any;
@@ -136,7 +137,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
     // 2. Webhook payload with `/start <token>`
     const webhookReq = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: TG_WEBHOOK_HEADERS,
       body: JSON.stringify({
         message: {
           from: { id: 54321, first_name: "Bob", username: "bob_engineer" },
@@ -146,12 +147,12 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
       }),
     });
 
-    const webhookRes = await worker.fetch(webhookReq, { DB: db } as any, mockCtx);
+    const webhookRes = await worker.fetch(webhookReq, tgEnv({ DB: db }), mockCtx);
     expect(webhookRes.status).toBe(200);
 
     // 3. Poll session
     const pollReq = new Request(`http://localhost/api/auth/telegram/session?token=${sessionToken}`);
-    const pollRes = await worker.fetch(pollReq, { DB: db } as any, mockCtx);
+    const pollRes = await worker.fetch(pollReq, tgEnv({ DB: db }), mockCtx);
     const pollData = (await pollRes.json()) as any;
     expect(pollData.status).toBe("authenticated");
     expect(pollData.user.username).toBe("bob_engineer");
@@ -161,7 +162,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
     // 1. Create session
     const initRes = await worker.fetch(
       new Request("http://localhost/api/auth/telegram/session"),
-      { DB: db } as any,
+      tgEnv({ DB: db }),
       mockCtx
     );
     const { sessionToken } = (await initRes.json()) as any;
@@ -177,7 +178,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
       }),
     });
 
-    const confirmRes = await worker.fetch(confirmReq, { DB: db } as any, mockCtx);
+    const confirmRes = await worker.fetch(confirmReq, tgEnv({ DB: db, ENABLE_DEMO_CONFIRM_SESSION: "true" }), mockCtx);
     expect(confirmRes.status).toBe(200);
     const confirmData = (await confirmRes.json()) as any;
     expect(confirmData.success).toBe(true);
@@ -185,7 +186,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
 
     // 3. Subsequent poll reflects authenticated status
     const pollReq = new Request(`http://localhost/api/auth/telegram/session?token=${sessionToken}`);
-    const pollRes = await worker.fetch(pollReq, { DB: db } as any, mockCtx);
+    const pollRes = await worker.fetch(pollReq, tgEnv({ DB: db }), mockCtx);
     const pollData = (await pollRes.json()) as any;
     expect(pollData.status).toBe("authenticated");
     expect(pollData.user.username).toBe("demo_guest");
@@ -193,13 +194,13 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
 
   it("should preserve original apiToken when existing user re-logs in via bot", async () => {
     // 1. First login
-    const session1Res = await worker.fetch(new Request("http://localhost/api/auth/telegram/session"), { DB: db } as any, mockCtx);
+    const session1Res = await worker.fetch(new Request("http://localhost/api/auth/telegram/session"), tgEnv({ DB: db }), mockCtx);
     const { sessionToken: token1 } = (await session1Res.json()) as any;
 
     await worker.fetch(
       new Request("http://localhost/api/telegram/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: TG_WEBHOOK_HEADERS,
         body: JSON.stringify({
           message: {
             from: { id: 777888, first_name: "Repeat User", username: "repeat_user" },
@@ -208,21 +209,21 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
           },
         }),
       }),
-      { DB: db } as any,
+      tgEnv({ DB: db }),
       mockCtx
     );
 
-    const poll1 = await (await worker.fetch(new Request(`http://localhost/api/auth/telegram/session?token=${token1}`), { DB: db } as any, mockCtx)).json() as any;
+    const poll1 = await (await worker.fetch(new Request(`http://localhost/api/auth/telegram/session?token=${token1}`), tgEnv({ DB: db }), mockCtx)).json() as any;
     const initialToken = poll1.token;
 
     // 2. Second login later with new session
-    const session2Res = await worker.fetch(new Request("http://localhost/api/auth/telegram/session"), { DB: db } as any, mockCtx);
+    const session2Res = await worker.fetch(new Request("http://localhost/api/auth/telegram/session"), tgEnv({ DB: db }), mockCtx);
     const { sessionToken: token2 } = (await session2Res.json()) as any;
 
     await worker.fetch(
       new Request("http://localhost/api/telegram/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: TG_WEBHOOK_HEADERS,
         body: JSON.stringify({
           message: {
             from: { id: 777888, first_name: "Repeat User (Updated)", username: "repeat_user" },
@@ -231,19 +232,19 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
           },
         }),
       }),
-      { DB: db } as any,
+      tgEnv({ DB: db }),
       mockCtx
     );
 
-    const poll2 = await (await worker.fetch(new Request(`http://localhost/api/auth/telegram/session?token=${token2}`), { DB: db } as any, mockCtx)).json() as any;
+    const poll2 = await (await worker.fetch(new Request(`http://localhost/api/auth/telegram/session?token=${token2}`), tgEnv({ DB: db }), mockCtx)).json() as any;
     expect(poll2.token).toBe(initialToken);
     expect(poll2.user.firstName).toBe("Repeat User (Updated)");
   });
 
   it("should return error if /api/telegram/setup-webhook is called without TELEGRAM_BOT_TOKEN", async () => {
     const res = await worker.fetch(
-      new Request("http://localhost/api/telegram/setup-webhook"),
-      { DB: db } as any,
+      new Request("http://localhost/api/telegram/setup-webhook", { headers: { "x-admin-token": "test-admin-secret-0123456789abcdef" } }),
+      { DB: db, ADMIN_TOKEN: "test-admin-secret-0123456789abcdef", TELEGRAM_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET } as any,
       mockCtx
     );
     expect(res.status).toBe(400);

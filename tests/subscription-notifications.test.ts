@@ -1,3 +1,4 @@
+import { tgEnv, signTelegramLogin, TG_WEBHOOK_HEADERS, TEST_BOT_TOKEN, TEST_WEBHOOK_SECRET } from "./helpers/telegram.js";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 import {
@@ -95,13 +96,13 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
       new Request("http://localhost/api/auth/telegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(signTelegramLogin({
           username: "subscriber_alex",
           first_name: "Alex",
           id: 7771234,
-        }),
+        })),
       }),
-      { DB: db } as any,
+      tgEnv({ DB: db }),
       mockCtx
     );
     const authData = (await authRes.json()) as any;
@@ -190,7 +191,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
     it("should require authentication for GET and POST", async () => {
       const unauthGet = await worker.fetch(
         new Request("http://localhost/api/user/subscription"),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(unauthGet.status).toBe(401);
@@ -201,7 +202,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ is_active: true }),
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(unauthPost.status).toBe(401);
@@ -213,7 +214,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
         new Request("http://localhost/api/user/subscription", {
           headers: { Authorization: `Bearer ${testToken}` },
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(res1.status).toBe(200);
@@ -236,7 +237,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
             is_active: true,
           }),
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(res2.status).toBe(200);
@@ -251,7 +252,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
         new Request("http://localhost/api/user/subscription", {
           headers: { Authorization: `Bearer ${testToken}` },
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       const data3 = (await res3.json()) as any;
@@ -372,7 +373,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
     it("should subscribe user via /subscribe with preferences", async () => {
       const tgReq = new Request("http://localhost/api/telegram/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: TG_WEBHOOK_HEADERS,
         body: JSON.stringify({
           message: {
             message_id: 101,
@@ -387,7 +388,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(tgReq, { DB: db, TELEGRAM_BOT_TOKEN: "mock_token" } as any, mockCtx);
+      const res = await worker.fetch(tgReq, tgEnv({ DB: db, TELEGRAM_BOT_TOKEN: "mock_token" }), mockCtx);
       expect(res.status).toBe(200);
 
       const sub = await subRepo.getByTelegramId("7771234");
@@ -405,7 +406,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
 
       const tgReq = new Request("http://localhost/api/telegram/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: TG_WEBHOOK_HEADERS,
         body: JSON.stringify({
           message: {
             message_id: 102,
@@ -416,7 +417,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(tgReq, { DB: db, TELEGRAM_BOT_TOKEN: "mock_token" } as any, mockCtx);
+      const res = await worker.fetch(tgReq, tgEnv({ DB: db, TELEGRAM_BOT_TOKEN: "mock_token" }), mockCtx);
       expect(res.status).toBe(200);
 
       const sub = await subRepo.getByTelegramId("7771234");
@@ -426,7 +427,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
     it("should return daily digest via /digest", async () => {
       const tgReq = new Request("http://localhost/api/telegram/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: TG_WEBHOOK_HEADERS,
         body: JSON.stringify({
           message: {
             message_id: 103,
@@ -437,7 +438,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(tgReq, { DB: db, TELEGRAM_BOT_TOKEN: "mock_token" } as any, mockCtx);
+      const res = await worker.fetch(tgReq, tgEnv({ DB: db, TELEGRAM_BOT_TOKEN: "mock_token" }), mockCtx);
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.ok).toBe(true);
@@ -453,7 +454,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
 
       const tgReq = new Request("http://localhost/api/telegram/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: TG_WEBHOOK_HEADERS,
         body: JSON.stringify({
           message: {
             message_id: 104,
@@ -464,7 +465,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(tgReq, { DB: db, TELEGRAM_BOT_TOKEN: "mock_token" } as any, mockCtx);
+      const res = await worker.fetch(tgReq, tgEnv({ DB: db, TELEGRAM_BOT_TOKEN: "mock_token" }), mockCtx);
       expect(res.status).toBe(200);
       const data = (await res.json()) as any;
       expect(data.ok).toBe(true);
@@ -481,7 +482,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
 
       const res = await worker.fetch(
         new Request("http://localhost/api/admin/stats", { headers: { "x-admin-token": "test_admin_token" } }),
-        { DB: db, ADMIN_TOKEN: "test_admin_token" } as any,
+        tgEnv({ DB: db, ADMIN_TOKEN: "test_admin_token" }),
         mockCtx
       );
       expect(res.status).toBe(200);
