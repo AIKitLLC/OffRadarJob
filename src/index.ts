@@ -40,6 +40,7 @@ import { SmbHarvester, SMB_CATALOGUE } from "./harvesters/smb-harvester.js";
 import { JdRerankerService } from "./services/jd-reranker.js";
 import { DecisionApiService } from "./services/decision-api.js";
 import { CvTagCloudService } from "./services/cv-tag-cloud.js";
+import { LINK_CHECK_CRON, runLinkQualityCron } from "./services/link-quality-cron.js";
 
 export interface KvNamespace {
   get(key: string, type?: "text" | "json"): Promise<any>;
@@ -59,6 +60,9 @@ export interface Env {
   TELEGRAM_ADMIN_USERNAMES?: string;
   TELEGRAM_ADMIN_IDS?: string;
   TELEGRAM_ADMIN_CHAT_ID?: string;
+  LINK_CHECK_BATCH_SIZE?: string;
+  LINK_CHECK_MAX_SUBREQUESTS?: string;
+  JOB_STALE_DAYS?: string;
   DISCOVERY_QUEUE?: {
     send(message: unknown): Promise<void>;
   };
@@ -2950,6 +2954,19 @@ export default {
     const subscriptionRepo = new UserSubscriptionRepository(env.DB);
     const settingsRepo = new SystemSettingsRepository(env.DB);
     const orchestrator = new PipelineOrchestrator(env.DB);
+
+    // Link-quality cron: expire stale jobs + check a bounded batch of apply links.
+    // Must short-circuit before the crawl logic (which treats any cron on Monday as weekly).
+    const eventCron = typeof _event === "object" && _event !== null && "cron" in _event ? String((_event as any).cron) : "";
+    if (eventCron === LINK_CHECK_CRON) {
+      ctx.waitUntil(
+        runLinkQualityCron(env).then(
+          () => undefined,
+          (err) => console.error("[LinkCheckCron] failed:", err)
+        )
+      );
+      return;
+    }
 
     ctx.waitUntil(
       (async () => {

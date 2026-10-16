@@ -279,6 +279,7 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
     if (q.includes("FROM jobs")) {
       let rows = Array.from(this.db.tables.get("jobs")!.values());
       if (sourcePolicyApplied(q)) rows = rows.filter(visibleJob);
+      if (q.includes("j.status = 'open'")) rows = rows.filter((r) => (r["status"] ?? "open") === "open");
 
       let bindingIdx = 0;
       if (q.includes("is_tech_role = 1")) {

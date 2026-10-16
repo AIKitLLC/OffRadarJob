@@ -130,7 +130,7 @@ describe("US-Midwest Priority Suite", () => {
       location: "Indianapolis, IN",
       isTechRole: true,
       applyType: "url",
-      applyTarget: "https://indycloud.dev/jobs",
+      applyTarget: "https://indycloud.dev/jobs/role-1042",
       contentHash: "hash_indy_cloud",
       firstSeenAt: 1000,
       lastSeenAt: 1000,
