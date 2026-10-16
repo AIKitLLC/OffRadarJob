@@ -59,7 +59,7 @@ function formatDuration(ms: number): string {
 }
 
 async function apiCall(endpoint: string, path: string, token: string, method = "GET", body?: unknown) {
-  const url = `${endpoint}${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+  const url = `${endpoint}${path}`;
   const headers: Record<string, string> = {
     "x-admin-token": token,
   };

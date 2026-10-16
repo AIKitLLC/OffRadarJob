@@ -158,6 +158,69 @@ export async function verifyAdminToken(env: Pick<Env, "ADMIN_TOKEN"> | undefined
   return timingSafeEqualStr(candidate, secret);
 }
 
+export const ADMIN_SESSION_TTL_SECONDS = 8 * 60 * 60;
+
+function b64urlEncode(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64urlDecode(value: string): Uint8Array | null {
+  try {
+    const norm = value.replace(/-/g, "+").replace(/_/g, "/");
+    const bin = atob(norm + "=".repeat((4 - (norm.length % 4)) % 4));
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+/** Session signing key: HMAC-SHA256(ADMIN_TOKEN, fixed label), so the raw token never leaves the worker. */
+async function adminSessionKey(secret: string): Promise<CryptoKey> {
+  const enc = new TextEncoder();
+  const base = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const derived = await crypto.subtle.sign("HMAC", base, enc.encode("offradarjob/admin-session/v1"));
+  return crypto.subtle.importKey("raw", derived, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+}
+
+/** Create a signed admin session value `<b64url(payload)>.<b64url(hmac)>` with payload {iat, exp} (seconds). */
+export async function createAdminSession(env: Pick<Env, "ADMIN_TOKEN"> | undefined, nowMs = Date.now()): Promise<string | null> {
+  const secret = await getAdminSecret(env);
+  if (!secret) return null;
+  const iat = Math.floor(nowMs / 1000);
+  const payload = b64urlEncode(new TextEncoder().encode(JSON.stringify({ iat, exp: iat + ADMIN_SESSION_TTL_SECONDS })));
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", await adminSessionKey(secret), new TextEncoder().encode(payload)));
+  return `${payload}.${b64urlEncode(sig)}`;
+}
+
+/** Verify a signed admin session (constant-time signature check, expiry enforced). Fails closed. */
+export async function verifyAdminSession(env: Pick<Env, "ADMIN_TOKEN"> | undefined, value: string | null | undefined, nowMs = Date.now()): Promise<boolean> {
+  const secret = await getAdminSecret(env);
+  if (!secret || !value) return false;
+  const parts = value.split(".");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
+  const given = b64urlDecode(parts[1]);
+  if (!given) return false;
+  const expected = new Uint8Array(await crypto.subtle.sign("HMAC", await adminSessionKey(secret), new TextEncoder().encode(parts[0])));
+  let diff = given.length ^ expected.length;
+  for (let i = 0; i < expected.length; i++) diff |= expected[i]! ^ (given[i] ?? 0);
+  if (diff !== 0) return false;
+  try {
+    const raw = b64urlDecode(parts[0]);
+    if (!raw) return false;
+    const payload = JSON.parse(new TextDecoder().decode(raw)) as { iat?: unknown; exp?: unknown };
+    if (typeof payload.iat !== "number" || typeof payload.exp !== "number") return false;
+    const now = Math.floor(nowMs / 1000);
+    if (payload.exp <= now) return false;
+    if (payload.iat > now + 60) return false;
+    if (payload.exp - payload.iat > ADMIN_SESSION_TTL_SECONDS) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export interface EffectiveConfig {
   telegramBotToken: string;
   telegramBotUsername: string;
@@ -198,17 +261,26 @@ export function clientIp(request: Request): string {
 }
 
 export function isAdminAuthRateLimited(request: Request, now = Date.now()): boolean {
-  const entry = adminAuthFailures.get(clientIp(request));
+  return isAdminAuthKeyRateLimited(clientIp(request), now);
+}
+
+/** Rate-limit check for an arbitrary key (e.g. `tg:<telegram user id>` for the bot /admin auth command). */
+export function isAdminAuthKeyRateLimited(key: string, now = Date.now()): boolean {
+  const entry = adminAuthFailures.get(key);
   if (!entry) return false;
   if (now >= entry.resetAt) {
-    adminAuthFailures.delete(clientIp(request));
+    adminAuthFailures.delete(key);
     return false;
   }
   return entry.count >= ADMIN_AUTH_MAX_FAILURES;
 }
 
 export function recordAdminAuthFailure(request: Request, now = Date.now()): void {
-  const ip = clientIp(request);
+  recordAdminAuthKeyFailure(clientIp(request), now);
+}
+
+export function recordAdminAuthKeyFailure(key: string, now = Date.now()): void {
+  const ip = key;
   const entry = adminAuthFailures.get(ip);
   if (!entry || now >= entry.resetAt) adminAuthFailures.set(ip, { count: 1, resetAt: now + ADMIN_AUTH_WINDOW_MS });
   else entry.count++;
@@ -236,7 +308,7 @@ export async function isAuthorized(request: Request, _url?: URL, env?: Env): Pro
   const matchCookie = cookieHeader.match(new RegExp(`(?:^|;\\s*)${ADMIN_COOKIE_NAME}=([^;]+)`));
   const tokenCookie = matchCookie ? decodeURIComponent(matchCookie[1]!) : "";
   const provided = tokenHeader || tokenCookie;
-  const ok = await verifyAdminToken(env, provided);
+  const ok = tokenHeader ? await verifyAdminToken(env, tokenHeader) : await verifyAdminSession(env, tokenCookie);
   // Only count attempts that actually presented a credential.
   if (!ok && provided) recordAdminAuthFailure(request);
   return ok;
@@ -460,12 +532,14 @@ export default {
           headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
         });
       }
+      const session = await createAdminSession(env);
+      if (!session) return new Response("Not Found", { status: 404 });
       return new Response(null, {
         status: 303,
         headers: {
           Location: "/admin",
           "Cache-Control": "no-store",
-          "Set-Cookie": `${ADMIN_COOKIE_NAME}=${encodeURIComponent(candidate)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=28800`,
+          "Set-Cookie": `${ADMIN_COOKIE_NAME}=${session}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${ADMIN_SESSION_TTL_SECONDS}`,
         },
       });
     }
@@ -860,6 +934,11 @@ export default {
         // B. /admin auth <token> - Authorize and promote user to admin
         if (text.startsWith("/admin auth") && chatId) {
           const providedToken = text.replace(/^\/admin\s+auth\s*/i, "").trim();
+          const rlKey = `tg:${tgId}`;
+          if (isAdminAuthKeyRateLimited(rlKey)) {
+            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Too many failed attempts. Try again later.");
+            return Response.json({ ok: false, error: "rate_limited" }, { status: 429 });
+          }
           if (await verifyAdminToken(env, providedToken)) {
             const now = Date.now();
             const apiToken = existingUser?.apiToken || `orp_${crypto.randomUUID().replace(/-/g, "")}`;
@@ -888,6 +967,7 @@ export default {
             }
             return Response.json({ ok: true, adminGranted: true });
           } else {
+            recordAdminAuthKeyFailure(rlKey);
             if (botToken) {
               await sendTelegramMessage(
                 botToken,

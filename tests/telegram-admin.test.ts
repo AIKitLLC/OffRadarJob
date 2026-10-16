@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 import { UserRepository, JobRepository, CompanyRepository, CrawlTaskRepository, SystemSettingsRepository } from "../src/db/repositories.js";
-import worker, { isTelegramAdmin } from "../src/index.js";
+import worker, { isTelegramAdmin, resetAdminAuthRateLimit, ADMIN_AUTH_MAX_FAILURES } from "../src/index.js";
 
 // Test-only admin secret (never a real token).
 const TEST_ADMIN_TOKEN = "test-admin-secret-0123456789abcdef";
@@ -33,6 +33,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
     companyRepo = new CompanyRepository(db);
     taskRepo = new CrawlTaskRepository(db);
     mockEnv.DB = db;
+    resetAdminAuthRateLimit();
   });
 
   describe("isTelegramAdmin Authorization Function", () => {
@@ -114,6 +115,27 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
   });
 
   describe("Telegram Webhook - /admin auth elevation", () => {
+    const adminAuth = (id: number, token: string) =>
+      worker.fetch(
+        new Request("http://localhost/api/telegram/webhook", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: { from: { id, first_name: "X" }, chat: { id }, text: `/admin auth ${token}` } }),
+        }),
+        mockEnv as any,
+        mockCtx
+      );
+
+    it("rate-limits repeated failed /admin auth attempts per Telegram user, even for the correct token", async () => {
+      for (let i = 0; i < ADMIN_AUTH_MAX_FAILURES; i++) await adminAuth(424242, "wrong-token-value-123456");
+      const blocked = await adminAuth(424242, TEST_ADMIN_TOKEN);
+      expect(blocked.status).toBe(429);
+      expect(((await blocked.json()) as any).adminGranted).toBeUndefined();
+      expect((await userRepo.findByTelegramId("424242"))?.role).not.toBe("admin");
+      const other = (await (await adminAuth(515151, TEST_ADMIN_TOKEN)).json()) as any;
+      expect(other.adminGranted).toBe(true);
+    });
+
     it("should reject invalid admin token", async () => {
       const payload = {
         message: {

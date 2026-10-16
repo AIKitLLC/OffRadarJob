@@ -10,6 +10,9 @@ import worker, {
   ADMIN_COOKIE_NAME,
   ADMIN_AUTH_MAX_FAILURES,
   resetAdminAuthRateLimit,
+  createAdminSession,
+  verifyAdminSession,
+  ADMIN_SESSION_TTL_SECONDS,
 } from "../src/index.js";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 
@@ -193,5 +196,57 @@ describe("admin auth rate limit (per IP)", () => {
   it("anonymous requests without a credential are not counted", async () => {
     for (let i = 0; i < ADMIN_AUTH_MAX_FAILURES + 2; i++) await call("/admin", { headers: { "CF-Connecting-IP": "203.0.113.9" } });
     expect((await call("/api/admin/stats", { headers: { "x-admin-token": SECRET, "CF-Connecting-IP": "203.0.113.9" } })).status).toBe(200);
+  });
+});
+
+describe("signed admin session cookie", () => {
+  const env = { ADMIN_TOKEN: SECRET };
+
+  it("the login cookie never contains the raw admin token and is a signed {iat,exp} payload", async () => {
+    const form = new FormData();
+    form.set("token", SECRET);
+    const res = await call("/admin/login", { method: "POST", body: form });
+    const cookie = res.headers.get("Set-Cookie")!;
+    expect(cookie).not.toContain(SECRET);
+    expect(cookie).not.toContain(encodeURIComponent(SECRET));
+    expect(cookie).toContain(`Max-Age=${ADMIN_SESSION_TTL_SECONDS}`);
+    const value = cookie.split(";")[0]!.split("=").slice(1).join("=");
+    const payload = JSON.parse(Buffer.from(value.split(".")[0]!, "base64url").toString("utf8"));
+    expect(payload.exp - payload.iat).toBe(8 * 60 * 60);
+  });
+
+  it("a cookie holding the raw token is rejected", async () => {
+    const req = new Request("https://jobs.ai-kit.net/api/admin/stats", { headers: { Cookie: `${ADMIN_COOKIE_NAME}=${SECRET}` } });
+    expect(await isAuthorized(req, new URL(req.url), { DB: db, ...env } as any)).toBe(false);
+  });
+
+  it("verifies fresh sessions and rejects expired, tampered or foreign-key sessions", async () => {
+    const now = Date.now();
+    const s = (await createAdminSession(env, now))!;
+    expect(await verifyAdminSession(env, s, now)).toBe(true);
+    expect(await verifyAdminSession(env, s, now + ADMIN_SESSION_TTL_SECONDS * 1000 + 1000)).toBe(false);
+    const [p, sig] = s.split(".");
+    const forged = Buffer.from(JSON.stringify({ iat: Math.floor(now / 1000), exp: Math.floor(now / 1000) + 10 * 365 * 86400 })).toString("base64url");
+    expect(await verifyAdminSession(env, `${forged}.${sig}`, now)).toBe(false);
+    expect(await verifyAdminSession(env, `${p}.${sig!.slice(0, -2)}AA`, now)).toBe(false);
+    expect(await verifyAdminSession({ ADMIN_TOKEN: "another-admin-secret-0123456789" }, s, now)).toBe(false);
+    expect(await verifyAdminSession(env, "garbage", now)).toBe(false);
+    expect(await verifyAdminSession({}, s, now)).toBe(false);
+  });
+
+  it("rotating ADMIN_TOKEN invalidates existing sessions", async () => {
+    const s = (await createAdminSession(env))!;
+    const page = await call("/admin", { headers: { Cookie: `${ADMIN_COOKIE_NAME}=${s}` } }, { ADMIN_TOKEN: "rotated-admin-secret-0123456789" });
+    expect(page.status).toBe(401);
+  });
+});
+
+describe("scripts send the admin token only in a header", () => {
+  it("does not put the token in the query string", () => {
+    for (const f of ["src/scripts/continuous-batch-feeder.ts", "src/scripts/harvest-public-sources.ts"]) {
+      const src = readFileSync(f, "utf8");
+      expect(src).not.toMatch(/[?&]token=\$\{/);
+      expect(src).toContain('"x-admin-token": token');
+    }
   });
 });

@@ -61,7 +61,7 @@ async function apiCall<T = any>(
   method = "GET",
   body?: unknown
 ): Promise<T> {
-  const url = `${endpoint}${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+  const url = `${endpoint}${path}`;
   const headers: Record<string, string> = {
     "x-admin-token": token,
   };
