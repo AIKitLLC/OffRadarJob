@@ -1,4 +1,4 @@
-import { renderDashboardHtml } from "./ui/dashboard.js";
+import { renderDashboardHtml, type PublicDashboardStats } from "./ui/dashboard.js";
 import { renderAdminDashboardHtml, renderAdminLoginHtml } from "./ui/admin-dashboard.js";
 import { ID1Database } from "./db/types.js";
 import {
@@ -601,9 +601,46 @@ export default {
       if (await isAdminAuthRateLimited(request, env)) return rateLimitedResponse();
     }
 
+    // Shared stats loader (KV-cached) used by /api/stats and the server-rendered dashboard.
+    const loadPublicStats = () => getOrSetKvCache(env, "api:stats:v8", 60, async () => {
+      const [companiesCount, jobsCount, jobSummary, recentLogs, freshness] = await Promise.all([
+        companyRepo.count(),
+        jobRepo.count(),
+        jobRepo.getStatsSummary(),
+        logRepo.getRecent(30),
+        jobRepo.getFreshnessMetrics(),
+      ]);
+      const midwestPct = jobSummary.total > 0 ? Math.round((jobSummary.midwestCount / jobSummary.total) * 100) : 100;
+      return {
+        companiesCount,
+        jobsCount,
+        seniorCount: jobSummary.seniorCount,
+        midwestPercent: midwestPct,
+        regionalBreakdown: {
+          midwest: jobSummary.midwestCount,
+          west: jobSummary.westCount,
+          northeast: jobSummary.northeastCount,
+          south: jobSummary.southCount,
+          mountain: jobSummary.mountainCount,
+        },
+        freshness: {
+          ...freshness,
+          cronSchedule: "Daily 02:00 UTC & Weekly Mon 03:00 UTC",
+        },
+        logsCount: recentLogs.length,
+        recentLogs,
+      };
+    });
+
     // 1. Public Dashboard UI
     if (path === "/" || path === "/index.html") {
-      return new Response(renderDashboardHtml(), {
+      let dashboardStats: PublicDashboardStats | null = null;
+      try {
+        dashboardStats = await loadPublicStats();
+      } catch (err) {
+        console.warn("Dashboard SSR stats unavailable:", err);
+      }
+      return new Response(renderDashboardHtml(dashboardStats), {
         headers: { "Content-Type": "text/html; charset=utf-8" },
       });
     }
@@ -752,35 +789,7 @@ export default {
 
     // 5. API: Stats & Telemetry Logs
     if (path === "/api/stats" && request.method === "GET") {
-      const data = await getOrSetKvCache(env, "api:stats:v8", 60, async () => {
-        const [companiesCount, jobsCount, jobSummary, recentLogs, freshness] = await Promise.all([
-          companyRepo.count(),
-          jobRepo.count(),
-          jobRepo.getStatsSummary(),
-          logRepo.getRecent(30),
-          jobRepo.getFreshnessMetrics(),
-        ]);
-        const midwestPct = jobSummary.total > 0 ? Math.round((jobSummary.midwestCount / jobSummary.total) * 100) : 100;
-        return {
-          companiesCount,
-          jobsCount,
-          seniorCount: jobSummary.seniorCount,
-          midwestPercent: midwestPct,
-          regionalBreakdown: {
-            midwest: jobSummary.midwestCount,
-            west: jobSummary.westCount,
-            northeast: jobSummary.northeastCount,
-            south: jobSummary.southCount,
-            mountain: jobSummary.mountainCount,
-          },
-          freshness: {
-            ...freshness,
-            cronSchedule: "Daily 02:00 UTC & Weekly Mon 03:00 UTC",
-          },
-          logsCount: recentLogs.length,
-          recentLogs,
-        };
-      });
+      const data = await loadPublicStats();
 
       return Response.json(data, {
         headers: {
