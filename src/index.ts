@@ -426,9 +426,11 @@ export default {
 
     // 5. API: Stats & Telemetry Logs
     if (path === "/api/stats" && request.method === "GET") {
-      const data = await getOrSetKvCache(env, "api:stats:v7", 60, async () => {
-        const [companiesCount, jobsCount, jobSummary, recentLogs, freshness] = await Promise.all([
+      // v8: counts only open (not closed/hidden) jobs; jobsCount matches the default /api/jobs total (tech roles).
+      const data = await getOrSetKvCache(env, "api:stats:v8", 60, async () => {
+        const [companiesCount, jobsCount, allOpenJobsCount, jobSummary, recentLogs, freshness] = await Promise.all([
           companyRepo.count(),
+          jobRepo.count({ techOnly: true }),
           jobRepo.count(),
           jobRepo.getStatsSummary(),
           logRepo.getRecent(30),
@@ -438,6 +440,7 @@ export default {
         return {
           companiesCount,
           jobsCount,
+          allOpenJobsCount,
           seniorCount: jobSummary.seniorCount,
           midwestPercent: midwestPct,
           regionalBreakdown: {

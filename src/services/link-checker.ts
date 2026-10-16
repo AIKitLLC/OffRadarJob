@@ -200,6 +200,46 @@ export interface LinkCheckBatchSummary {
   subrequests: number;
 }
 
+/** Apply hosts that come from a structured ATS feed (not scraped from a careers page). */
+export const ATS_HOST_PATTERNS = [
+  "greenhouse.io",
+  "ashbyhq.com",
+  "lever.co",
+  "workable.com",
+  "smartrecruiters.com",
+  "bamboohr.com",
+  "recruitee.com",
+  "breezy.hr",
+  "jobvite.com",
+  "myworkdayjobs.com",
+  "rippling.com",
+  "wellfound.com",
+];
+
+const hostLike = (h: string) => `LOWER(apply_target) LIKE '%${h}/%'`;
+
+/**
+ * Queue priority (Free plan: ~360 checks/day, so order matters):
+ *   0 = never checked (newly ingested first, newest first_seen_at first)
+ *   1 = error-prone sources: Greenhouse, and links scraped from company careers pages (no ATS host)
+ *   2 = everything else (Ashby, Lever, other ATS), oldest link_checked_at first
+ */
+export const LINK_CHECK_PRIORITY_SQL = `CASE
+  WHEN link_checked_at IS NULL THEN 0
+  WHEN ${hostLike("greenhouse.io")} THEN 1
+  WHEN NOT (${ATS_HOST_PATTERNS.map(hostLike).join(" OR ")}) THEN 1
+  ELSE 2
+END`;
+
+/** Same priority in TypeScript (used for logging/tests). */
+export function linkCheckPriority(row: { apply_target: string; link_checked_at: number | null }): 0 | 1 | 2 {
+  if (row.link_checked_at == null) return 0;
+  const t = row.apply_target.toLowerCase();
+  if (t.includes("greenhouse.io/")) return 1;
+  if (!ATS_HOST_PATTERNS.some((h) => t.includes(`${h}/`))) return 1;
+  return 2;
+}
+
 interface QueueRow {
   id: string;
   apply_target: string;
@@ -227,7 +267,9 @@ export async function runLinkCheckBatch(
       `SELECT id, apply_target, link_fail_count FROM jobs
        WHERE status = 'open' AND apply_type IN ('url', 'form')
          AND (link_checked_at IS NULL OR link_checked_at < ?)
-       ORDER BY COALESCE(link_checked_at, 0) ASC
+       ORDER BY ${LINK_CHECK_PRIORITY_SQL} ASC,
+         CASE WHEN link_checked_at IS NULL THEN -first_seen_at ELSE link_checked_at END ASC,
+         id ASC
        LIMIT ?`
     )
     .bind(now - minRecheckMs, batchSize)

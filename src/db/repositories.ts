@@ -1137,7 +1137,7 @@ export class JobRepository {
           ) THEN 1 ELSE 0 END) as mountain_count
         FROM jobs j
         LEFT JOIN companies c ON j.company_id = c.id
-        WHERE ${ignoredSourceSql("c")}
+        WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}
       `)
       .first<{
         total: number;
@@ -1179,7 +1179,7 @@ export class JobRepository {
           SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) as updated_last_7d
         FROM jobs j
         LEFT JOIN companies c ON j.company_id = c.id
-        WHERE ${ignoredSourceSql("c")}
+        WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}
       `)
       .bind(oneDayAgo, oneDayAgo, sevenDaysAgo)
       .first<{
@@ -1197,9 +1197,14 @@ export class JobRepository {
     };
   }
 
-  public async count(): Promise<number> {
+  /**
+   * Count publicly visible jobs (open, not from ignored sources).
+   * With `techOnly: true` this matches the default `/api/jobs` pagination total.
+   */
+  public async count(options: { techOnly?: boolean } = {}): Promise<number> {
+    const techSql = options.techOnly ? " AND j.is_tech_role = 1" : "";
     const res = await this.db
-      .prepare(`SELECT COUNT(*) as count FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}`)
+      .prepare(`SELECT COUNT(*) as count FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}${techSql}`)
       .first<{ count: number }>();
     return res?.count ?? 0;
   }
