@@ -243,7 +243,7 @@ describe("Telegram Bot Seamless Deep-Link Authentication Suite", () => {
 
   it("should return error if /api/telegram/setup-webhook is called without TELEGRAM_BOT_TOKEN", async () => {
     const res = await worker.fetch(
-      new Request("http://localhost/api/telegram/setup-webhook", { headers: { "x-admin-token": "test-admin-secret-0123456789abcdef" } }),
+      new Request("http://localhost/api/telegram/setup-webhook", { method: "POST", headers: { "x-admin-token": "test-admin-secret-0123456789abcdef" } }),
       { DB: db, ADMIN_TOKEN: "test-admin-secret-0123456789abcdef", TELEGRAM_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET } as any,
       mockCtx
     );

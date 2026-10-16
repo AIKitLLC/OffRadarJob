@@ -1780,7 +1780,7 @@ export function renderAdminDashboardHtml(): string {
     async function setupTgWebhook() {
       try {
         showToast("Setting up Telegram webhook...");
-        const res = await fetch('/api/telegram/setup-webhook');
+        const res = await fetch('/api/telegram/setup-webhook', { method: 'POST' });
         const data = await res.json();
         if (res.ok && data.result?.ok) {
           showToast("✅ Telegram Webhook registered successfully!");

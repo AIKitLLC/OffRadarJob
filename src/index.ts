@@ -15,6 +15,14 @@ import {
   UserSubscriptionRepository,
 } from "./db/repositories.js";
 import { McpServerHandler } from "./mcp/mcp-server.js";
+import {
+  AdminAuthLimiter,
+  ADMIN_AUTH_MAX_FAILURES,
+  ADMIN_AUTH_WINDOW_MS,
+  type LimiterNamespaceLike,
+} from "./durable/admin-auth-limiter.js";
+
+export { AdminAuthLimiter, ADMIN_AUTH_MAX_FAILURES, ADMIN_AUTH_WINDOW_MS };
 import { PipelineOrchestrator } from "./orchestrator/dispatcher.js";
 import {
   DiscoveryMessage,
@@ -54,6 +62,10 @@ export interface Env {
     run(model: string, inputs: Record<string, unknown>): Promise<any>;
   };
   ADMIN_TOKEN?: string;
+  /** Dedicated HMAC key for admin session cookies (>= 32 chars). Sessions fail closed without it. */
+  ADMIN_SESSION_SECRET?: string;
+  /** SQLite-backed Durable Object namespace that stores failed admin auth attempts. */
+  ADMIN_AUTH_LIMITER?: LimiterNamespaceLike;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_BOT_USERNAME?: string;
   /** Comma-separated numeric Telegram user IDs that have bot admin rights. */
@@ -150,7 +162,7 @@ export async function timingSafeEqualStr(a: string, b: string): Promise<boolean>
 /** The configured admin secret, or null when admin must stay closed (unset, too short, or the leaked value). */
 export async function getAdminSecret(env?: Pick<Env, "ADMIN_TOKEN">): Promise<string | null> {
   const secret = (env?.ADMIN_TOKEN ?? "").trim();
-  if (secret.length < 16) return null;
+  if (secret.length < 32) return null;
   if (toHex(await sha256Bytes(secret)) === LEAKED_ADMIN_TOKEN_SHA256) return null;
   return secret;
 }
@@ -184,17 +196,24 @@ function b64urlDecode(value: string): Uint8Array | null {
   }
 }
 
-/** Session signing key: HMAC-SHA256(ADMIN_TOKEN, fixed label), so the raw token never leaves the worker. */
+export const ADMIN_SESSION_SECRET_MIN_LENGTH = 32;
+
+/** The dedicated session signing secret, or null (fail closed) when unset, too short, or equal to ADMIN_TOKEN. */
+export function getAdminSessionSecret(env?: Pick<Env, "ADMIN_SESSION_SECRET" | "ADMIN_TOKEN">): string | null {
+  const secret = (env?.ADMIN_SESSION_SECRET ?? "").trim();
+  if (secret.length < ADMIN_SESSION_SECRET_MIN_LENGTH) return null;
+  if (secret === (env?.ADMIN_TOKEN ?? "").trim()) return null;
+  return secret;
+}
+
 async function adminSessionKey(secret: string): Promise<CryptoKey> {
-  const enc = new TextEncoder();
-  const base = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const derived = await crypto.subtle.sign("HMAC", base, enc.encode("offradarjob/admin-session/v1"));
-  return crypto.subtle.importKey("raw", derived, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
 }
 
 /** Create a signed admin session value `<b64url(payload)>.<b64url(hmac)>` with payload {iat, exp} (seconds). */
-export async function createAdminSession(env: Pick<Env, "ADMIN_TOKEN"> | undefined, nowMs = Date.now()): Promise<string | null> {
-  const secret = await getAdminSecret(env);
+export async function createAdminSession(env: Pick<Env, "ADMIN_TOKEN" | "ADMIN_SESSION_SECRET"> | undefined, nowMs = Date.now()): Promise<string | null> {
+  if (!(await getAdminSecret(env))) return null;
+  const secret = getAdminSessionSecret(env);
   if (!secret) return null;
   const iat = Math.floor(nowMs / 1000);
   const payload = b64urlEncode(new TextEncoder().encode(JSON.stringify({ iat, exp: iat + ADMIN_SESSION_TTL_SECONDS })));
@@ -203,8 +222,9 @@ export async function createAdminSession(env: Pick<Env, "ADMIN_TOKEN"> | undefin
 }
 
 /** Verify a signed admin session (constant-time signature check, expiry enforced). Fails closed. */
-export async function verifyAdminSession(env: Pick<Env, "ADMIN_TOKEN"> | undefined, value: string | null | undefined, nowMs = Date.now()): Promise<boolean> {
-  const secret = await getAdminSecret(env);
+export async function verifyAdminSession(env: Pick<Env, "ADMIN_TOKEN" | "ADMIN_SESSION_SECRET"> | undefined, value: string | null | undefined, nowMs = Date.now()): Promise<boolean> {
+  if (!(await getAdminSecret(env))) return false;
+  const secret = getAdminSessionSecret(env);
   if (!secret || !value) return false;
   const parts = value.split(".");
   if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
@@ -256,49 +276,89 @@ export async function getEffectiveConfig(env: Env, settingsRepo?: SystemSettings
  * Returns false whenever the ADMIN_TOKEN secret is unset (fail closed).
  */
 /**
- * Per-IP rate limit on failed admin auth attempts (per isolate, in-memory).
+ * Rate limit on failed admin auth attempts, keyed per client IP.
  * ADMIN_AUTH_MAX_FAILURES failures inside ADMIN_AUTH_WINDOW_MS => 429 until the window expires.
+ * Production state lives in the ADMIN_AUTH_LIMITER Durable Object (SQLite). The in-memory map is only
+ * used when that binding is absent (unit tests / bare local runs).
  */
-export const ADMIN_AUTH_MAX_FAILURES = 10;
-export const ADMIN_AUTH_WINDOW_MS = 15 * 60 * 1000;
-const adminAuthFailures = new Map<string, { count: number; resetAt: number }>();
+const memoryAuthFailures = new Map<string, { count: number; resetAt: number }>();
 
 export function clientIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() || "unknown";
 }
 
-export function isAdminAuthRateLimited(request: Request, now = Date.now()): boolean {
-  return isAdminAuthKeyRateLimited(clientIp(request), now);
-}
-
-/** Rate-limit check for an arbitrary key (e.g. `tg:<telegram user id>` for the bot /admin auth command). */
-export function isAdminAuthKeyRateLimited(key: string, now = Date.now()): boolean {
-  const entry = adminAuthFailures.get(key);
-  if (!entry) return false;
-  if (now >= entry.resetAt) {
-    adminAuthFailures.delete(key);
-    return false;
+async function limiterCall(env: Pick<Env, "ADMIN_AUTH_LIMITER"> | undefined, op: "check" | "fail", key: string): Promise<boolean> {
+  const ns = env?.ADMIN_AUTH_LIMITER;
+  if (ns) {
+    try {
+      const stub = ns.get(ns.idFromName(key));
+      const res = await stub.fetch("https://admin-auth-limiter/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op, key }),
+      });
+      if (!res.ok) return true;
+      return Boolean(((await res.json()) as { limited?: unknown }).limited);
+    } catch (err) {
+      console.warn("[AdminAuthLimiter] unavailable, failing closed:", (err as Error)?.message);
+      return true; // fail closed
+    }
   }
-  return entry.count >= ADMIN_AUTH_MAX_FAILURES;
-}
-
-export function recordAdminAuthFailure(request: Request, now = Date.now()): void {
-  recordAdminAuthKeyFailure(clientIp(request), now);
-}
-
-export function recordAdminAuthKeyFailure(key: string, now = Date.now()): void {
-  const ip = key;
-  const entry = adminAuthFailures.get(ip);
-  if (!entry || now >= entry.resetAt) adminAuthFailures.set(ip, { count: 1, resetAt: now + ADMIN_AUTH_WINDOW_MS });
+  const now = Date.now();
+  const entry = memoryAuthFailures.get(key);
+  if (op === "check") {
+    if (!entry) return false;
+    if (now >= entry.resetAt) {
+      memoryAuthFailures.delete(key);
+      return false;
+    }
+    return entry.count >= ADMIN_AUTH_MAX_FAILURES;
+  }
+  if (!entry || now >= entry.resetAt) memoryAuthFailures.set(key, { count: 1, resetAt: now + ADMIN_AUTH_WINDOW_MS });
   else entry.count++;
-  if (adminAuthFailures.size > 10_000) {
-    for (const [k, v] of adminAuthFailures) if (now >= v.resetAt) adminAuthFailures.delete(k);
+  if (memoryAuthFailures.size > 10_000) {
+    for (const [k, v] of memoryAuthFailures) if (now >= v.resetAt) memoryAuthFailures.delete(k);
   }
+  return (memoryAuthFailures.get(key)?.count ?? 0) >= ADMIN_AUTH_MAX_FAILURES;
 }
 
-/** Test helper. */
+export function isAdminAuthRateLimited(request: Request, env?: Pick<Env, "ADMIN_AUTH_LIMITER">): Promise<boolean> {
+  return limiterCall(env, "check", `ip:${clientIp(request)}`);
+}
+
+export function recordAdminAuthFailure(request: Request, env?: Pick<Env, "ADMIN_AUTH_LIMITER">): Promise<boolean> {
+  return limiterCall(env, "fail", `ip:${clientIp(request)}`);
+}
+
+/** Test helper: clears the in-memory fallback store. */
 export function resetAdminAuthRateLimit(): void {
-  adminAuthFailures.clear();
+  memoryAuthFailures.clear();
+}
+
+/** Routes that require admin auth (and get the CSRF origin check on writes). */
+export function isAdminRoute(path: string): boolean {
+  return path.startsWith("/admin") || path.startsWith("/api/admin/") || path === "/api/telegram/setup-webhook" || path === "/api/crawl/seed";
+}
+
+/**
+ * CSRF guard for state-changing admin requests. Browsers send Sec-Fetch-Site and/or Origin on
+ * POST/PUT/PATCH/DELETE; anything cross-site is rejected. Requests with neither header (non-browser
+ * clients) are allowed only when authenticated by an explicit header token, never by the cookie alone.
+ */
+export function isCrossSiteAdminWrite(request: Request, url: URL): boolean {
+  const method = request.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return false;
+  const site = request.headers.get("Sec-Fetch-Site");
+  if (site && site !== "same-origin" && site !== "none") return true;
+  const origin = request.headers.get("Origin");
+  if (origin && origin !== url.origin) return true;
+  if (!site && !origin) {
+    const auth = request.headers.get("Authorization") ?? "";
+    const hasHeaderToken = !!request.headers.get("x-admin-token") || auth.startsWith("Bearer ");
+    const hasCookie = new RegExp(`(?:^|;\\s*)${ADMIN_COOKIE_NAME}=`).test(request.headers.get("Cookie") || "");
+    if (hasCookie && !hasHeaderToken) return true;
+  }
+  return false;
 }
 
 function rateLimitedResponse(): Response {
@@ -317,7 +377,7 @@ export async function isAuthorized(request: Request, _url?: URL, env?: Env): Pro
   const provided = tokenHeader || tokenCookie;
   const ok = tokenHeader ? await verifyAdminToken(env, tokenHeader) : await verifyAdminSession(env, tokenCookie);
   // Only count attempts that actually presented a credential.
-  if (!ok && provided) recordAdminAuthFailure(request);
+  if (!ok && provided) await recordAdminAuthFailure(request, env);
   return ok;
 }
 
@@ -332,8 +392,8 @@ export function parseTelegramAdminIds(raw: string | undefined): Set<string> {
 }
 
 /**
- * Bot admin check: numeric Telegram user ID listed in TELEGRAM_ADMIN_IDS, or a user already
- * granted role=admin via `/admin auth`. Usernames are never used (they can be changed/claimed).
+ * Bot admin check: numeric Telegram user ID listed in TELEGRAM_ADMIN_IDS only. D1 role=admin is not
+ * trusted, and usernames are never used (they can be changed/claimed).
  */
 export function isTelegramAdmin(
   env: Env,
@@ -341,7 +401,8 @@ export function isTelegramAdmin(
   userRole?: string,
   config?: EffectiveConfig
 ): boolean {
-  if (userRole === "admin") return true;
+  // role=admin stored in D1 is deliberately ignored: bot admin comes only from TELEGRAM_ADMIN_IDS.
+  void userRole;
   const id = String(from.id ?? "").trim();
   if (!/^\d{1,20}$/.test(id)) return false;
   return parseTelegramAdminIds(config?.telegramAdminIds || env.TELEGRAM_ADMIN_IDS).has(id);
@@ -513,8 +574,11 @@ export default {
     );
 
     // Rate limit admin auth attempts per IP (applies to /admin*, /api/admin/*, and admin-gated APIs).
-    if ((path.startsWith("/admin") || path.startsWith("/api/admin/") || (path.startsWith("/api/telegram/") && path !== "/api/telegram/webhook") || path === "/api/crawl/seed") && isAdminAuthRateLimited(request)) {
-      return rateLimitedResponse();
+    if (isAdminRoute(path)) {
+      if (isCrossSiteAdminWrite(request, url)) {
+        return Response.json({ error: "Cross-site request rejected" }, { status: 403 });
+      }
+      if (await isAdminAuthRateLimited(request, env)) return rateLimitedResponse();
     }
 
     // 1. Public Dashboard UI
@@ -554,15 +618,19 @@ export default {
         candidate = "";
       }
       if (!(await verifyAdminToken(env, candidate))) {
-        recordAdminAuthFailure(request);
-        if (isAdminAuthRateLimited(request)) return rateLimitedResponse();
+        if (await recordAdminAuthFailure(request, env)) return rateLimitedResponse();
         return new Response(renderAdminLoginHtml("Invalid token."), {
           status: 401,
           headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
         });
       }
       const session = await createAdminSession(env);
-      if (!session) return new Response("Not Found", { status: 404 });
+      if (!session) {
+        return new Response(renderAdminLoginHtml("Admin sessions are not configured (ADMIN_SESSION_SECRET)."), {
+          status: 503,
+          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+        });
+      }
       return new Response(null, {
         status: 303,
         headers: {
@@ -892,7 +960,7 @@ export default {
 
           const now = Date.now();
           const apiToken = existingUser?.apiToken || `orp_${crypto.randomUUID().replace(/-/g, "")}`;
-          // /start never grants admin; admin is TELEGRAM_ADMIN_IDS (evaluated live) or `/admin auth`.
+          // /start never grants admin; admin is TELEGRAM_ADMIN_IDS only (evaluated live).
           const role = existingUser?.role || "user";
 
           const userRecord: User = {
@@ -964,52 +1032,17 @@ export default {
           return Response.json({ ok: true, authenticated: true, isAdmin });
         }
 
-        // B. /admin auth <token> - Authorize and promote user to admin
+        // B. /admin auth <token> - retired. Admin tokens are never accepted over chat and D1 roles do not
+        // grant bot admin; bot admins are configured only via the TELEGRAM_ADMIN_IDS secret/var.
         if (text.startsWith("/admin auth") && chatId) {
-          const providedToken = text.replace(/^\/admin\s+auth\s*/i, "").trim();
-          const rlKey = `tg:${tgId}`;
-          if (isAdminAuthKeyRateLimited(rlKey)) {
-            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Too many failed attempts. Try again later.");
-            return Response.json({ ok: false, error: "rate_limited" }, { status: 429 });
+          if (botToken) {
+            await sendTelegramMessage(
+              botToken,
+              chatId,
+              `ℹ️ /admin auth is no longer supported. Bot admins are configured by numeric Telegram user ID (TELEGRAM_ADMIN_IDS). Your ID: \`${tgId}\``
+            );
           }
-          if (await verifyAdminToken(env, providedToken)) {
-            const now = Date.now();
-            const apiToken = existingUser?.apiToken || `orp_${crypto.randomUUID().replace(/-/g, "")}`;
-            const userRecord: User = {
-              id: existingUser?.id || `usr_${tgId}`,
-              telegramId: tgId,
-              username: from.username ? String(from.username) : undefined,
-              firstName: String(from.first_name || from.username || "Telegram User"),
-              apiToken,
-              role: "admin",
-              createdAt: existingUser?.createdAt || now,
-              updatedAt: now,
-            };
-            await userRepo.upsert(userRecord);
-            await userRepo.setRole(tgId, "admin");
-
-            if (botToken) {
-              await sendTelegramMessage(
-                botToken,
-                chatId,
-                `✅ *Xác thực Admin thành công!*\n` +
-                `Chào mừng Quản trị viên *${from.first_name || "Admin"}* (@${from.username || tgId}).\n` +
-                `Tài khoản của bạn đã được cấp quyền Quản trị viên vĩnh viễn trên D1.\n\n` +
-                `👉 Gõ \`/admin\` để bắt đầu điều khiển hệ thống.`
-              );
-            }
-            return Response.json({ ok: true, adminGranted: true });
-          } else {
-            recordAdminAuthKeyFailure(rlKey);
-            if (botToken) {
-              await sendTelegramMessage(
-                botToken,
-                chatId,
-                `❌ *Xác thực thất bại!*\nAdmin Token không chính xác. Vui lòng kiểm tra lại.`
-              );
-            }
-            return Response.json({ ok: false, error: "Invalid admin token" });
-          }
+          return Response.json({ ok: false, error: "admin_auth_disabled" });
         }
 
         // C. /admin or /admin help or /help
@@ -1026,7 +1059,7 @@ export default {
                 `• \`/digest\` - Xem ngay bản tin việc làm tuyển chọn hôm nay`,
                 `• \`/mcp\` - Lấy MCP Endpoint & Personal API Token`,
                 `• \`/stats\` - Xem thống kê nhanh số lượng jobs & companies`,
-                `• Quản trị viên: Gõ \`/admin auth <admin_token>\` để kích hoạt quyền quản trị.`,
+                `• Admins are configured by numeric Telegram user ID (TELEGRAM_ADMIN_IDS).`,
               ].join("\n");
               if (botToken) await sendTelegramMessage(botToken, chatId, helpText);
               return Response.json({ ok: true });
@@ -1036,7 +1069,7 @@ export default {
                 `Tài khoản Telegram của bạn (@${from.username || tgId}) chưa được cấp quyền Admin.`,
                 ``,
                 `🔑 *Nếu bạn là chủ sở hữu hệ thống:*`,
-                `Hãy dùng lệnh: \`/admin auth <admin_token>\` để xác thực quyền quản trị.`,
+                `Add your numeric Telegram user ID (${tgId}) to TELEGRAM_ADMIN_IDS.`,
               ].join("\n");
               if (botToken) await sendTelegramMessage(botToken, chatId, deniedText);
               return Response.json({ ok: true });
@@ -1635,7 +1668,10 @@ export default {
     }
 
     // 6d. Telegram Webhook Setup Helper (admin only; registers the webhook secret with Telegram)
-    if (path === "/api/telegram/setup-webhook" && (request.method === "GET" || request.method === "POST")) {
+    if (path === "/api/telegram/setup-webhook" && request.method !== "POST") {
+      return Response.json({ error: "Method Not Allowed" }, { status: 405, headers: { Allow: "POST" } });
+    }
+    if (path === "/api/telegram/setup-webhook" && request.method === "POST") {
       if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }

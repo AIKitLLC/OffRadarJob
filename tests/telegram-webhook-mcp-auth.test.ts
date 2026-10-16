@@ -90,11 +90,8 @@ describe("(C) /api/telegram/setup-webhook", () => {
   });
 
   it("requires admin auth and does not call Telegram for anonymous callers", async () => {
-    for (const method of ["GET", "POST"]) {
-      const res = await call("/api/telegram/setup-webhook", { method });
-      expect(res.status).toBe(401);
-    }
-    expect((await call("/api/telegram/setup-webhook", { headers: { "x-admin-token": "wrong-token-value-123456" } })).status).toBe(401);
+    expect((await call("/api/telegram/setup-webhook", { method: "POST" })).status).toBe(401);
+    expect((await call("/api/telegram/setup-webhook", { method: "POST", headers: { "x-admin-token": "wrong-token-value-123456" } })).status).toBe(401);
     expect(captured).toBeNull();
   });
 
@@ -109,7 +106,7 @@ describe("(C) /api/telegram/setup-webhook", () => {
 
   it("refuses to register a webhook when TELEGRAM_WEBHOOK_SECRET is missing", async () => {
     const { TELEGRAM_WEBHOOK_SECRET: _omit, ...env } = baseEnv();
-    const res = await call("/api/telegram/setup-webhook", { headers: { "x-admin-token": ADMIN } }, env);
+    const res = await call("/api/telegram/setup-webhook", { method: "POST", headers: { "x-admin-token": ADMIN } }, env);
     expect(res.status).toBe(400);
     expect(captured).toBeNull();
   });

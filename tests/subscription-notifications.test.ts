@@ -481,8 +481,8 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
       });
 
       const res = await worker.fetch(
-        new Request("http://localhost/api/admin/stats", { headers: { "x-admin-token": "test_admin_token" } }),
-        tgEnv({ DB: db, ADMIN_TOKEN: "test_admin_token" }),
+        new Request("http://localhost/api/admin/stats", { headers: { "x-admin-token": "test_admin_token_0123456789abcdefgh" } }),
+        tgEnv({ DB: db, ADMIN_TOKEN: "test_admin_token_0123456789abcdefgh" }),
         mockCtx
       );
       expect(res.status).toBe(200);

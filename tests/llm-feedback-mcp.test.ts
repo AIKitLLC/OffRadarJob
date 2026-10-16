@@ -373,7 +373,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
   });
 
   describe("Admin Feedback Moderation Endpoints", () => {
-    const adminToken = "test_admin_secret_token";
+    const adminToken = "test_admin_secret_token_0123456789ab";
     const adminEnv = {
       ADMIN_TOKEN: adminToken,
       TELEGRAM_BOT_TOKEN: "fake_telegram_token",

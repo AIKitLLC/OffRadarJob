@@ -18,6 +18,7 @@ import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 
 // Test-only secret (never a real token).
 const SECRET = "test-admin-secret-0123456789abcdef";
+const SESSION_SECRET = "test-session-secret-0123456789abcdefghij";
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as any;
 
 /** The token that used to be hardcoded, read from git history (last commit that had it). Never logged. */
@@ -32,7 +33,7 @@ function leakedDefaultToken(): string | null {
 const LEAKED = leakedDefaultToken();
 
 let db: InMemoryD1Database;
-const call = (path: string, init?: RequestInit, env: Record<string, unknown> = { ADMIN_TOKEN: SECRET }) =>
+const call = (path: string, init?: RequestInit, env: Record<string, unknown> = { ADMIN_TOKEN: SECRET, ADMIN_SESSION_SECRET: SESSION_SECRET }) =>
   worker.fetch(new Request(`https://jobs.ai-kit.net${path}`, init), { DB: db, ...env } as any, ctx);
 
 beforeEach(() => {
@@ -200,7 +201,7 @@ describe("admin auth rate limit (per IP)", () => {
 });
 
 describe("signed admin session cookie", () => {
-  const env = { ADMIN_TOKEN: SECRET };
+  const env = { ADMIN_TOKEN: SECRET, ADMIN_SESSION_SECRET: SESSION_SECRET };
 
   it("the login cookie never contains the raw admin token and is a signed {iat,exp} payload", async () => {
     const form = new FormData();
@@ -229,14 +230,14 @@ describe("signed admin session cookie", () => {
     const forged = Buffer.from(JSON.stringify({ iat: Math.floor(now / 1000), exp: Math.floor(now / 1000) + 10 * 365 * 86400 })).toString("base64url");
     expect(await verifyAdminSession(env, `${forged}.${sig}`, now)).toBe(false);
     expect(await verifyAdminSession(env, `${p}.${sig!.slice(0, -2)}AA`, now)).toBe(false);
-    expect(await verifyAdminSession({ ADMIN_TOKEN: "another-admin-secret-0123456789" }, s, now)).toBe(false);
+    expect(await verifyAdminSession({ ADMIN_TOKEN: SECRET, ADMIN_SESSION_SECRET: "another-session-secret-0123456789abcdef" }, s, now)).toBe(false);
     expect(await verifyAdminSession(env, "garbage", now)).toBe(false);
     expect(await verifyAdminSession({}, s, now)).toBe(false);
   });
 
-  it("rotating ADMIN_TOKEN invalidates existing sessions", async () => {
+  it("rotating ADMIN_SESSION_SECRET invalidates existing sessions", async () => {
     const s = (await createAdminSession(env))!;
-    const page = await call("/admin", { headers: { Cookie: `${ADMIN_COOKIE_NAME}=${s}` } }, { ADMIN_TOKEN: "rotated-admin-secret-0123456789" });
+    const page = await call("/admin", { headers: { Cookie: `${ADMIN_COOKIE_NAME}=${s}` } }, { ADMIN_TOKEN: SECRET, ADMIN_SESSION_SECRET: "rotated-session-secret-0123456789abcdef" });
     expect(page.status).toBe(401);
   });
 });

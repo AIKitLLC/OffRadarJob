@@ -59,8 +59,9 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       expect(isTelegramAdmin(mockEnv as any, { id: 55555555 })).toBe(false);
     });
 
-    it("should authorize any user having admin role in database", () => {
-      expect(isTelegramAdmin(mockEnv as any, { id: 999999, username: "guest" }, "admin")).toBe(true);
+    it("never trusts role=admin stored in D1", () => {
+      expect(isTelegramAdmin(mockEnv as any, { id: 999999, username: "guest" }, "admin")).toBe(false);
+      expect(isTelegramAdmin(mockEnv as any, { id: 99887766 }, "user")).toBe(true);
       expect(isTelegramAdmin(mockEnv as any, { id: 999999, username: "guest" }, "user")).toBe(false);
     });
   });
@@ -136,78 +137,29 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
     });
   });
 
-  describe("Telegram Webhook - /admin auth elevation", () => {
-    const adminAuth = (id: number, token: string) =>
+  describe("Telegram Webhook - /admin auth is retired", () => {
+    const send = (id: number, text: string) =>
       worker.fetch(
         new Request("http://localhost/api/telegram/webhook", {
           method: "POST",
           headers: TG_WEBHOOK_HEADERS,
-          body: JSON.stringify({ message: { from: { id, first_name: "X" }, chat: { id }, text: `/admin auth ${token}` } }),
+          body: JSON.stringify({ message: { from: { id, first_name: "X" }, chat: { id }, text } }),
         }),
         mockEnv as any,
         mockCtx
       );
 
-    it("rate-limits repeated failed /admin auth attempts per Telegram user, even for the correct token", async () => {
-      for (let i = 0; i < ADMIN_AUTH_MAX_FAILURES; i++) await adminAuth(424242, "wrong-token-value-123456");
-      const blocked = await adminAuth(424242, TEST_ADMIN_TOKEN);
-      expect(blocked.status).toBe(429);
-      expect(((await blocked.json()) as any).adminGranted).toBeUndefined();
-      expect((await userRepo.findByTelegramId("424242"))?.role).not.toBe("admin");
-      const other = (await (await adminAuth(515151, TEST_ADMIN_TOKEN)).json()) as any;
-      expect(other.adminGranted).toBe(true);
-    });
-
-    it("should reject invalid admin token", async () => {
-      const payload = {
-        message: {
-          from: { id: 333444, first_name: "Attacker", username: "hacker" },
-          chat: { id: 333444 },
-          text: "/admin auth wrong_token_123",
-        },
-      };
-
-      const res = await worker.fetch(
-        new Request("http://localhost/api/telegram/webhook", {
-          method: "POST",
-          headers: TG_WEBHOOK_HEADERS,
-          body: JSON.stringify(payload),
-        }),
-        mockEnv as any,
-        mockCtx
-      );
-
-      const data = (await res.json()) as any;
+    it("does not promote a user even with the correct admin token", async () => {
+      const data = (await (await send(333444, `/admin auth ${TEST_ADMIN_TOKEN}`)).json()) as any;
       expect(data.ok).toBe(false);
-      expect(data.error).toBe("Invalid admin token");
+      expect(data.adminGranted).toBeUndefined();
+      expect((await userRepo.findByTelegramId("333444"))?.role).not.toBe("admin");
     });
 
-    it("should promote user to admin in D1 upon valid admin token", async () => {
-      const payload = {
-        message: {
-          from: { id: 333444, first_name: "New Admin", username: "newadmin" },
-          chat: { id: 333444 },
-          text: `/admin auth ${TEST_ADMIN_TOKEN}`,
-        },
-      };
-
-      const res = await worker.fetch(
-        new Request("http://localhost/api/telegram/webhook", {
-          method: "POST",
-          headers: TG_WEBHOOK_HEADERS,
-          body: JSON.stringify(payload),
-        }),
-        mockEnv as any,
-        mockCtx
-      );
-
-      expect(res.status).toBe(200);
-      const data = (await res.json()) as any;
-      expect(data.ok).toBe(true);
-      expect(data.adminGranted).toBe(true);
-
-      const user = await userRepo.findByTelegramId("333444");
-      expect(user?.role).toBe("admin");
+    it("a D1 role=admin user without a TELEGRAM_ADMIN_IDS entry cannot run admin commands", async () => {
+      await userRepo.upsert({ id: "usr_555", telegramId: "555", firstName: "Old", apiToken: "orp_old_admin", role: "admin", createdAt: Date.now(), updatedAt: Date.now() } as any);
+      const data = (await (await send(555, "/users")).json()) as any;
+      expect(data.ok).not.toBe(true);
     });
   });
 
@@ -523,7 +475,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
     it("should return helpful error if webhook setup is called without bot token", async () => {
       const emptyEnv = { DB: db, ADMIN_TOKEN: TEST_ADMIN_TOKEN };
       const res = await worker.fetch(
-        new Request("http://localhost/api/telegram/setup-webhook", { headers: { "x-admin-token": TEST_ADMIN_TOKEN } }),
+        new Request("http://localhost/api/telegram/setup-webhook", { method: "POST", headers: { "x-admin-token": TEST_ADMIN_TOKEN } }),
         emptyEnv as any,
         mockCtx
       );

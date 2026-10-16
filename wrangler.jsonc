@@ -68,6 +68,11 @@
       }
     ]
   },
+  // Failed-admin-auth counters (SQLite-backed Durable Object; created automatically on deploy).
+  "durable_objects": {
+    "bindings": [{ "name": "ADMIN_AUTH_LIMITER", "class_name": "AdminAuthLimiter" }]
+  },
+  "migrations": [{ "tag": "v1-admin-auth-limiter", "new_sqlite_classes": ["AdminAuthLimiter"] }],
   "vars": {
     "TELEGRAM_BOT_USERNAME": "OffRadarJobBot",
   },
