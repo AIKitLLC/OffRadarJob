@@ -1,4 +1,31 @@
-export function renderDashboardHtml(): string {
+export interface PublicDashboardStats {
+  companiesCount: number;
+  jobsCount: number;
+  seniorCount: number;
+  midwestPercent: number;
+  regionalBreakdown: {
+    midwest: number;
+    west: number;
+    northeast: number;
+    south: number;
+    mountain: number;
+  };
+}
+
+/** Renders a server-side count, or nothing when the value is missing or not positive (never a placeholder 0). */
+function ssrCount(value: number | undefined | null): string {
+  return typeof value === "number" && value > 0 ? value.toLocaleString("en-US") : "";
+}
+
+/**
+ * Renders the public dashboard. When `stats` holds real data from D1, the counters are
+ * rendered on the server so crawlers and no-JS clients see real values. Without data, the
+ * counter grid is hidden and region counts are left empty until /api/stats returns data.
+ */
+export function renderDashboardHtml(stats?: PublicDashboardStats | null): string {
+  const hasStats = !!stats && stats.jobsCount > 0;
+  const rb = hasStats ? stats!.regionalBreakdown : undefined;
+  const midwestPct = hasStats && rb && rb.midwest > 0 ? `${stats!.midwestPercent}%` : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -98,6 +125,9 @@ export function renderDashboardHtml(): string {
       white-space: nowrap;
     }
 
+    .stats-grid[hidden] {
+      display: none;
+    }
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -839,49 +869,49 @@ export function renderDashboardHtml(): string {
       <span class="midwest-tag">⭐ US Nationwide + Midwest Priority</span>
     </div>
 
-    <div class="stats-grid">
+    <div class="stats-grid" id="stats-grid"${hasStats ? "" : " hidden"}>
       <div class="stat-card">
         <span class="stat-label">Micro-Companies</span>
-        <span class="stat-value" id="stat-companies">0</span>
+        <span class="stat-value" id="stat-companies">${hasStats ? ssrCount(stats!.companiesCount) : ""}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Tech Jobs</span>
-        <span class="stat-value" id="stat-jobs">0</span>
+        <span class="stat-value" id="stat-jobs">${hasStats ? ssrCount(stats!.jobsCount) : ""}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Senior / Founding</span>
-        <span class="stat-value" id="stat-senior" style="color: #c084fc;">0</span>
+        <span class="stat-value" id="stat-senior" style="color: #c084fc;">${hasStats ? ssrCount(stats!.seniorCount) : ""}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Midwest Focus</span>
-        <span class="stat-value" id="stat-midwest" style="color: #fb7185;">100%</span>
+        <span class="stat-value" id="stat-midwest" style="color: #fb7185;">${midwestPct}</span>
       </div>
     </div>
 
     <div class="region-pills-bar">
       <div class="region-pill active" id="pill-all" onclick="setRegionFilter('all')">
         <span class="pill-dot" style="background: #38bdf8;"></span>
-        <span>All US: <strong id="stat-reg-all">0</strong></span>
+        <span>All US: <strong id="stat-reg-all">${hasStats ? ssrCount(stats!.jobsCount) : ""}</strong></span>
       </div>
       <div class="region-pill" id="pill-midwest" onclick="setRegionFilter('midwest')">
         <span class="pill-dot" style="background: #f43f5e;"></span>
-        <span>📍 Midwest: <strong id="stat-reg-midwest">0</strong></span>
+        <span>📍 Midwest: <strong id="stat-reg-midwest">${ssrCount(rb?.midwest)}</strong></span>
       </div>
       <div class="region-pill" id="pill-west" onclick="setRegionFilter('west')">
         <span class="pill-dot" style="background: #10b981;"></span>
-        <span>🌲 West: <strong id="stat-reg-west">0</strong></span>
+        <span>🌲 West: <strong id="stat-reg-west">${ssrCount(rb?.west)}</strong></span>
       </div>
       <div class="region-pill" id="pill-northeast" onclick="setRegionFilter('northeast')">
         <span class="pill-dot" style="background: #6366f1;"></span>
-        <span>🗽 Northeast: <strong id="stat-reg-northeast">0</strong></span>
+        <span>🗽 Northeast: <strong id="stat-reg-northeast">${ssrCount(rb?.northeast)}</strong></span>
       </div>
       <div class="region-pill" id="pill-south" onclick="setRegionFilter('south')">
         <span class="pill-dot" style="background: #f59e0b;"></span>
-        <span>☀️ South: <strong id="stat-reg-south">0</strong></span>
+        <span>☀️ South: <strong id="stat-reg-south">${ssrCount(rb?.south)}</strong></span>
       </div>
       <div class="region-pill" id="pill-mountain" onclick="setRegionFilter('mountain')">
         <span class="pill-dot" style="background: #06b6d4;"></span>
-        <span>🏔️ Mountain: <strong id="stat-reg-mountain">0</strong></span>
+        <span>🏔️ Mountain: <strong id="stat-reg-mountain">${ssrCount(rb?.mountain)}</strong></span>
       </div>
     </div>
 
@@ -1143,11 +1173,10 @@ export function renderDashboardHtml(): string {
             <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--card-border); border-radius: 10px; padding: 16px;">
               <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Projected Match Score</div>
               <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 8px;">
-                <span style="font-size: 28px; font-weight: 800; color: #94a3b8;" id="decision-current-score">55%</span>
+                <span style="font-size: 28px; font-weight: 800; color: #94a3b8;" id="decision-current-score"></span>
                 <span style="font-size: 18px; color: var(--text-muted);">➔</span>
-                <span style="font-size: 32px; font-weight: 800; color: #34d399;" id="decision-projected-score">94%</span>
+                <span style="font-size: 32px; font-weight: 800; color: #34d399;" id="decision-projected-score"></span>
               </div>
-              <div style="font-size: 12px; color: #34d399; margin-top: 4px;">🚀 Significantly boosts interview conversion for this target group!</div>
             </div>
 
             <!-- Strategy Box -->
@@ -1721,18 +1750,23 @@ export function renderDashboardHtml(): string {
       try {
         const stats = await fetch('/api/stats').then(r => r.json());
         if (!stats) return;
-        document.getElementById('stat-companies').innerText = (stats.companiesCount || 0).toLocaleString();
-        document.getElementById('stat-jobs').innerText = (stats.jobsCount || 0).toLocaleString();
-        document.getElementById('stat-senior').innerText = (stats.seniorCount || 0).toLocaleString();
-        document.getElementById('stat-midwest').innerText = (stats.midwestPercent !== undefined ? stats.midwestPercent : 100) + '%';
-        if (stats.regionalBreakdown) {
-          const rb = stats.regionalBreakdown;
-          if (document.getElementById('stat-reg-all')) document.getElementById('stat-reg-all').innerText = (stats.jobsCount || 0).toLocaleString();
-          if (document.getElementById('stat-reg-midwest')) document.getElementById('stat-reg-midwest').innerText = (rb.midwest || 0).toLocaleString();
-          if (document.getElementById('stat-reg-west')) document.getElementById('stat-reg-west').innerText = (rb.west || 0).toLocaleString();
-          if (document.getElementById('stat-reg-northeast')) document.getElementById('stat-reg-northeast').innerText = (rb.northeast || 0).toLocaleString();
-          if (document.getElementById('stat-reg-south')) document.getElementById('stat-reg-south').innerText = (rb.south || 0).toLocaleString();
-          if (document.getElementById('stat-reg-mountain')) document.getElementById('stat-reg-mountain').innerText = (rb.mountain || 0).toLocaleString();
+        // Only show counters once real data exists; never show placeholder 0 or 100%.
+        const fmt = (n) => (typeof n === 'number' && n > 0) ? n.toLocaleString('en-US') : '';
+        const setText = (id, text) => { const el = document.getElementById(id); if (el) el.innerText = text; };
+        if (stats.jobsCount > 0) {
+          const rb = stats.regionalBreakdown || {};
+          setText('stat-companies', fmt(stats.companiesCount));
+          setText('stat-jobs', fmt(stats.jobsCount));
+          setText('stat-senior', fmt(stats.seniorCount));
+          setText('stat-midwest', (rb.midwest > 0 && typeof stats.midwestPercent === 'number') ? stats.midwestPercent + '%' : '');
+          setText('stat-reg-all', fmt(stats.jobsCount));
+          setText('stat-reg-midwest', fmt(rb.midwest));
+          setText('stat-reg-west', fmt(rb.west));
+          setText('stat-reg-northeast', fmt(rb.northeast));
+          setText('stat-reg-south', fmt(rb.south));
+          setText('stat-reg-mountain', fmt(rb.mountain));
+          const grid = document.getElementById('stats-grid');
+          if (grid) grid.hidden = false;
         }
         renderLogs(stats.recentLogs || []);
       } catch (err) {
