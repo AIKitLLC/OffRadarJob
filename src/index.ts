@@ -283,8 +283,10 @@ export async function getEffectiveConfig(env: Env, settingsRepo?: SystemSettings
  */
 const memoryAuthFailures = new Map<string, { count: number; resetAt: number }>();
 
-export function clientIp(request: Request): string {
-  return request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() || "unknown";
+/** Client IP as reported by Cloudflare. Returns null when CF-Connecting-IP is absent. */
+export function clientIp(request: Request): string | null {
+  const ip = request.headers.get("CF-Connecting-IP")?.trim();
+  return ip ? ip : null;
 }
 
 async function limiterCall(env: Pick<Env, "ADMIN_AUTH_LIMITER"> | undefined, op: "check" | "fail", key: string): Promise<boolean> {
@@ -323,11 +325,15 @@ async function limiterCall(env: Pick<Env, "ADMIN_AUTH_LIMITER"> | undefined, op:
 }
 
 export function isAdminAuthRateLimited(request: Request, env?: Pick<Env, "ADMIN_AUTH_LIMITER">): Promise<boolean> {
-  return limiterCall(env, "check", `ip:${clientIp(request)}`);
+  const ip = clientIp(request);
+  if (!ip) return Promise.resolve(true);
+  return limiterCall(env, "check", `ip:${ip}`);
 }
 
 export function recordAdminAuthFailure(request: Request, env?: Pick<Env, "ADMIN_AUTH_LIMITER">): Promise<boolean> {
-  return limiterCall(env, "fail", `ip:${clientIp(request)}`);
+  const ip = clientIp(request);
+  if (!ip) return Promise.resolve(true);
+  return limiterCall(env, "fail", `ip:${ip}`);
 }
 
 /** Test helper: clears the in-memory fallback store. */

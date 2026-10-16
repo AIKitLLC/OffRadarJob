@@ -88,6 +88,42 @@ describe("(1) durable admin auth rate limiter (SQLite Durable Object)", () => {
     expect((await login(baseEnv({ ADMIN_AUTH_LIMITER: broken }))).status).toBe(429);
   });
 
+  it("keys only on CF-Connecting-IP; requests without it are rejected regardless of X-Forwarded-For", async () => {
+    const keys: string[] = [];
+    const ns = {
+      idFromName: (n: string) => { keys.push(n); return n; },
+      get: () => ({ fetch: async () => new Response(JSON.stringify({ limited: false })) }),
+    };
+    const env = baseEnv({ ADMIN_AUTH_LIMITER: ns });
+    const noCf = (token: string, xff: string) => {
+      const req = new Request("https://jobs.ai-kit.net/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Forwarded-For": xff },
+        body: JSON.stringify({ token }),
+      });
+      req.headers.delete("CF-Connecting-IP");
+      expect(req.headers.has("CF-Connecting-IP")).toBe(false);
+      return worker.fetch(req, env as any, ctx);
+    };
+    const res = await noCf(ADMIN, "192.0.2.10");
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Set-Cookie")).toBeNull();
+    expect(keys.some((k) => k.includes("192.0.2.10") || k.includes("unknown"))).toBe(false);
+    // Rotating X-Forwarded-For values never yields a fresh allowance.
+    for (let i = 0; i < ADMIN_AUTH_MAX_FAILURES + 2; i++) expect((await noCf(ADMIN, `192.0.2.${100 + i}`)).status).toBe(429);
+    expect(keys).toHaveLength(0);
+    // With CF-Connecting-IP present the key is derived from it, not from X-Forwarded-For.
+    expect((await login(env, ADMIN, "198.51.100.9", { "X-Forwarded-For": "192.0.2.55" })).status).toBe(303);
+    expect(keys.every((k) => k === "ip:198.51.100.9")).toBe(true);
+  });
+
+  it("spoofed X-Forwarded-For does not reset the in-memory limit for a CF-Connecting-IP client", async () => {
+    const env = baseEnv();
+    for (let i = 0; i < ADMIN_AUTH_MAX_FAILURES; i++)
+      await login(env, "wrong-token-value-0123456789abcdef", "203.0.113.60", { "X-Forwarded-For": `192.0.2.${i}` });
+    expect((await login(env, ADMIN, "203.0.113.60", { "X-Forwarded-For": "192.0.2.250" })).status).toBe(429);
+  });
+
   it("wrangler.jsonc declares the DO binding with a SQLite migration", () => {
     const cfg = readFileSync("wrangler.jsonc", "utf8");
     expect(cfg).toMatch(/"name":\s*"ADMIN_AUTH_LIMITER",\s*"class_name":\s*"AdminAuthLimiter"/);
