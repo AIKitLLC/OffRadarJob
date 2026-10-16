@@ -1881,6 +1881,7 @@ export function renderDashboardHtml(): string {
                 <span class="tag">\${j.employmentType}</span>
                 \${j.salaryMin ? \`<span class="tag tag-salary">\\$\${j.salaryMin.toLocaleString()} - \\$\${j.salaryMax.toLocaleString()} \${j.salaryCurrency || 'USD'}</span>\` : ''}
                 \${(j.skills || []).map(s => \`<span class="tag">\${s}</span>\`).join('')}
+                <span class="tag tag-verified" title="Apply link last verified / last seen by the crawler">✓ Last verified \${new Date(j.lastVerifiedAt || j.lastSeenAt).toISOString().slice(0, 10)}</span>
               </div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">

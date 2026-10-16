@@ -100,8 +100,10 @@ export class JobExtractorAgent extends BaseAgent {
           lastSeenAt: now,
         };
 
-        await this.jobRepo.upsert(job);
-        jobs.push(job);
+        // Ingest validation: LinkedIn, ?error=true and generic careers pages are rejected.
+        if (await this.jobRepo.upsert(job)) {
+          jobs.push(job);
+        }
       }
 
       if (this.companyRepo && jobs.length > 0) {
