@@ -22,7 +22,7 @@ function parseArgs(): FeederOptions {
   let intervalSeconds = 15;
   let batchSize = 3;
   let endpoint = "https://off-radar-jobs.tuannx87.workers.dev";
-  let token = "offradar-admin-2026";
+  let token = process.env.OFFRADAR_ADMIN_TOKEN ?? "";
 
   for (const arg of args) {
     if (arg.startsWith("--duration=")) {
@@ -36,6 +36,11 @@ function parseArgs(): FeederOptions {
     } else if (arg.startsWith("--token=")) {
       token = arg.split("=")[1] || token;
     }
+  }
+
+  if (!token) {
+    console.error("Missing admin token: set OFFRADAR_ADMIN_TOKEN or pass --token=...");
+    process.exit(1);
   }
 
   return { durationHours, intervalSeconds, batchSize, endpoint, token };

@@ -115,6 +115,7 @@ export function renderDashboardHtml(): string {
     .stat-label { font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .stat-value { font-size: 32px; font-weight: 700; color: #fff; margin-top: 8px; }
     
+    [hidden] { display: none !important; }
     .crawl-trigger {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
@@ -824,7 +825,7 @@ export function renderDashboardHtml(): string {
         <div id="auth-section" style="display: flex; align-items: center; gap: 8px;">
           <!-- Populated by JS -->
         </div>
-        <a href="/admin" style="text-decoration: none; color: #38bdf8; font-size: 13px; font-weight: 600; padding: 6px 14px; border: 1px solid #1f2a44; border-radius: 8px; background: #131b2e;">⚙️ Admin</a>
+        <a href="/admin" id="admin-link" data-admin-only hidden style="text-decoration: none; color: #38bdf8; font-size: 13px; font-weight: 600; padding: 6px 14px; border: 1px solid #1f2a44; border-radius: 8px; background: #131b2e;">⚙️ Admin</a>
         <div class="status-badge">
           <span class="status-dot"></span>
           Edge Active
@@ -885,7 +886,7 @@ export function renderDashboardHtml(): string {
       </div>
     </div>
 
-    <div class="crawl-trigger">
+    <div class="crawl-trigger" id="seed-ingest" data-admin-only hidden>
       <h2>🚀 Ingest & Dispatch New Seed Domain</h2>
       <div class="input-group">
         <input type="text" id="seed-input" placeholder="e.g. https://promptloop.com, https://sixfeetup.com, https://bendyworks.com" />
@@ -2155,6 +2156,14 @@ export function renderDashboardHtml(): string {
     function fillSeed(url) {
       document.getElementById('seed-input').value = url;
     }
+
+    // Admin-only controls (Admin link, seed ingest) stay hidden unless the visitor has an admin session.
+    fetch('/api/admin/session', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : { admin: false })
+      .then(d => {
+        if (d && d.admin === true) document.querySelectorAll('[data-admin-only]').forEach(el => el.removeAttribute('hidden'));
+      })
+      .catch(() => {});
 
     async function triggerCrawl() {
       const input = document.getElementById('seed-input');

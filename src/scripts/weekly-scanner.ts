@@ -58,7 +58,7 @@ async function main() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer offradar-admin-2026",
+        "Authorization": `Bearer ${process.env.OFFRADAR_ADMIN_TOKEN ?? ""}`,
       },
       body: JSON.stringify({ limit: 200 }),
     });

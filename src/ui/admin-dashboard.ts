@@ -882,7 +882,7 @@ export function renderAdminDashboardHtml(): string {
                 <span id="cfg-admin-token-status" style="margin-left: 8px; font-weight: normal; font-size: 11px; color: #38bdf8;"></span>
               </label>
               <div style="display: flex; gap: 8px;">
-                <input type="password" id="cfg-admin-token" class="form-input" placeholder="offradar-admin-2026" autocomplete="off" />
+                <input type="password" id="cfg-admin-token" class="form-input" placeholder="Managed as a Cloudflare secret (wrangler secret put ADMIN_TOKEN)" disabled autocomplete="off" />
                 <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTokenVisibility('cfg-admin-token', this)">👁️</button>
               </div>
               <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
@@ -1115,7 +1115,8 @@ export function renderAdminDashboardHtml(): string {
   <div id="toast" class="toast"></div>
 
   <script>
-    const token = new URLSearchParams(window.location.search).get('token') || 'offradar-admin-2026';
+    // Auth is the HttpOnly admin session cookie set by POST /admin/login; no token lives in page JS.
+    const token = '';
 
     function showToast(msg) {
       const t = document.getElementById('toast');
@@ -1143,7 +1144,8 @@ export function renderAdminDashboardHtml(): string {
 
     async function apiFetch(endpoint, options = {}) {
       options.headers = options.headers || {};
-      options.headers['x-admin-token'] = token;
+      if (token) options.headers['x-admin-token'] = token;
+      options.credentials = 'same-origin';
       if (options.body && typeof options.body === 'object') {
         options.headers['Content-Type'] = 'application/json';
         options.body = JSON.stringify(options.body);
@@ -2023,6 +2025,29 @@ export function renderAdminDashboardHtml(): string {
     loadStats();
     loadTasks();
   </script>
+</body>
+</html>`;
+}
+
+/** Minimal login page. No token is ever embedded; the form POSTs to /admin/login. */
+export function renderAdminLoginHtml(error?: string): string {
+  const err = error ? `<p style="color:#f87171;margin:0 0 12px">${error.replace(/[<>&"]/g, "")}</p>` : "";
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Admin sign in · Off-Radar Jobs</title>
+</head>
+<body style="font-family:system-ui,sans-serif;background:#0b1120;color:#e2e8f0;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0">
+  <form method="POST" action="/admin/login" style="background:#131b2e;padding:28px;border-radius:12px;border:1px solid #1f2a44;min-width:300px">
+    <h1 style="font-size:18px;margin:0 0 16px">Admin sign in</h1>
+    ${err}
+    <label for="token" style="display:block;font-size:13px;margin-bottom:6px">Admin token</label>
+    <input id="token" name="token" type="password" autocomplete="current-password" required style="width:100%;padding:8px;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;box-sizing:border-box" />
+    <button type="submit" style="margin-top:14px;width:100%;padding:9px;border-radius:6px;border:0;background:#38bdf8;color:#0b1120;font-weight:600">Sign in</button>
+  </form>
 </body>
 </html>`;
 }

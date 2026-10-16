@@ -480,7 +480,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
       });
 
       const res = await worker.fetch(
-        new Request("http://localhost/api/admin/stats?token=test_admin_token"),
+        new Request("http://localhost/api/admin/stats", { headers: { "x-admin-token": "test_admin_token" } }),
         { DB: db, ADMIN_TOKEN: "test_admin_token" } as any,
         mockCtx
       );

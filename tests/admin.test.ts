@@ -13,6 +13,9 @@ import { renderDashboardHtml } from "../src/ui/dashboard.js";
 import vm from "vm";
 import worker from "../src/index.js";
 
+// Test-only admin secret (never a real token).
+const TEST_ADMIN_TOKEN = "test-admin-secret-0123456789abcdef";
+
 describe("Admin Control Center Suite", () => {
   let db: InMemoryD1Database;
   let taskRepo: CrawlTaskRepository;
@@ -180,13 +183,13 @@ describe("Admin Control Center Suite", () => {
 
     it("should deny unauthorized access to /api/admin/* without token", async () => {
       const req = new Request("http://localhost/api/admin/tasks");
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, { DB: db, ADMIN_TOKEN: TEST_ADMIN_TOKEN } as any, mockCtx);
       expect(res.status).toBe(401);
     });
 
-    it("should allow authorized access to /api/admin/stats with header or query token", async () => {
-      const req = new Request("http://localhost/api/admin/stats?token=offradar-admin-2026");
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+    it("should allow authorized access to /api/admin/stats with header token", async () => {
+      const req = new Request("http://localhost/api/admin/stats", { headers: { "x-admin-token": TEST_ADMIN_TOKEN } });
+      const res = await worker.fetch(req, { DB: db, ADMIN_TOKEN: TEST_ADMIN_TOKEN } as any, mockCtx);
       expect(res.status).toBe(200);
       const data = await res.json() as any;
       expect(data.tasks).toBeDefined();
@@ -194,8 +197,8 @@ describe("Admin Control Center Suite", () => {
     });
 
     it("should render admin UI on /admin", async () => {
-      const req = new Request("http://localhost/admin");
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const req = new Request("http://localhost/admin", { headers: { "x-admin-token": TEST_ADMIN_TOKEN } });
+      const res = await worker.fetch(req, { DB: db, ADMIN_TOKEN: TEST_ADMIN_TOKEN } as any, mockCtx);
       expect(res.status).toBe(200);
       const html = await res.text();
       expect(html).toContain("OffRadarJob Control Center");
@@ -204,13 +207,13 @@ describe("Admin Control Center Suite", () => {
     });
 
     it("should dispatch a crawl task via POST /api/admin/tasks/create", async () => {
-      const req = new Request("http://localhost/api/admin/tasks/create?token=offradar-admin-2026", {
+      const req = new Request("http://localhost/api/admin/tasks/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-admin-token": TEST_ADMIN_TOKEN },
         body: JSON.stringify({ url: "https://boutiquestudio.design", source: "admin_test" }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, { DB: db, ADMIN_TOKEN: TEST_ADMIN_TOKEN } as any, mockCtx);
       expect(res.status).toBe(200);
       const body = await res.json() as any;
       expect(body.success).toBe(true);
@@ -223,12 +226,12 @@ describe("Admin Control Center Suite", () => {
 
     it("should dispatch public source harvest tasks via POST /api/admin/harvest/hn and /github", async () => {
       // Test HN Harvest endpoint
-      const reqHn = new Request("http://localhost/api/admin/harvest/hn?token=offradar-admin-2026", {
+      const reqHn = new Request("http://localhost/api/admin/harvest/hn", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-admin-token": TEST_ADMIN_TOKEN },
         body: JSON.stringify({ limit: 5 }),
       });
-      const resHn = await worker.fetch(reqHn, { DB: db } as any, mockCtx);
+      const resHn = await worker.fetch(reqHn, { DB: db, ADMIN_TOKEN: TEST_ADMIN_TOKEN } as any, mockCtx);
       expect(resHn.status).toBe(200);
       const dataHn = await resHn.json() as any;
       expect(dataHn.success).toBe(true);
@@ -236,12 +239,12 @@ describe("Admin Control Center Suite", () => {
       expect(dataHn.status).toBe("harvest_started");
 
       // Test GitHub Harvest endpoint
-      const reqGh = new Request("http://localhost/api/admin/harvest/github?token=offradar-admin-2026", {
+      const reqGh = new Request("http://localhost/api/admin/harvest/github", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-admin-token": TEST_ADMIN_TOKEN },
         body: JSON.stringify({ limit: 5 }),
       });
-      const resGh = await worker.fetch(reqGh, { DB: db } as any, mockCtx);
+      const resGh = await worker.fetch(reqGh, { DB: db, ADMIN_TOKEN: TEST_ADMIN_TOKEN } as any, mockCtx);
       expect(resGh.status).toBe(200);
       const dataGh = await resGh.json() as any;
       expect(dataGh.success).toBe(true);
@@ -251,7 +254,7 @@ describe("Admin Control Center Suite", () => {
 
     it("should return paged jobs with metadata via GET /api/jobs?paged=true", async () => {
       const req = new Request("http://localhost/api/jobs?page=1&limit=2&paged=true");
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, { DB: db, ADMIN_TOKEN: TEST_ADMIN_TOKEN } as any, mockCtx);
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toContain("max-age=60");
       const data = await res.json() as any;
@@ -266,7 +269,7 @@ describe("Admin Control Center Suite", () => {
 
     it("should return paged companies via GET /api/companies?paged=true", async () => {
       const req = new Request("http://localhost/api/companies?page=1&limit=5&paged=true");
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, { DB: db, ADMIN_TOKEN: TEST_ADMIN_TOKEN } as any, mockCtx);
       expect(res.status).toBe(200);
       const data = await res.json() as any;
       expect(data.items).toBeDefined();
@@ -314,7 +317,7 @@ describe("Admin Control Center Suite", () => {
 
       // Verify /api/admin/stats endpoint returns freshness
       const req = new Request("http://localhost/api/admin/stats", {
-        headers: { Authorization: "Bearer offradar-admin-2026" },
+        headers: { Authorization: `Bearer ${TEST_ADMIN_TOKEN}` },
       });
       const ctx = {
         waitUntil: () => {},
@@ -324,7 +327,7 @@ describe("Admin Control Center Suite", () => {
         req,
         {
           DB: db,
-          ADMIN_TOKEN: "offradar-admin-2026",
+          ADMIN_TOKEN: TEST_ADMIN_TOKEN,
         } as any,
         ctx as any
       );

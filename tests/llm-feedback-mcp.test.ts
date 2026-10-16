@@ -412,7 +412,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
 
     it("should allow admin to list feedbacks with stats", async () => {
       const res = await worker.fetch(
-        new Request("http://localhost/api/admin/feedbacks?token=" + adminToken),
+        new Request("http://localhost/api/admin/feedbacks", { headers: { "x-admin-token": adminToken } }),
         { DB: db, ...adminEnv } as any,
         mockCtx
       );

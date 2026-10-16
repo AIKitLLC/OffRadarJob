@@ -1,5 +1,5 @@
 import { renderDashboardHtml } from "./ui/dashboard.js";
-import { renderAdminDashboardHtml } from "./ui/admin-dashboard.js";
+import { renderAdminDashboardHtml, renderAdminLoginHtml } from "./ui/admin-dashboard.js";
 import { ID1Database } from "./db/types.js";
 import {
   CompanyRepository,
@@ -115,7 +115,48 @@ async function getOrSetKvCache<T>(
   return data;
 }
 
-export const DEFAULT_ADMIN_TOKEN = "offradar-admin-2026";
+/**
+ * SHA-256 of the admin token that used to be hardcoded (and public in git history).
+ * It is rejected even if someone sets it as the ADMIN_TOKEN secret again.
+ */
+export const LEAKED_ADMIN_TOKEN_SHA256 = "8def82a2adab551529187ce033d1da734c0483c2cb4c6756110957314cabfbb1";
+
+export const ADMIN_COOKIE_NAME = "admin_session";
+
+async function sha256Bytes(value: string): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
+}
+
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Constant-time comparison: both sides are hashed to 32 bytes, then XOR-compared. */
+export async function timingSafeEqualStr(a: string, b: string): Promise<boolean> {
+  const [ha, hb] = await Promise.all([sha256Bytes(a), sha256Bytes(b)]);
+  let diff = 0;
+  for (let i = 0; i < ha.length; i++) diff |= ha[i]! ^ hb[i]!;
+  return diff === 0;
+}
+
+/** The configured admin secret, or null when admin must stay closed (unset, too short, or the leaked value). */
+export async function getAdminSecret(env?: Pick<Env, "ADMIN_TOKEN">): Promise<string | null> {
+  const secret = (env?.ADMIN_TOKEN ?? "").trim();
+  if (secret.length < 16) return null;
+  if (toHex(await sha256Bytes(secret)) === LEAKED_ADMIN_TOKEN_SHA256) return null;
+  return secret;
+}
+
+export async function isAdminConfigured(env?: Pick<Env, "ADMIN_TOKEN">): Promise<boolean> {
+  return (await getAdminSecret(env)) !== null;
+}
+
+/** Validate a candidate token against the ADMIN_TOKEN secret. Fails closed. */
+export async function verifyAdminToken(env: Pick<Env, "ADMIN_TOKEN"> | undefined, candidate: string | null | undefined): Promise<boolean> {
+  const secret = await getAdminSecret(env);
+  if (!secret || !candidate) return false;
+  return timingSafeEqualStr(candidate, secret);
+}
 
 export interface EffectiveConfig {
   telegramBotToken: string;
@@ -134,30 +175,71 @@ export async function getEffectiveConfig(env: Env, settingsRepo?: SystemSettings
     telegramAdminUsernames: dynamicMap["telegram_admin_usernames"] || env.TELEGRAM_ADMIN_USERNAMES || "tuannx87",
     telegramAdminIds: dynamicMap["telegram_admin_ids"] || env.TELEGRAM_ADMIN_IDS || "",
     telegramAdminChatId: dynamicMap["telegram_admin_chat_id"] || env.TELEGRAM_ADMIN_CHAT_ID || "",
-    adminToken: dynamicMap["admin_token"] || env.ADMIN_TOKEN || DEFAULT_ADMIN_TOKEN,
+    // Admin token comes ONLY from the ADMIN_TOKEN Cloudflare secret (never D1 settings, never a default).
+    adminToken: "",
   };
 }
 
-export function isAuthorized(
-  request: Request,
-  url: URL,
-  env?: Env,
-  dynamicAdminToken?: string
-): boolean {
-  const tokenHeader = request.headers.get("x-admin-token") || request.headers.get("Authorization")?.replace("Bearer ", "");
-  const tokenQuery = url.searchParams.get("token");
+/**
+ * Admin auth: `x-admin-token` / `Authorization: Bearer` header, or the HttpOnly
+ * session cookie set by POST /admin/login. Query-string tokens are not accepted.
+ * Returns false whenever the ADMIN_TOKEN secret is unset (fail closed).
+ */
+/**
+ * Per-IP rate limit on failed admin auth attempts (per isolate, in-memory).
+ * ADMIN_AUTH_MAX_FAILURES failures inside ADMIN_AUTH_WINDOW_MS => 429 until the window expires.
+ */
+export const ADMIN_AUTH_MAX_FAILURES = 10;
+export const ADMIN_AUTH_WINDOW_MS = 15 * 60 * 1000;
+const adminAuthFailures = new Map<string, { count: number; resetAt: number }>();
+
+export function clientIp(request: Request): string {
+  return request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() || "unknown";
+}
+
+export function isAdminAuthRateLimited(request: Request, now = Date.now()): boolean {
+  const entry = adminAuthFailures.get(clientIp(request));
+  if (!entry) return false;
+  if (now >= entry.resetAt) {
+    adminAuthFailures.delete(clientIp(request));
+    return false;
+  }
+  return entry.count >= ADMIN_AUTH_MAX_FAILURES;
+}
+
+export function recordAdminAuthFailure(request: Request, now = Date.now()): void {
+  const ip = clientIp(request);
+  const entry = adminAuthFailures.get(ip);
+  if (!entry || now >= entry.resetAt) adminAuthFailures.set(ip, { count: 1, resetAt: now + ADMIN_AUTH_WINDOW_MS });
+  else entry.count++;
+  if (adminAuthFailures.size > 10_000) {
+    for (const [k, v] of adminAuthFailures) if (now >= v.resetAt) adminAuthFailures.delete(k);
+  }
+}
+
+/** Test helper. */
+export function resetAdminAuthRateLimit(): void {
+  adminAuthFailures.clear();
+}
+
+function rateLimitedResponse(): Response {
+  return Response.json(
+    { error: "Too many failed admin auth attempts. Try again later." },
+    { status: 429, headers: { "Retry-After": String(Math.ceil(ADMIN_AUTH_WINDOW_MS / 1000)) } }
+  );
+}
+
+export async function isAuthorized(request: Request, _url?: URL, env?: Env): Promise<boolean> {
+  const auth = request.headers.get("Authorization") ?? "";
+  const tokenHeader = request.headers.get("x-admin-token") || (auth.startsWith("Bearer ") ? auth.slice(7) : "");
   const cookieHeader = request.headers.get("Cookie") || "";
-  const matchCookie = cookieHeader.match(/admin_token=([^;]+)/);
-  const tokenCookie = matchCookie ? matchCookie[1] : null;
-
-  const validTokens = [
-    dynamicAdminToken,
-    env?.ADMIN_TOKEN,
-    DEFAULT_ADMIN_TOKEN,
-  ].filter(Boolean);
-
-  const provided = tokenHeader || tokenQuery || tokenCookie;
-  return !!provided && validTokens.includes(provided);
+  const matchCookie = cookieHeader.match(new RegExp(`(?:^|;\\s*)${ADMIN_COOKIE_NAME}=([^;]+)`));
+  const tokenCookie = matchCookie ? decodeURIComponent(matchCookie[1]!) : "";
+  const provided = tokenHeader || tokenCookie;
+  const ok = await verifyAdminToken(env, provided);
+  // Only count attempts that actually presented a credential.
+  if (!ok && provided) recordAdminAuthFailure(request);
+  return ok;
 }
 
 export function isTelegramAdmin(
@@ -329,6 +411,11 @@ export default {
       rerankerService
     );
 
+    // Rate limit admin auth attempts per IP (applies to /admin*, /api/admin/*, and admin-gated APIs).
+    if ((path.startsWith("/admin") || path.startsWith("/api/admin/") || (path.startsWith("/api/telegram/") && path !== "/api/telegram/webhook") || path === "/api/crawl/seed") && isAdminAuthRateLimited(request)) {
+      return rateLimitedResponse();
+    }
+
     // 1. Public Dashboard UI
     if (path === "/" || path === "/index.html") {
       return new Response(renderDashboardHtml(), {
@@ -337,13 +424,65 @@ export default {
     }
 
     // 2. Admin Control Center UI
+    // Never sets a cookie on GET. 404 when the ADMIN_TOKEN secret is not configured.
     if (path === "/admin" || path === "/admin/") {
+      if (!(await isAdminConfigured(env))) return new Response("Not Found", { status: 404 });
+      if (!(await isAuthorized(request, url, env))) {
+        return new Response(renderAdminLoginHtml(), {
+          status: 401,
+          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+        });
+      }
       return new Response(renderAdminDashboardHtml(), {
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+      });
+    }
+
+    // Explicit admin login: POST the token; on success set a strict HttpOnly session cookie.
+    if (path === "/admin/login" && request.method === "POST") {
+      if (!(await isAdminConfigured(env))) return new Response("Not Found", { status: 404 });
+      let candidate = "";
+      const ct = request.headers.get("Content-Type") ?? "";
+      try {
+        if (ct.includes("application/json")) {
+          candidate = String(((await request.json()) as { token?: unknown }).token ?? "");
+        } else {
+          candidate = String((await request.formData()).get("token") ?? "");
+        }
+      } catch {
+        candidate = "";
+      }
+      if (!(await verifyAdminToken(env, candidate))) {
+        recordAdminAuthFailure(request);
+        if (isAdminAuthRateLimited(request)) return rateLimitedResponse();
+        return new Response(renderAdminLoginHtml("Invalid token."), {
+          status: 401,
+          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+        });
+      }
+      return new Response(null, {
+        status: 303,
         headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          "Set-Cookie": `admin_token=${effectiveConfig.adminToken || DEFAULT_ADMIN_TOKEN}; Path=/; HttpOnly; SameSite=Lax`,
+          Location: "/admin",
+          "Cache-Control": "no-store",
+          "Set-Cookie": `${ADMIN_COOKIE_NAME}=${encodeURIComponent(candidate)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=28800`,
         },
       });
+    }
+
+    if (path === "/admin/logout" && request.method === "POST") {
+      return new Response(null, {
+        status: 303,
+        headers: {
+          Location: "/",
+          "Set-Cookie": `${ADMIN_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`,
+        },
+      });
+    }
+
+    // Lets the public dashboard decide whether to render admin-only controls.
+    if (path === "/api/admin/session" && request.method === "GET") {
+      return Response.json({ admin: await isAuthorized(request, url, env) }, { headers: { "Cache-Control": "no-store" } });
     }
 
     // 3. API: List Gathered Jobs (Supports Paging & KV Caching)
@@ -721,8 +860,7 @@ export default {
         // B. /admin auth <token> - Authorize and promote user to admin
         if (text.startsWith("/admin auth") && chatId) {
           const providedToken = text.replace(/^\/admin\s+auth\s*/i, "").trim();
-          const validTokens = [effectiveConfig.adminToken, env.ADMIN_TOKEN, DEFAULT_ADMIN_TOKEN].filter(Boolean);
-          if (validTokens.includes(providedToken)) {
+          if (await verifyAdminToken(env, providedToken)) {
             const now = Date.now();
             const apiToken = existingUser?.apiToken || `orp_${crypto.randomUUID().replace(/-/g, "")}`;
             const userRecord: User = {
@@ -1237,16 +1375,11 @@ export default {
             return Response.json({ ok: false, error: "Unauthorized" });
           }
 
-          const validToken = effectiveConfig.adminToken || env.ADMIN_TOKEN || DEFAULT_ADMIN_TOKEN;
-          const magicUrl = `https://off-radar-jobs.tuannx87.workers.dev/admin?token=${validToken}`;
-
+          // No token in links: tokens in URLs leak via chat history, logs and Referer.
           const msg = [
-            `🔑 *Magic Link Đăng Nhập Web Admin Control Center:*`,
+            `🔑 *Web Admin Control Center*`,
             ``,
-            `🔗 [Mở Web Admin Dashboard](${magicUrl})`,
-            `\`${magicUrl}\``,
-            ``,
-            `*(Link đã bao gồm token bảo mật, có thể mở trực tiếp không cần mật khẩu)*`,
+            `Open https://jobs.ai-kit.net/admin and sign in with the admin token (the ADMIN_TOKEN Cloudflare secret).`,
           ].join("\n");
 
           if (botToken) await sendTelegramMessage(botToken, chatId, msg);
@@ -1910,7 +2043,7 @@ export default {
 
     // 11. Admin API: Stats & Task Metrics
     if (path === "/api/admin/stats" && request.method === "GET") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const [companiesCount, jobsCount, recentLogs, tasksStats, freshness, subscriberStats] = await Promise.all([
@@ -1937,7 +2070,7 @@ export default {
 
     // 7. Admin API: List Crawl Tasks
     if (path === "/api/admin/tasks" && request.method === "GET") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const statusParam = url.searchParams.get("status");
@@ -1950,7 +2083,7 @@ export default {
 
     // 8. Admin API: Dispatch Single Crawl Task
     if (path === "/api/admin/tasks/create" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -1997,7 +2130,7 @@ export default {
 
     // 9. Admin API: Dispatch Batch Crawl Tasks
     if (path === "/api/admin/tasks/batch" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -2052,7 +2185,7 @@ export default {
 
     // 10. Admin API: Trigger Preset Sweeps
     if (path === "/api/admin/tasks/preset" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -2119,7 +2252,7 @@ export default {
 
     // 11. Admin API: Bulk Heavy Seeder (Enqueues full curated catalogue into Cloudflare Queues/Runner)
     if (path === "/api/admin/tasks/bulk-seed" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -2194,7 +2327,7 @@ export default {
 
     // 11b. Admin API: Massive Simultaneous Bulk Sweep across all tracked companies
     if (path === "/api/admin/tasks/bulk-sweep-all" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -2262,7 +2395,7 @@ export default {
 
     // 11c. Admin API: Weekly Continuous Sweep across tracked companies & ATS boards
     if (path === "/api/admin/tasks/weekly-sweep" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -2334,7 +2467,7 @@ export default {
 
     // 11d. Admin API: Backfill Department Hiring Weights & Primary Departments
     if (path === "/api/admin/companies/backfill-weights" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -2372,7 +2505,7 @@ export default {
     // 12. Admin API: Moderation - Update Job Status
     const jobStatusMatch = path.match(/^\/api\/admin\/jobs\/([^/]+)\/status$/);
     if (jobStatusMatch && request.method === "PATCH") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const jobId = jobStatusMatch[1]!;
@@ -2388,7 +2521,7 @@ export default {
     // 12. Admin API: Moderation - Delete Job
     const jobDeleteMatch = path.match(/^\/api\/admin\/jobs\/([^/]+)$/);
     if (jobDeleteMatch && request.method === "DELETE") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const jobId = jobDeleteMatch[1]!;
@@ -2398,7 +2531,7 @@ export default {
 
     // 12b. Admin API: Continuous JD Reranker Trigger
     if (path === "/api/admin/rerank" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
 
@@ -2425,7 +2558,7 @@ export default {
 
     // 13. Admin API: Harvest from Hacker News "Who is Hiring"
     if (path === "/api/admin/harvest/hn" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -2456,7 +2589,7 @@ export default {
 
     // 14. Admin API: Harvest from GitHub Open Directories (remoteintech & established-remote)
     if (path === "/api/admin/harvest/github" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -2487,7 +2620,7 @@ export default {
 
     // 15. Admin API: Harvest from All Public Sources
     if (path === "/api/admin/harvest/all" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -2518,7 +2651,7 @@ export default {
 
     // 15b. Admin API: Harvest New Grad Roles (SimplifyJobs & Midwest programs)
     if (path === "/api/admin/harvest/newgrad" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -2543,7 +2676,7 @@ export default {
 
     // 15c. Admin API: Harvest Cross-Industry US SMBs
     if (path === "/api/admin/harvest/smb" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
@@ -2584,7 +2717,7 @@ export default {
 
     // 15a. Admin API: Telegram Bot Status & Config
     if (path === "/api/admin/telegram/status" && request.method === "GET") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const [totalUsers, totalAdmins] = await Promise.all([
@@ -2613,7 +2746,7 @@ export default {
 
     // 15a2. Admin API: Full Telegram & System Config (Masked Sensitive Data)
     if (path === "/api/admin/telegram/config" && request.method === "GET") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const token = effectiveConfig.telegramBotToken;
@@ -2638,7 +2771,7 @@ export default {
 
     // 15a3. Admin API: Save Telegram & System Config to D1
     if (path === "/api/admin/telegram/config" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const body = (await request.json().catch(() => ({}))) as {
@@ -2669,12 +2802,7 @@ export default {
       if (body.adminChatId !== undefined) {
         toSave["telegram_admin_chat_id"] = body.adminChatId.trim();
       }
-      if (body.adminToken !== undefined) {
-        const trimmed = body.adminToken.trim();
-        if (trimmed && !trimmed.includes("...")) {
-          toSave["admin_token"] = trimmed;
-        }
-      }
+      // body.adminToken is ignored: the admin token is only the ADMIN_TOKEN Cloudflare secret.
 
       if (Object.keys(toSave).length > 0) {
         await settingsRepo.setMany(toSave);
@@ -2689,7 +2817,7 @@ export default {
 
     // 15a4. Admin API: Telegram Webhook Live Status & Diagnostic
     if (path === "/api/telegram/webhook-info" && request.method === "GET") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const botToken = effectiveConfig.telegramBotToken;
@@ -2708,7 +2836,7 @@ export default {
 
     // 15b. Admin API: List Users & MCP Tokens
     if (path === "/api/admin/users" && request.method === "GET") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const role = url.searchParams.get("role") || undefined;
@@ -2720,7 +2848,7 @@ export default {
     // 15c. Admin API: Update User Role (Grant / Revoke Admin)
     const userRoleMatch = path.match(/^\/api\/admin\/users\/([^/]+)\/role$/);
     if (userRoleMatch && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const userId = decodeURIComponent(userRoleMatch[1]!);
@@ -2732,7 +2860,7 @@ export default {
 
     // 15d. Admin API: Send Test Alert via Telegram Bot
     if (path === "/api/admin/telegram/test-notify" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const botToken = effectiveConfig.telegramBotToken;
@@ -2754,7 +2882,7 @@ export default {
 
     // 15e. Admin API: LLM Feedbacks Moderation & Analysis
     if (path === "/api/admin/feedbacks" && request.method === "GET") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
@@ -2777,7 +2905,7 @@ export default {
     }
 
     if (path === "/api/admin/feedbacks/status" && request.method === "POST") {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const body = (await request.json().catch(() => ({}))) as { id?: string; status?: FeedbackStatus };
@@ -2789,7 +2917,7 @@ export default {
     }
 
     if ((path === "/api/admin/feedbacks/delete" && request.method === "POST") || (path === "/api/admin/feedbacks" && request.method === "DELETE")) {
-      if (!isAuthorized(request, url, env, effectiveConfig.adminToken)) {
+      if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       let id = url.searchParams.get("id");
@@ -2806,6 +2934,9 @@ export default {
 
     // 16. API: Trigger Ingest / Crawl Seed (Public)
     if (path === "/api/crawl/seed" && request.method === "POST") {
+      if (!(await isAuthorized(request, url, env))) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
       try {
         const body = (await request.json()) as { url?: string; source?: string };
         if (!body.url) {

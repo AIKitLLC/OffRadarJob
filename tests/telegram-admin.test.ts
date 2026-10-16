@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 import { UserRepository, JobRepository, CompanyRepository, CrawlTaskRepository, SystemSettingsRepository } from "../src/db/repositories.js";
-import worker, { isTelegramAdmin, DEFAULT_ADMIN_TOKEN } from "../src/index.js";
+import worker, { isTelegramAdmin } from "../src/index.js";
+
+// Test-only admin secret (never a real token).
+const TEST_ADMIN_TOKEN = "test-admin-secret-0123456789abcdef";
 
 describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
   let db: InMemoryD1Database;
@@ -15,7 +18,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
     TELEGRAM_BOT_USERNAME: "OffRadarJobBot",
     TELEGRAM_ADMIN_USERNAMES: "tuannx87,lead_dev",
     TELEGRAM_ADMIN_IDS: "99887766,11223344",
-    ADMIN_TOKEN: "offradar-admin-2026",
+    ADMIN_TOKEN: TEST_ADMIN_TOKEN,
   };
 
   const mockCtx = {
@@ -140,7 +143,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
         message: {
           from: { id: 333444, first_name: "New Admin", username: "newadmin" },
           chat: { id: 333444 },
-          text: `/admin auth ${DEFAULT_ADMIN_TOKEN}`,
+          text: `/admin auth ${TEST_ADMIN_TOKEN}`,
         },
       };
 
@@ -320,7 +323,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
     it("should return Telegram bot status and configured admins via GET /api/admin/telegram/status", async () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/admin/telegram/status", {
-          headers: { "x-admin-token": DEFAULT_ADMIN_TOKEN },
+          headers: { "x-admin-token": TEST_ADMIN_TOKEN },
         }),
         mockEnv as any,
         mockCtx
@@ -339,7 +342,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
     it("should list users via GET /api/admin/users", async () => {
       const res = await worker.fetch(
         new Request("http://localhost/api/admin/users", {
-          headers: { "x-admin-token": DEFAULT_ADMIN_TOKEN },
+          headers: { "x-admin-token": TEST_ADMIN_TOKEN },
         }),
         mockEnv as any,
         mockCtx
@@ -356,7 +359,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
         new Request("http://localhost/api/admin/users/usr_alice/role", {
           method: "POST",
           headers: {
-            "x-admin-token": DEFAULT_ADMIN_TOKEN,
+            "x-admin-token": TEST_ADMIN_TOKEN,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ role: "admin" }),
@@ -402,7 +405,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
 
       const res = await worker.fetch(
         new Request("http://localhost/api/admin/telegram/config", {
-          headers: { "x-admin-token": DEFAULT_ADMIN_TOKEN },
+          headers: { "x-admin-token": TEST_ADMIN_TOKEN },
         }),
         mockEnv as any,
         mockCtx
@@ -422,7 +425,7 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
         new Request("http://localhost/api/admin/telegram/config", {
           method: "POST",
           headers: {
-            "x-admin-token": DEFAULT_ADMIN_TOKEN,
+            "x-admin-token": TEST_ADMIN_TOKEN,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -442,12 +445,13 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       expect(data.success).toBe(true);
       expect(data.updatedKeys).toContain("telegram_bot_token");
       expect(data.updatedKeys).toContain("telegram_bot_username");
-      expect(data.updatedKeys).toContain("admin_token");
+      // adminToken in the body is ignored: the admin token is only the ADMIN_TOKEN secret.
+      expect(data.updatedKeys).not.toContain("admin_token");
 
       // Verify status endpoint reflects new bot username and admins
       const statusRes = await worker.fetch(
         new Request("http://localhost/api/admin/telegram/status", {
-          headers: { "x-admin-token": "secret-master-token-999" }, // Authenticating with new dynamic admin token!
+          headers: { "x-admin-token": TEST_ADMIN_TOKEN }, // only the ADMIN_TOKEN secret authenticates
         }),
         mockEnv as any,
         mockCtx
@@ -458,15 +462,15 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       expect(statusData.configuredAdmins).toContain("new_super_admin");
       expect(statusData.hasBotToken).toBe(true);
 
-      // Verify original default admin token still works (no lock-out)
-      const defaultAuthRes = await worker.fetch(
+      // A token posted to the config endpoint must NOT become a valid admin token.
+      const injectedRes = await worker.fetch(
         new Request("http://localhost/api/admin/telegram/status", {
-          headers: { "x-admin-token": DEFAULT_ADMIN_TOKEN },
+          headers: { "x-admin-token": "secret-master-token-999" },
         }),
         mockEnv as any,
         mockCtx
       );
-      expect(defaultAuthRes.status).toBe(200);
+      expect(injectedRes.status).toBe(401);
     });
 
     it("should return helpful error if webhook setup is called without bot token", async () => {
