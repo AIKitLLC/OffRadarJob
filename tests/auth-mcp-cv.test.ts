@@ -1,3 +1,4 @@
+import { tgEnv, signTelegramLogin, TG_WEBHOOK_HEADERS, TEST_BOT_TOKEN, TEST_WEBHOOK_SECRET } from "./helpers/telegram.js";
 import { describe, it, expect, beforeEach } from "vitest";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 import {
@@ -39,10 +40,10 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
       const req = new Request("http://localhost/api/auth/telegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(signTelegramLogin(payload)),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const data = (await res.json()) as any;
@@ -65,9 +66,9 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         new Request("http://localhost/api/auth/telegram", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: "alice_engineer", first_name: "Alice" }),
+          body: JSON.stringify(signTelegramLogin({ username: "alice_engineer", first_name: "Alice" })),
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       const authData = (await authRes.json()) as any;
@@ -76,7 +77,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
       // 2. Unauthenticated request should fail
       const unauthRes = await worker.fetch(
         new Request("http://localhost/api/user/me"),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(unauthRes.status).toBe(401);
@@ -86,7 +87,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         new Request("http://localhost/api/user/me", {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(authHeaderRes.status).toBe(200);
@@ -96,7 +97,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
       // 4. Logout should clear cookie
       const logoutRes = await worker.fetch(
         new Request("http://localhost/api/auth/logout", { method: "POST" }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(logoutRes.status).toBe(200);
@@ -112,9 +113,9 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         new Request("http://localhost/api/auth/telegram", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: "bob_dev", first_name: "Bob" }),
+          body: JSON.stringify(signTelegramLogin({ username: "bob_dev", first_name: "Bob" })),
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       const data = (await authRes.json()) as any;
@@ -173,7 +174,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
             content: "# Bob - Backend Engineer\n\nExperienced in TypeScript, Node.js, and distributed SQL.",
           }),
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(createRes.status).toBe(201);
@@ -186,7 +187,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         new Request("http://localhost/api/user/cvs", {
           headers: { Authorization: `Bearer ${testToken}` },
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(listRes.status).toBe(200);
@@ -199,7 +200,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         new Request(`http://localhost/api/user/cvs/${cvId}`, {
           headers: { Authorization: `Bearer ${testToken}` },
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(getRes.status).toBe(200);
@@ -219,7 +220,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
             targetRole: "Lead Engineer",
           }),
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(updateRes.status).toBe(200);
@@ -233,7 +234,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
           method: "DELETE",
           headers: { Authorization: `Bearer ${testToken}` },
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       expect(delRes.status).toBe(200);
@@ -243,7 +244,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         new Request("http://localhost/api/user/cvs", {
           headers: { Authorization: `Bearer ${testToken}` },
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       const checkListData = (await checkListRes.json()) as any;
@@ -263,7 +264,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
             customCvContent: "# Bob's Resume\nExperienced in Python, PyTorch, and building AI tools.",
           }),
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
 
@@ -293,9 +294,9 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         new Request("http://localhost/api/auth/telegram", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: "mcp_tester", first_name: "MCP Tester" }),
+          body: JSON.stringify(signTelegramLogin({ username: "mcp_tester", first_name: "MCP Tester" })),
         }),
-        { DB: db } as any,
+        tgEnv({ DB: db }),
         mockCtx
       );
       const data = (await authRes.json()) as any;
@@ -330,7 +331,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
       });
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(401);
     });
 
@@ -352,7 +353,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const data = (await res.json()) as any;
@@ -376,7 +377,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const data = (await res.json()) as any;
@@ -411,7 +412,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const data = (await res.json()) as any;
@@ -442,7 +443,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
         }),
       });
 
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const data = (await res.json()) as any;
@@ -457,7 +458,7 @@ describe("Telegram Auth, CV Management & MCP Server Suite", () => {
   describe("Dashboard Frontend UI Integration", () => {
     it("should render Telegram auth and MCP setup elements in dashboard HTML", async () => {
       const req = new Request("http://localhost/");
-      const res = await worker.fetch(req, { DB: db } as any, mockCtx);
+      const res = await worker.fetch(req, tgEnv({ DB: db }), mockCtx);
       expect(res.status).toBe(200);
 
       const html = await res.text();

@@ -338,7 +338,7 @@ Node.js, PostgreSQL`;
       db = new InMemoryD1Database();
       env = {
         DB: db,
-        ADMIN_TOKEN: "admin-secret-2026",
+        ADMIN_TOKEN: "test-admin-secret-2026-0123456789abcdef",
       };
 
       const userRepo = new UserRepository(db);
@@ -410,7 +410,7 @@ Node.js, PostgreSQL`;
       const req = new Request("http://localhost/api/admin/rerank", {
         method: "POST",
         headers: {
-          "x-admin-token": "admin-secret-2026",
+          "x-admin-token": "test-admin-secret-2026-0123456789abcdef",
         },
       });
 

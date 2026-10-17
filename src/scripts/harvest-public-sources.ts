@@ -24,7 +24,7 @@ function parseArgs(): HarvesterCliOptions {
   let source: "hn" | "github" | "all" = "all";
   let limit = 20;
   let endpoint = "https://off-radar-jobs.tuannx87.workers.dev";
-  let token = "offradar-admin-2026";
+  let token = process.env.OFFRADAR_ADMIN_TOKEN ?? "";
   let previewOnly = false;
 
   for (const arg of args) {
@@ -42,6 +42,11 @@ function parseArgs(): HarvesterCliOptions {
     }
   }
 
+  if (!token) {
+    console.error("Missing admin token: set OFFRADAR_ADMIN_TOKEN or pass --token=...");
+    process.exit(1);
+  }
+
   return { source, limit, endpoint, token, previewOnly };
 }
 
@@ -56,7 +61,7 @@ async function apiCall<T = any>(
   method = "GET",
   body?: unknown
 ): Promise<T> {
-  const url = `${endpoint}${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+  const url = `${endpoint}${path}`;
   const headers: Record<string, string> = {
     "x-admin-token": token,
   };
