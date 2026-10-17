@@ -387,6 +387,17 @@ export async function isAuthorized(request: Request, _url?: URL, env?: Env): Pro
   return ok;
 }
 
+/** Admin listings must not leak user API tokens; keep only the prefix and the last 4 characters. */
+export function maskApiToken(token: string | null | undefined): string {
+  if (!token) return "";
+  return token.length > 8 ? `${token.slice(0, 4)}…${token.slice(-4)}` : "****";
+}
+
+export function maskUserApiToken<T extends { apiToken?: string }>(user: T): Omit<T, "apiToken"> & { apiTokenHint: string } {
+  const { apiToken, ...rest } = user;
+  return { ...rest, apiTokenHint: maskApiToken(apiToken) };
+}
+
 /** Parse TELEGRAM_ADMIN_IDS into numeric Telegram user IDs; non-numeric entries are ignored. */
 export function parseTelegramAdminIds(raw: string | undefined): Set<string> {
   return new Set(
@@ -2999,7 +3010,8 @@ export default {
       const role = url.searchParams.get("role") || undefined;
       const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 100);
       const users = await userRepo.list(limit, role);
-      return Response.json({ users });
+      // Never return raw api_token values: expose only a short, non-usable hint.
+      return Response.json({ users: users.map(maskUserApiToken) });
     }
 
     // 15c. Admin API: Update User Role (Grant / Revoke Admin)

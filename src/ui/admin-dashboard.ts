@@ -970,7 +970,7 @@ export function renderAdminDashboardHtml(): string {
                 <th>Name / First Name</th>
                 <th>Telegram Username</th>
                 <th>Telegram ID</th>
-                <th>Personal MCP Token</th>
+                <th>MCP Token (hint)</th>
                 <th>Joined Date</th>
                 <th>Actions</th>
               </tr>
@@ -1742,7 +1742,7 @@ export function renderAdminDashboardHtml(): string {
 
           var dateStr = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'N/A';
           var tgHandle = u.username ? '@' + escapeHtml(u.username) : '<span style="color:var(--text-muted);">-</span>';
-          var tokenDisplay = u.apiToken ? u.apiToken.slice(0, 10) + '...' : '';
+          var tokenDisplay = u.apiTokenHint || '';
 
           return '<tr>' +
             '<td>' + roleBadge + '</td>' +

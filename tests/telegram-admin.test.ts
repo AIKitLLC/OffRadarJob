@@ -347,6 +347,13 @@ describe("Telegram Bot Admin Suite - RBAC & Command Engine", () => {
       const data = (await res.json()) as any;
       expect(data.users).toBeDefined();
       expect(data.users.length).toBe(2);
+      for (const u of data.users) {
+        expect(u.apiToken).toBeUndefined();
+        expect(typeof u.apiTokenHint).toBe("string");
+      }
+      const body = JSON.stringify(data);
+      expect(body).not.toContain("orp_tuan123");
+      expect(body).not.toContain("orp_alice123");
     });
 
     it("should promote a user to admin via POST /api/admin/users/:id/role", async () => {
