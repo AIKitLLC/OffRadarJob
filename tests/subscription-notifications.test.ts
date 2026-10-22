@@ -279,7 +279,7 @@ describe("Candidate Subscriptions & Automated Notifications Suite", () => {
       const toolNames = res.result.tools.map((t: any) => t.name);
       expect(toolNames).toContain("get_daily_digest");
       expect(toolNames).toContain("manage_job_subscription");
-      expect(toolNames.length).toBe(12);
+      expect(toolNames.length).toBe(16);
     });
 
     it("should execute get_daily_digest tool and return curated openings", async () => {

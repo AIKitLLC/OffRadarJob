@@ -881,6 +881,10 @@ export class JobRepository {
       .run();
   }
 
+  public async replaceSkills(id: string, skills: string[]): Promise<void> {
+    await this.db.prepare("UPDATE jobs SET skills = ? WHERE id = ?").bind(JSON.stringify(skills), id).run();
+  }
+
   public async delete(id: string): Promise<void> {
     await this.db
       .prepare("DELETE FROM jobs WHERE id = ?")
@@ -905,7 +909,7 @@ export class JobRepository {
     const techOnly = options.techOnly !== false ? 1 : 0;
     const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
 
-    let query = `SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")}`;
+    let query = `SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")} AND j.status = 'open'`;
     const bindings: unknown[] = [];
 
     if (techOnly === 1) {
@@ -979,7 +983,7 @@ export class JobRepository {
     const techOnly = options.techOnly !== false ? 1 : 0;
     const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
 
-    let whereClause = `WHERE ${ignoredSourceSql("c")}`;
+    let whereClause = `WHERE ${ignoredSourceSql("c")} AND j.status = 'open'`;
     const bindings: unknown[] = [];
 
     if (techOnly === 1) {
@@ -1116,7 +1120,7 @@ export class JobRepository {
           ) THEN 1 ELSE 0 END) as mountain_count
         FROM jobs j
         LEFT JOIN companies c ON j.company_id = c.id
-        WHERE ${ignoredSourceSql("c")}
+        WHERE ${ignoredSourceSql("c")} AND j.status = 'open'
       `)
       .first<{
         total: number;
@@ -1158,7 +1162,7 @@ export class JobRepository {
           SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) as updated_last_7d
         FROM jobs j
         LEFT JOIN companies c ON j.company_id = c.id
-        WHERE ${ignoredSourceSql("c")}
+        WHERE ${ignoredSourceSql("c")} AND j.status = 'open'
       `)
       .bind(oneDayAgo, oneDayAgo, sevenDaysAgo)
       .first<{
@@ -1178,7 +1182,7 @@ export class JobRepository {
 
   public async count(): Promise<number> {
     const res = await this.db
-      .prepare(`SELECT COUNT(*) as count FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")}`)
+      .prepare(`SELECT COUNT(*) as count FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")} AND j.status = 'open'`)
       .first<{ count: number }>();
     return res?.count ?? 0;
   }
