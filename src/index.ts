@@ -48,6 +48,8 @@ import { SmbHarvester, SMB_CATALOGUE } from "./harvesters/smb-harvester.js";
 import { JdRerankerService } from "./services/jd-reranker.js";
 import { DecisionApiService } from "./services/decision-api.js";
 import { CvTagCloudService } from "./services/cv-tag-cloud.js";
+import { handleCandidateMatchRoutes } from "./http/candidate-match-routes.js";
+import { CandidateMatchService } from "./pipeline/candidate-match-service.js";
 
 export interface KvNamespace {
   get(key: string, type?: "text" | "json"): Promise<any>;
@@ -587,7 +589,8 @@ export default {
       },
       subscriptionRepo,
       decisionApi,
-      rerankerService
+      rerankerService,
+      CandidateMatchService.fromDatabase(env.DB, env.AI)
     );
 
     // Rate limit admin auth attempts per IP (applies to /admin*, /api/admin/*, and admin-gated APIs).
@@ -687,7 +690,7 @@ export default {
       const techOnlyParam = url.searchParams.get("tech_only");
       const techOnly = techOnlyParam === "false" ? false : true;
 
-      const cacheKey = `api:jobs:v6:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:st${state || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
+      const cacheKey = `api:jobs:v7:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:st${state || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
 
       const data = await getOrSetKvCache(env, cacheKey, 120, async () => {
         if (paged) {
@@ -749,7 +752,7 @@ export default {
 
     // 5. API: Stats & Telemetry Logs
     if (path === "/api/stats" && request.method === "GET") {
-      const data = await getOrSetKvCache(env, "api:stats:v7", 60, async () => {
+      const data = await getOrSetKvCache(env, "api:stats:v8", 60, async () => {
         const [companiesCount, jobsCount, jobSummary, recentLogs, freshness] = await Promise.all([
           companyRepo.count(),
           jobRepo.count(),
@@ -3148,6 +3151,18 @@ export default {
       }
     }
 
+    const matchResponse = await handleCandidateMatchRoutes({
+      request,
+      path,
+      db: env.DB,
+      ai: env.AI,
+      getUser: () => getAuthenticatedUser(request, userRepo),
+      authorizeAdmin: () => isAuthorized(request, url, env),
+      logRepo,
+      listJobs: () => jobRepo.list({ limit: 80, techOnly: true }),
+    });
+    if (matchResponse) return matchResponse;
+
     return new Response("Not Found", { status: 404 });
   },
 
@@ -3212,6 +3227,12 @@ export default {
             const extMsg = body as unknown as ExtractMessage;
             const res = await orchestrator.extractorAgent.process(extMsg);
             if (res.ok) {
+              try {
+                const matchService = CandidateMatchService.fromDatabase(env.DB, env.AI);
+                await matchService.runPass(res.value, { maxAiCalls: 2, jobLimit: 30 });
+              } catch (matchError) {
+                console.error("[QueueHandler] Continuous match pass failed:", matchError);
+              }
               msg.ack();
             } else {
               msg.retry();
@@ -3455,6 +3476,24 @@ export default {
           }
         } catch (notifyErr) {
           console.error("[DailyCronTrigger] Daily subscriber notification dispatch failed:", notifyErr);
+        }
+
+        try {
+          const matchService = CandidateMatchService.fromDatabase(env.DB, env.AI);
+          const recentJobs = await jobRepo.list({ limit: 40, techOnly: true });
+          const matchReport = await matchService.runPass(recentJobs, { maxAiCalls: 5, jobLimit: 40 });
+          await logRepo.log({
+            id: `log_match_cron_${Date.now()}`,
+            agentName: "candidate_match",
+            targetUrl: "cron://candidate-match",
+            status: "success",
+            durationMs: 0,
+            message: `Judged ${matchReport.judged} jobs, reused ${matchReport.reused}, surfaced ${matchReport.alertsCreated} new matches.`,
+            metadata: { ...matchReport },
+            createdAt: Date.now(),
+          });
+        } catch (matchError) {
+          console.error("[DailyCronTrigger] Candidate match pass failed:", matchError);
         }
 
         await logRepo.log({

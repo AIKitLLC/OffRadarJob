@@ -107,9 +107,48 @@ OffRadarJob exposes standard MCP tools for AI IDEs (Claude Desktop, Antigravity,
 - **AI Inference**: Cloudflare Workers AI (`@cf/meta/llama-3.3-70b-instruct`)
 - **Queue & Storage**: Cloudflare Queues, Vectorize
 - **Language**: TypeScript (Strict Mode, `exactOptionalPropertyTypes: true`)
-- **Test Framework**: Vitest (17 suites, 178 automated unit, integration, and red-team tests)
+- **Test Framework**: Vitest (23 files, 257 automated unit, integration, and red-team tests)
 
 ---
+
+## Candidate profiles and continuous filters
+
+A profile is CV text or structured fields: skills, seniority, locations, remote preference (`required`, `preferred`, `any`), and sponsorship preference (`required`, `not_needed`, `any`). Matching is deterministic. Each open job gets a 0–100 score and a reason for skills, seniority, location, remote, and visa-sponsorship wording. Design notes are in [docs/adr/0001-cv-job-matching.md](docs/adr/0001-cv-job-matching.md), [docs/adr/0002-job-quality-decision.md](docs/adr/0002-job-quality-decision.md), and [docs/adr/0003-continuous-new-match-filters.md](docs/adr/0003-continuous-new-match-filters.md).
+
+Apply the storage migration before use:
+
+```bash
+npx wrangler d1 execute DB --local --file=migrations/0016_candidate_profiles_quality_and_match_alerts.sql
+```
+
+Authenticate with the user API token (`Authorization: Bearer orp_...`), then save a profile and a filter. The sample below is synthetic.
+
+```bash
+curl -X POST "$ORIGIN/api/user/candidate-profiles" \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "label": "Edge platform profile",
+    "text": "Jordan Hale\nSenior Software Engineer\nLocation: Chicago, IL\nOpen to remote.\nRequires visa sponsorship.\nSkills: TypeScript, Cloudflare Workers, PostgreSQL, React"
+  }'
+
+curl -X POST "$ORIGIN/api/user/job-filters" \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "profileId": "PROFILE_ID",
+    "keywords": ["TypeScript"],
+    "seniorityLevels": ["senior"],
+    "locations": ["Chicago"],
+    "remote": "preferred",
+    "sponsorship": "required",
+    "minScore": 70
+  }'
+```
+
+`POST /api/match` with `{ "profileId": "..." }` or `{ "profile": { "text": "..." } }` returns the ranked jobs and reasons. `POST /api/user/match-alerts/scan` runs the saved filters against recent open jobs and returns only new alerts. Repeating the scan does not create a second alert for the same profile, job, and content hash. `GET /api/user/match-alerts` lists them.
+
+Gathered jobs are also classified on the extract queue and the daily cron. Rules drop spam, duplicates, and stale postings, keep complete postings, and enrich sparse skill lists from the posting text. A Workers AI judge (`@cf/meta/llama-3.1-8b-instruct`, temperature 0) runs only for the review band, and the decision is stored in `job_quality_decisions`. `POST /api/admin/quality/run` runs a bounded pass with the admin token. MCP tools: `rank_jobs_for_profile`, `save_candidate_profile`, `save_job_filter`, `list_new_match_alerts`.
 
 ## 🚀 Getting Started
 
@@ -150,7 +189,7 @@ npm run deploy
 
 ### Testing & Type Checking
 ```bash
-# Run full Vitest suite (178 tests across 17 test files)
+# Run full Vitest suite (257 tests across 23 test files)
 npm test
 
 # Verify strict TypeScript types

@@ -19,6 +19,7 @@ import {
 } from "../types/domain.js";
 import { JdRerankerService } from "../services/jd-reranker.js";
 import { DecisionApiService } from "../services/decision-api.js";
+import { CandidateMatchService } from "../pipeline/candidate-match-service.js";
 
 /**
  * Model Context Protocol (MCP) Server for Off-Radar Jobs
@@ -36,7 +37,8 @@ export class McpServerHandler {
     private readonly onFeedbackCreated?: (feedback: LlmFeedback, user: User) => Promise<void>,
     private readonly subscriptionRepo?: UserSubscriptionRepository,
     decisionApi?: DecisionApiService,
-    rerankerService?: JdRerankerService
+    rerankerService?: JdRerankerService,
+    private readonly candidateMatch?: CandidateMatchService
   ) {
     this.decisionApi = decisionApi || new DecisionApiService();
     this.rerankerService = rerankerService || new JdRerankerService();
@@ -431,6 +433,57 @@ export class McpServerHandler {
           type: "object",
           properties: {},
         },
+      },
+      {
+        name: "rank_jobs_for_profile",
+        description: "Score and rank open jobs against a saved candidate profile or an inline CV profile. Explains skill, seniority, location, remote, and visa sponsorship reasons.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            profile_id: { type: "string", description: "Saved candidate profile id" },
+            profile: { type: "object", description: "Inline profile with text or structured skills, seniority, locations, remote, and sponsorship" },
+            limit: { type: "number", description: "Maximum matches to return (default 10, max 25)" },
+          },
+        },
+      },
+      {
+        name: "save_candidate_profile",
+        description: "Save a candidate profile parsed from CV text or structured fields. Use synthetic or user-provided profile text only.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            label: { type: "string" },
+            text: { type: "string", description: "CV or profile text" },
+            skills: { type: "array", items: { type: "string" } },
+            seniority: { type: "string" },
+            locations: { type: "array", items: { type: "string" } },
+            remote: { type: "string", enum: ["required", "preferred", "any"] },
+            sponsorship: { type: "string", enum: ["required", "not_needed", "any"] },
+            keywords: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+      {
+        name: "save_job_filter",
+        description: "Save a continuous filter for a candidate profile. New jobs that pass it are surfaced once.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            profileId: { type: "string" },
+            keywords: { type: "array", items: { type: "string" } },
+            seniorityLevels: { type: "array", items: { type: "string" } },
+            locations: { type: "array", items: { type: "string" } },
+            remote: { type: "string", enum: ["required", "preferred", "any"] },
+            sponsorship: { type: "string", enum: ["required", "any"] },
+            minScore: { type: "number" },
+          },
+          required: ["profileId"],
+        },
+      },
+      {
+        name: "list_new_match_alerts",
+        description: "List match alerts already surfaced for the authenticated user. Does not create duplicates.",
+        inputSchema: { type: "object", properties: {} },
       },
     ];
   }
@@ -1015,9 +1068,58 @@ export class McpServerHandler {
         };
       }
 
+      case "rank_jobs_for_profile": {
+        const service = this.requireCandidateMatch();
+        const ranked = await service.rank(user.id, {
+          profileId: args.profile_id ?? args.profileId,
+          profile: args.profile,
+          limit: args.limit,
+        });
+        return {
+          matches: ranked.matches.map((entry) => ({
+            job_id: entry.job.id,
+            title: entry.job.title,
+            score: entry.match.total,
+            factors: entry.match.factors,
+            reasons: entry.match.reasons,
+          })),
+        };
+      }
+
+      case "save_candidate_profile": {
+        const service = this.requireCandidateMatch();
+        const saved = await service.saveProfile(user.id, args);
+        return { id: saved.id, label: saved.label, profile: saved.profile };
+      }
+
+      case "save_job_filter": {
+        const service = this.requireCandidateMatch();
+        const saved = await service.saveFilter(user.id, {
+          profileId: args.profileId ?? args.profile_id,
+          keywords: args.keywords,
+          seniorityLevels: args.seniorityLevels ?? args.seniority_levels,
+          locations: args.locations,
+          remote: args.remote,
+          sponsorship: args.sponsorship,
+          minScore: args.minScore ?? args.min_score,
+        });
+        return saved;
+      }
+
+      case "list_new_match_alerts": {
+        const service = this.requireCandidateMatch();
+        const alerts = await service.listAlerts(user.id);
+        return { alerts };
+      }
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
+  }
+
+  private requireCandidateMatch(): CandidateMatchService {
+    if (!this.candidateMatch) throw new Error("Candidate matching is not configured");
+    return this.candidateMatch;
   }
 
   public getPromptDefinitions() {

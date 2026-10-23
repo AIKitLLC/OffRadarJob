@@ -22,6 +22,10 @@ export class InMemoryD1Database implements ID1Database {
     this.tables.set("system_settings", new Map());
     this.tables.set("llm_feedbacks", new Map());
     this.tables.set("user_subscriptions", new Map());
+    this.tables.set("candidate_profiles", new Map());
+    this.tables.set("saved_job_filters", new Map());
+    this.tables.set("job_quality_decisions", new Map());
+    this.tables.set("match_alerts", new Map());
   }
 
   public prepare(query: string): ID1PreparedStatement {
@@ -279,6 +283,9 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
     if (q.includes("FROM jobs")) {
       let rows = Array.from(this.db.tables.get("jobs")!.values());
       if (sourcePolicyApplied(q)) rows = rows.filter(visibleJob);
+      if (q.includes("j.status = 'open'") || q.includes("status = 'open'")) {
+        rows = rows.filter((row) => String(row["status"] ?? "open") === "open");
+      }
 
       let bindingIdx = 0;
       if (q.includes("is_tech_role = 1")) {
@@ -721,6 +728,71 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: filtered as T[], success: true };
     }
 
+    if (q.includes("FROM candidate_profiles") && q.includes("WHERE id = ?") && q.includes("user_id = ?")) {
+      const [id, userId] = this.boundValues;
+      const row = this.db.tables.get("candidate_profiles")!.get(String(id));
+      if (row && row["user_id"] === String(userId)) return { results: [row as T], success: true };
+      return { results: [], success: true };
+    }
+
+    if (q.includes("FROM candidate_profiles") && q.includes("user_id = ?")) {
+      const userId = String(this.boundValues[0]);
+      const rows = Array.from(this.db.tables.get("candidate_profiles")!.values()).filter((row) => row["user_id"] === userId);
+      return { results: rows as T[], success: true };
+    }
+
+    if (q.includes("FROM candidate_profiles")) {
+      const rows = Array.from(this.db.tables.get("candidate_profiles")!.values());
+      return { results: rows as T[], success: true };
+    }
+
+    if (q.includes("FROM saved_job_filters") && q.includes("WHERE id = ?") && !q.includes("user_id = ?")) {
+      const row = this.db.tables.get("saved_job_filters")!.get(String(this.boundValues[0]));
+      return { results: row ? [row as T] : [], success: true };
+    }
+
+    if (q.includes("FROM saved_job_filters") && q.includes("user_id = ?")) {
+      const userId = String(this.boundValues[0]);
+      const rows = Array.from(this.db.tables.get("saved_job_filters")!.values()).filter((row) => row["user_id"] === userId);
+      return { results: rows as T[], success: true };
+    }
+
+    if (q.includes("FROM saved_job_filters") && q.includes("is_active = 1")) {
+      const rows = Array.from(this.db.tables.get("saved_job_filters")!.values()).filter((row) => Number(row["is_active"]) === 1);
+      return { results: rows as T[], success: true };
+    }
+
+    if (q.includes("FROM job_quality_decisions") && q.includes("job_id = ?") && q.includes("content_hash = ?")) {
+      const [jobId, contentHash, rulesetVersion] = this.boundValues;
+      const rows = Array.from(this.db.tables.get("job_quality_decisions")!.values()).filter(
+        (row) => row["job_id"] === String(jobId) && row["content_hash"] === String(contentHash) && row["ruleset_version"] === String(rulesetVersion)
+      );
+      return { results: rows as T[], success: true };
+    }
+
+    if (q.includes("FROM job_quality_decisions") && q.includes("COUNT(*)")) {
+      const count = this.db.tables.get("job_quality_decisions")!.size;
+      return { results: [{ count } as T], success: true };
+    }
+
+    if (q.includes("FROM match_alerts") && q.includes("alert_key = ?")) {
+      const alertKey = String(this.boundValues[0]);
+      const rows = Array.from(this.db.tables.get("match_alerts")!.values()).filter((row) => row["alert_key"] === alertKey);
+      return { results: rows as T[], success: true };
+    }
+
+    if (q.includes("FROM match_alerts") && q.includes("job_id = ?")) {
+      const jobId = String(this.boundValues[0]);
+      const rows = Array.from(this.db.tables.get("match_alerts")!.values()).filter((row) => row["job_id"] === jobId);
+      return { results: rows as T[], success: true };
+    }
+
+    if (q.includes("FROM match_alerts") && q.includes("user_id = ?")) {
+      const userId = String(this.boundValues[0]);
+      const rows = Array.from(this.db.tables.get("match_alerts")!.values()).filter((row) => row["user_id"] === userId);
+      return { results: rows as T[], success: true };
+    }
+
     return { results: [], success: true };
   }
 
@@ -906,6 +978,13 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       };
       this.db.tables.get("crawl_logs")!.set(String(id), record);
       return { success: true };
+    }
+
+    if (q.includes("UPDATE jobs SET skills = ?")) {
+      const [skills, id] = this.boundValues;
+      const existing = this.db.tables.get("jobs")!.get(String(id));
+      if (existing) existing["skills"] = String(skills);
+      return { success: true, meta: { changes: existing ? 1 : 0 } };
     }
 
     // UPDATE jobs SET status = ?, last_seen_at = ? WHERE id = ?
@@ -1254,6 +1333,132 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         }
       }
       return { success: true, meta: { changes } };
+    }
+
+    if (q.includes("INTO candidate_profiles")) {
+      const [id, userId, label, profileJson, sourceCvId, createdAt, updatedAt] = this.boundValues;
+      const table = this.db.tables.get("candidate_profiles")!;
+      const existing = table.get(String(id));
+      table.set(String(id), {
+        id: String(id),
+        user_id: String(userId),
+        label: String(label),
+        profile_json: String(profileJson),
+        source_cv_id: sourceCvId ?? null,
+        created_at: existing ? existing["created_at"] : Number(createdAt),
+        updated_at: Number(updatedAt),
+      });
+      return { success: true, meta: { changes: 1 } };
+    }
+
+    if (q.includes("DELETE FROM candidate_profiles WHERE id = ? AND user_id = ?")) {
+      const [id, userId] = this.boundValues;
+      const table = this.db.tables.get("candidate_profiles")!;
+      const row = table.get(String(id));
+      if (row && row["user_id"] === String(userId)) {
+        table.delete(String(id));
+        return { success: true, meta: { changes: 1 } };
+      }
+      return { success: true, meta: { changes: 0 } };
+    }
+
+    if (q.includes("INTO saved_job_filters")) {
+      const [id, userId, profileId, filterJson, isActive, createdAt, updatedAt] = this.boundValues;
+      const table = this.db.tables.get("saved_job_filters")!;
+      const existing = table.get(String(id));
+      table.set(String(id), {
+        id: String(id),
+        user_id: String(userId),
+        profile_id: String(profileId),
+        filter_json: String(filterJson),
+        is_active: Number(isActive),
+        created_at: existing ? existing["created_at"] : Number(createdAt),
+        updated_at: Number(updatedAt),
+      });
+      return { success: true, meta: { changes: 1 } };
+    }
+
+    if (q.includes("DELETE FROM saved_job_filters WHERE id = ? AND user_id = ?")) {
+      const [id, userId] = this.boundValues;
+      const table = this.db.tables.get("saved_job_filters")!;
+      const row = table.get(String(id));
+      if (row && row["user_id"] === String(userId)) {
+        table.delete(String(id));
+        return { success: true, meta: { changes: 1 } };
+      }
+      return { success: true, meta: { changes: 0 } };
+    }
+
+    if (q.includes("INTO job_quality_decisions")) {
+      const [
+        id,
+        jobId,
+        contentHash,
+        action,
+        qualityScore,
+        authenticity,
+        sponsorshipSignal,
+        rulesetVersion,
+        decisionKey,
+        source,
+        recordJson,
+        createdAt,
+      ] = this.boundValues;
+      const table = this.db.tables.get("job_quality_decisions")!;
+      for (const row of table.values()) {
+        if (row["job_id"] === String(jobId) && row["content_hash"] === String(contentHash) && row["ruleset_version"] === String(rulesetVersion)) {
+          return { success: true, meta: { changes: 0 } };
+        }
+      }
+      table.set(String(id), {
+        id: String(id),
+        job_id: String(jobId),
+        content_hash: String(contentHash),
+        action: String(action),
+        quality_score: Number(qualityScore),
+        authenticity: String(authenticity),
+        sponsorship_signal: String(sponsorshipSignal),
+        ruleset_version: String(rulesetVersion),
+        decision_key: String(decisionKey),
+        source: String(source),
+        record_json: String(recordJson),
+        created_at: Number(createdAt),
+      });
+      return { success: true, meta: { changes: 1 } };
+    }
+
+    if (q.includes("DELETE FROM job_quality_decisions WHERE job_id = ?")) {
+      const [jobId, contentHash, rulesetVersion] = this.boundValues;
+      const table = this.db.tables.get("job_quality_decisions")!;
+      let changes = 0;
+      for (const [key, row] of table.entries()) {
+        if (row["job_id"] === String(jobId) && row["content_hash"] === String(contentHash) && row["ruleset_version"] === String(rulesetVersion)) {
+          table.delete(key);
+          changes += 1;
+        }
+      }
+      return { success: true, meta: { changes } };
+    }
+
+    if (q.includes("INTO match_alerts")) {
+      const [id, alertKey, userId, profileId, filterId, jobId, contentHash, score, reasonsJson, createdAt] = this.boundValues;
+      const table = this.db.tables.get("match_alerts")!;
+      for (const row of table.values()) {
+        if (row["alert_key"] === String(alertKey)) return { success: true, meta: { changes: 0 } };
+      }
+      table.set(String(id), {
+        id: String(id),
+        alert_key: String(alertKey),
+        user_id: String(userId),
+        profile_id: String(profileId),
+        filter_id: String(filterId),
+        job_id: String(jobId),
+        content_hash: String(contentHash),
+        score: Number(score),
+        reasons_json: String(reasonsJson),
+        created_at: Number(createdAt),
+      });
+      return { success: true, meta: { changes: 1 } };
     }
 
     // UPDATE user_subscriptions SET last_notified_at = ?, updated_at = ? WHERE id = ?
