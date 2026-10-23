@@ -1,0 +1,108 @@
+# Pull requests install dependencies, typecheck, and run Vitest.
+# A failed check fails the workflow.
+# A push to main, or a manual run from main, repeats those checks, applies
+# remote D1 migrations, then deploys. A failed migration does not deploy.
+# Actions are pinned to the commit of a release tag.
+# No default token scopes; each job grants only contents: read.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    name: typecheck and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+
+  deploy:
+    name: migrate and deploy
+    needs: check
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify Cloudflare credentials
+        id: cf_creds
+        run: |
+          node --input-type=module <<'EOF'
+          import { appendFileSync, readFileSync } from "node:fs";
+
+          const token = process.env.CLOUDFLARE_API_TOKEN ?? "";
+          const accountFromSecret = process.env.CLOUDFLARE_ACCOUNT_ID ?? "";
+          const ghOutput = process.env.GITHUB_OUTPUT ?? "";
+          if (token.length === 0 || accountFromSecret.length === 0) {
+            console.log("::notice::Skipping automated Cloudflare deploy: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are not set in the production environment yet.");
+            if (ghOutput) appendFileSync(ghOutput, "configured=false\n");
+            process.exit(0);
+          }
+
+          const config = readFileSync("wrangler.jsonc", "utf8");
+          const match = config.match(/"account_id"\s*:\s*"([^"]+)"/);
+          if (!match) {
+            console.error("wrangler.jsonc is missing account_id.");
+            process.exit(1);
+          }
+
+          if (accountFromSecret !== match[1]) {
+            console.error("CLOUDFLARE_ACCOUNT_ID does not match account_id in wrangler.jsonc.");
+            process.exit(1);
+          }
+          if (ghOutput) appendFileSync(ghOutput, "configured=true\n");
+          EOF
+      - name: Apply D1 migrations
+        if: steps.cf_creds.outputs.configured == 'true'
+        run: npm exec -- wrangler d1 migrations apply off_radar_db --remote
+      - name: Deploy Worker
+        if: steps.cf_creds.outputs.configured == 'true'
+        run: npm run deploy

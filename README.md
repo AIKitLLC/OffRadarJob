@@ -196,6 +196,30 @@ npm test
 npm run typecheck
 ```
 
+### Continuous integration
+
+Pull requests run `npm ci`, `npm run typecheck`, and `npm test`. A failure fails the workflow.
+
+A push to `main`, or a manual run of the CI workflow from `main`, repeats those checks, applies remote D1 migrations (`wrangler d1 migrations apply off_radar_db --remote`), then runs `npm run deploy`. Migrations run first. A migration failure stops the deploy. The deploy job uses the GitHub Environment `production` and a concurrency group of the same name, so production deploys do not overlap. Manual runs from any other branch run the checks only.
+
+Store these Actions secrets on the `production` environment. Do not commit the values.
+
+| Secret | Role |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Authenticates Wrangler. |
+| `CLOUDFLARE_ACCOUNT_ID` | Account that owns the Worker and D1 database. Wrangler uses `account_id` from `wrangler.jsonc` when that field is set, and the workflow stops unless this secret is the same account. |
+
+Create the token for that account only. This Wrangler config needs these permissions:
+
+- **Account → Workers Scripts → Edit** — deploy the Worker, cron triggers, the Durable Object migration, and the Workers AI, KV, and queue-producer bindings.
+- **Account → D1 → Edit** — apply migrations to the remote `off_radar_db` database.
+- **Account → Queues → Edit** — confirm the configured queues exist and create or update their consumers, including the dead-letter queue setting.
+- **Zone → Workers Routes → Edit** — publish the custom domain in `wrangler.jsonc`. Scope this to that zone.
+
+Workers AI, KV, and Durable Objects are attached as bindings on the script upload, so they do not add token permissions. The queues named in `wrangler.jsonc` must already exist.
+
+Before the first deploy from `main`, confirm the remote database's `d1_migrations` history matches `migrations/`. Schema that was loaded with `wrangler d1 execute` is not recorded there, and the first apply will fail closed instead of deploying. `wrangler deploy` keeps Worker secrets and replaces plain-text vars with the `vars` in `wrangler.jsonc`. In non-interactive CI it also republishes the custom domain and overwrites a conflicting DNS record for that hostname.
+
 ---
 
 ## 🤖 Contributing & Agent Guidelines
