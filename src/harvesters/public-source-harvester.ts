@@ -626,6 +626,15 @@ export class GitHubDirectoryHarvester {
 // 3. Y Combinator Active Startups Harvester
 // -----------------------------------------------------------------------------
 
+/** The public directory is a JSON array. Some responses wrap it, and stubs may not. */
+function companyDirectoryEntries(payload: unknown): any[] | null {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === "object" && Array.isArray((payload as { companies?: unknown }).companies)) {
+    return (payload as { companies: any[] }).companies;
+  }
+  return null;
+}
+
 export class YcHarvester {
   public async harvestYcStartups(limit = 20): Promise<HarvestedCompanyProfile[]> {
     try {
@@ -634,7 +643,8 @@ export class YcHarvester {
       });
       if (!res.ok) return [];
 
-      const list = (await res.json()) as any[];
+      const list = companyDirectoryEntries(await res.json());
+      if (!list) return [];
       const activeList = list.filter((c) => c.status === "Active" && c.website);
       const dayOfMonth = new Date().getUTCDate();
       const startIndex = (dayOfMonth * limit) % Math.max(1, activeList.length - limit);

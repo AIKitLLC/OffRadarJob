@@ -21,8 +21,16 @@ import {
   ADMIN_AUTH_WINDOW_MS,
   type LimiterNamespaceLike,
 } from "./durable/admin-auth-limiter.js";
+import {
+  MatchScanLimiter,
+  MATCH_SCAN_LIMIT,
+  MATCH_SCAN_WINDOW_MS,
+  consumeUserMatchScan,
+  resetMatchScanRateLimit,
+} from "./durable/match-scan-limiter.js";
 
 export { AdminAuthLimiter, ADMIN_AUTH_MAX_FAILURES, ADMIN_AUTH_WINDOW_MS };
+export { MatchScanLimiter, MATCH_SCAN_LIMIT, MATCH_SCAN_WINDOW_MS, resetMatchScanRateLimit };
 import { PipelineOrchestrator } from "./orchestrator/dispatcher.js";
 import {
   DiscoveryMessage,
@@ -69,6 +77,8 @@ export interface Env {
   ADMIN_SESSION_SECRET?: string;
   /** SQLite-backed Durable Object namespace that stores failed admin auth attempts. */
   ADMIN_AUTH_LIMITER?: LimiterNamespaceLike;
+  /** SQLite-backed Durable Object namespace that rate-limits match-alert scans per user. */
+  MATCH_SCAN_LIMITER?: LimiterNamespaceLike;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_BOT_USERNAME?: string;
   /** Comma-separated numeric Telegram user IDs that have bot admin rights. */
@@ -380,12 +390,29 @@ function rateLimitedResponse(): Response {
   );
 }
 
-export async function isAuthorized(request: Request, _url?: URL, env?: Env): Promise<boolean> {
+function presentedAdminCredential(request: Request): { header: string; cookie: string } {
   const auth = request.headers.get("Authorization") ?? "";
-  const tokenHeader = request.headers.get("x-admin-token") || (auth.startsWith("Bearer ") ? auth.slice(7) : "");
+  const header = request.headers.get("x-admin-token") || (auth.startsWith("Bearer ") ? auth.slice(7) : "");
   const cookieHeader = request.headers.get("Cookie") || "";
   const matchCookie = cookieHeader.match(new RegExp(`(?:^|;\\s*)${ADMIN_COOKIE_NAME}=([^;]+)`));
-  const tokenCookie = matchCookie ? decodeURIComponent(matchCookie[1]!) : "";
+  const cookie = matchCookie ? decodeURIComponent(matchCookie[1]!) : "";
+  return { header, cookie };
+}
+
+/**
+ * Whether this request already has a valid admin session or header token.
+ * Does not record a failed attempt: loading the public homepage must not
+ * count toward the admin auth limiter.
+ */
+export async function viewerIsAdmin(request: Request, env?: Env): Promise<boolean> {
+  const { header, cookie } = presentedAdminCredential(request);
+  if (header) return verifyAdminToken(env, header);
+  if (!cookie) return false;
+  return verifyAdminSession(env, cookie);
+}
+
+export async function isAuthorized(request: Request, _url?: URL, env?: Env): Promise<boolean> {
+  const { header: tokenHeader, cookie: tokenCookie } = presentedAdminCredential(request);
   const provided = tokenHeader || tokenCookie;
   const ok = tokenHeader ? await verifyAdminToken(env, tokenHeader) : await verifyAdminSession(env, tokenCookie);
   // Only count attempts that actually presented a credential.
@@ -647,8 +674,13 @@ export default {
       } catch (err) {
         console.warn("Dashboard SSR stats unavailable:", err);
       }
-      return new Response(renderDashboardHtml(dashboardStats), {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+      const includeAdminLink = await viewerIsAdmin(request, env);
+      return new Response(renderDashboardHtml(dashboardStats, { includeAdminLink }), {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "private, no-store",
+          Vary: "Cookie",
+        },
       });
     }
 
@@ -3176,6 +3208,7 @@ export default {
       authorizeAdmin: () => isAuthorized(request, url, env),
       logRepo,
       listJobs: () => jobRepo.list({ limit: 80, techOnly: true }),
+      consumeMatchScan: (userId) => consumeUserMatchScan(env, userId),
     });
     if (matchResponse) return matchResponse;
 

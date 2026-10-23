@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 import {
   HackerNewsHarvester,
   GitHubDirectoryHarvester,
+  YcHarvester,
   PublicSourceManager,
   HarvestedCompanyProfile,
   decodeHtmlEntities,
@@ -165,6 +166,35 @@ ReactJs, Docker, Django, Python
       expect(profile?.description).toContain("Adaface helps companies identify top engineers");
       expect(profile?.techStack).toContain("Python");
       expect(profile?.techStack).toContain("Docker");
+    });
+  });
+
+  describe("YcHarvester directory payload", () => {
+    const previousFetch = globalThis.fetch;
+    afterEach(() => {
+      globalThis.fetch = previousFetch;
+    });
+
+    it("reads an array of companies", async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify([
+            { status: "Active", website: "https://northwind.example", name: "Northwind", one_liner: "Tools" },
+            { status: "Inactive", website: "https://old.example", name: "Old" },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      const profiles = await new YcHarvester().harvestYcStartups(5);
+      expect(profiles.map((profile) => profile.domain)).toEqual(["northwind.example"]);
+    });
+
+    it("returns no companies when the payload is not a list", async () => {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify({ hits: [], items: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      await expect(new YcHarvester().harvestYcStartups(5)).resolves.toEqual([]);
     });
   });
 
