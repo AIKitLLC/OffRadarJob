@@ -4,6 +4,7 @@ import { User } from "../types/domain.js";
 import { CandidateMatchService, MatchRequestError } from "../pipeline/candidate-match-service.js";
 import { WorkersAiBinding } from "../quality/quality-judge.js";
 import { Job } from "../types/domain.js";
+import type { MatchScanDecision } from "../durable/match-scan-limiter.js";
 
 export async function handleCandidateMatchRoutes(input: {
   request: Request;
@@ -14,6 +15,7 @@ export async function handleCandidateMatchRoutes(input: {
   authorizeAdmin: () => Promise<boolean>;
   logRepo: LogRepository;
   listJobs: () => Promise<Job[]>;
+  consumeMatchScan?: (userId: string) => Promise<MatchScanDecision>;
 }): Promise<Response | null> {
   const { path, request } = input;
   const handled =
@@ -80,6 +82,15 @@ export async function handleCandidateMatchRoutes(input: {
       return Response.json({ items: await service.listAlerts(user.id) });
     }
     if (path === "/api/user/match-alerts/scan" && request.method === "POST") {
+      if (input.consumeMatchScan) {
+        const decision = await input.consumeMatchScan(user.id);
+        if (!decision.allowed) {
+          return Response.json(
+            { error: "Too many requests" },
+            { status: 429, headers: { "Retry-After": String(decision.retryAfterSeconds) } }
+          );
+        }
+      }
       const jobs = await input.listJobs();
       const report = await service.runPass(jobs, { userId: user.id, maxAiCalls: 0, jobLimit: 40 });
       return Response.json({ success: true, report, alerts: await service.listAlerts(user.id) });

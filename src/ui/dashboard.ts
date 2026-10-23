@@ -22,10 +22,18 @@ function ssrCount(value: number | undefined | null): string {
  * rendered on the server so crawlers and no-JS clients see real values. Without data, the
  * counter grid is hidden and region counts are left empty until /api/stats returns data.
  */
-export function renderDashboardHtml(stats?: PublicDashboardStats | null): string {
+export interface DashboardRenderOptions {
+  /** Include the admin entry link. Omit for anyone who is not an admin. */
+  includeAdminLink?: boolean;
+}
+
+export function renderDashboardHtml(stats?: PublicDashboardStats | null, options?: DashboardRenderOptions): string {
   const hasStats = !!stats && stats.jobsCount > 0;
   const rb = hasStats ? stats!.regionalBreakdown : undefined;
   const midwestPct = hasStats && rb && rb.midwest > 0 ? `${stats!.midwestPercent}%` : "";
+  const adminLink = options?.includeAdminLink
+    ? `<a href="/admin" id="admin-link" style="text-decoration: none; color: #38bdf8; font-size: 13px; font-weight: 600; padding: 6px 14px; border: 1px solid #1f2a44; border-radius: 8px; background: #131b2e;">⚙️ Admin</a>`
+    : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -855,7 +863,7 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null): string
         <div id="auth-section" style="display: flex; align-items: center; gap: 8px;">
           <!-- Populated by JS -->
         </div>
-        <a href="/admin" id="admin-link" data-admin-only hidden style="text-decoration: none; color: #38bdf8; font-size: 13px; font-weight: 600; padding: 6px 14px; border: 1px solid #1f2a44; border-radius: 8px; background: #131b2e;">⚙️ Admin</a>
+        ${adminLink}
         <div class="status-badge">
           <span class="status-dot"></span>
           Edge Active
