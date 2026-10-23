@@ -144,27 +144,32 @@ describe("/admin login flow", () => {
 });
 
 describe("public dashboard hides admin controls", () => {
-  it("omits the admin link for anonymous visitors and keeps seed ingest hidden", async () => {
+  it("omits the admin link, seed ingest, and admin session request for anonymous visitors", async () => {
     const res = await call("/");
     const html = await res.text();
     expect(res.headers.get("Cache-Control")).toContain("private");
     expect(html).not.toMatch(/<a[^>]*href="\/admin"/);
-    expect(html).toMatch(/id="seed-ingest" data-admin-only hidden/);
+    expect(html).not.toContain('id="seed-ingest"');
+    expect(html).not.toContain("/api/admin/session");
   });
 
-  it("includes the admin link only after a valid admin session", async () => {
+  it("includes the admin link and seed ingest only after a valid admin session", async () => {
     const form = new FormData();
     form.set("token", SECRET);
     const login = await call("/admin/login", { method: "POST", body: form });
     const session = login.headers.get("Set-Cookie")!.split(";")[0]!;
     const html = await (await call("/", { headers: { Cookie: session } })).text();
     expect(html).toMatch(/<a href="\/admin" id="admin-link"/);
+    expect(html).toContain('id="seed-ingest"');
+    expect(html).not.toContain("/api/admin/session");
   });
 
   it("a bad admin cookie does not reveal the link or consume the auth limiter", async () => {
     for (let i = 0; i < ADMIN_AUTH_MAX_FAILURES + 2; i++) {
       const html = await (await call("/", { headers: { Cookie: `${ADMIN_COOKIE_NAME}=not-a-session` } })).text();
       expect(html).not.toMatch(/<a[^>]*href="\/admin"/);
+      expect(html).not.toContain('id="seed-ingest"');
+      expect(html).not.toContain("/api/admin/session");
     }
     expect((await call("/api/admin/stats", { headers: { "x-admin-token": SECRET } })).status).toBe(200);
   });

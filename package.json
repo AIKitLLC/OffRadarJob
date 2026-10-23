@@ -14,7 +14,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "NODE_OPTIONS=\"--experimental-sqlite${NODE_OPTIONS:+ $NODE_OPTIONS}\" node --experimental-sqlite ./node_modules/vitest/vitest.mjs run",
     "demo": "tsx src/demo/local-runner.ts",
     "feed:continuous": "tsx src/scripts/continuous-batch-feeder.ts",
     "harvest:public": "tsx src/scripts/harvest-public-sources.ts",

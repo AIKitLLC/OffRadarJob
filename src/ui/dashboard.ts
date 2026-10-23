@@ -31,8 +31,27 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
   const hasStats = !!stats && stats.jobsCount > 0;
   const rb = hasStats ? stats!.regionalBreakdown : undefined;
   const midwestPct = hasStats && rb && rb.midwest > 0 ? `${stats!.midwestPercent}%` : "";
-  const adminLink = options?.includeAdminLink
+  const showAdmin = options?.includeAdminLink === true;
+  const adminLink = showAdmin
     ? `<a href="/admin" id="admin-link" style="text-decoration: none; color: #38bdf8; font-size: 13px; font-weight: 600; padding: 6px 14px; border: 1px solid #1f2a44; border-radius: 8px; background: #131b2e;">⚙️ Admin</a>`
+    : "";
+  const seedIngest = showAdmin
+    ? `<div class="crawl-trigger" id="seed-ingest">
+      <h2>🚀 Ingest & Dispatch New Seed Domain</h2>
+      <div class="input-group">
+        <input type="text" id="seed-input" placeholder="e.g. https://promptloop.com, https://sixfeetup.com, https://bendyworks.com" />
+        <button id="btn-crawl" onclick="triggerCrawl()">Dispatch to Discovery Queue</button>
+      </div>
+      <div class="quick-seeds">
+        <span>Vetted Regional Studios:</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://promptloop.com')">PromptLoop (Chicago, IL • AI)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://sixfeetup.com')">Six Feet Up (Carmel, IN • AWS)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://postlight.com')">Postlight (New York, NY • Studio)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://substantial.com')">Substantial (Seattle, WA • Studio)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://modernize.com')">Modernize (Austin, TX • South)</span>
+        <span class="quick-seed-chip" onclick="fillSeed('https://automox.com')">Automox (Boulder, CO • Mountain)</span>
+      </div>
+    </div>`
     : "";
   return `<!DOCTYPE html>
 <html lang="en">
@@ -924,22 +943,7 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
       </div>
     </div>
 
-    <div class="crawl-trigger" id="seed-ingest" data-admin-only hidden>
-      <h2>🚀 Ingest & Dispatch New Seed Domain</h2>
-      <div class="input-group">
-        <input type="text" id="seed-input" placeholder="e.g. https://promptloop.com, https://sixfeetup.com, https://bendyworks.com" />
-        <button id="btn-crawl" onclick="triggerCrawl()">Dispatch to Discovery Queue</button>
-      </div>
-      <div class="quick-seeds">
-        <span>Vetted Regional Studios:</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://promptloop.com')">PromptLoop (Chicago, IL • AI)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://sixfeetup.com')">Six Feet Up (Carmel, IN • AWS)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://postlight.com')">Postlight (New York, NY • Studio)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://substantial.com')">Substantial (Seattle, WA • Studio)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://modernize.com')">Modernize (Austin, TX • South)</span>
-        <span class="quick-seed-chip" onclick="fillSeed('https://automox.com')">Automox (Boulder, CO • Mountain)</span>
-      </div>
-    </div>
+    ${seedIngest}
 
     <div class="filter-bar">
       <div class="nav-tabs">
@@ -2199,14 +2203,6 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
     function fillSeed(url) {
       document.getElementById('seed-input').value = url;
     }
-
-    // Admin-only controls (Admin link, seed ingest) stay hidden unless the visitor has an admin session.
-    fetch('/api/admin/session', { credentials: 'same-origin' })
-      .then(r => r.ok ? r.json() : { admin: false })
-      .then(d => {
-        if (d && d.admin === true) document.querySelectorAll('[data-admin-only]').forEach(el => el.removeAttribute('hidden'));
-      })
-      .catch(() => {});
 
     async function triggerCrawl() {
       const input = document.getElementById('seed-input');

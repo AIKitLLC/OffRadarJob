@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 import worker, {
   AdminAuthLimiter,
   ADMIN_AUTH_MAX_FAILURES,
@@ -10,25 +9,14 @@ import worker, {
   isTelegramAdmin,
   resetAdminAuthRateLimit,
 } from "../src/index.js";
-import { AdminAuthLimiterCore, ADMIN_AUTH_WINDOW_MS, type SqlLike } from "../src/durable/admin-auth-limiter.js";
+import { AdminAuthLimiterCore, ADMIN_AUTH_WINDOW_MS } from "../src/durable/admin-auth-limiter.js";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
+import { sqliteSql } from "./helpers/node-sqlite.js";
 
 // Test-only values (never real secrets).
 const ADMIN = "test-admin-secret-0123456789abcdef";
 const SESSION = "test-session-secret-0123456789abcdefghij";
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as any;
-
-/** Real SQLite (node:sqlite) behind the Durable Object `sql.exec` shape. */
-function sqliteSql(): SqlLike {
-  const db = new DatabaseSync(":memory:");
-  // Like ctx.storage.sql.exec, the statement runs immediately; toArray() returns the rows.
-  return {
-    exec: (q: string, ...b: unknown[]) => {
-      const rows = db.prepare(q).all(...(b as any[])) as Record<string, unknown>[];
-      return { toArray: () => rows };
-    },
-  };
-}
 
 /** Fake DO namespace: one AdminAuthLimiter (with its own SQLite) per name, like idFromName(). */
 function fakeNamespace() {

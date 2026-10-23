@@ -1,21 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { DatabaseSync } from "node:sqlite";
 import worker, { MatchScanLimiter, MATCH_SCAN_LIMIT, resetMatchScanRateLimit } from "../src/index.js";
 import { MatchScanLimiterCore, MATCH_SCAN_WINDOW_MS } from "../src/durable/match-scan-limiter.js";
-import type { SqlLike } from "../src/durable/admin-auth-limiter.js";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 import { UserRepository } from "../src/db/repositories.js";
 import { readFileSync } from "node:fs";
-
-function sqliteSql(): SqlLike {
-  const db = new DatabaseSync(":memory:");
-  return {
-    exec: (q: string, ...b: unknown[]) => {
-      const rows = db.prepare(q).all(...(b as never[])) as Record<string, unknown>[];
-      return { toArray: () => rows };
-    },
-  };
-}
+import { sqliteSql } from "./helpers/node-sqlite.js";
 
 function fakeNamespace(opts?: { fail?: boolean }) {
   const objects = new Map<string, MatchScanLimiter>();
@@ -127,5 +116,11 @@ describe("match-alert scan rate limit", () => {
     expect(config).toMatch(/"class_name": "MatchScanLimiter"/);
     expect(config).toMatch(/"tag": "v2-match-scan-limiter"/);
     expect(config).toMatch(/"new_sqlite_classes": \["MatchScanLimiter"\]/);
+  });
+
+  it("CI runs tests on Node 22 with the SQLite built-in enabled", () => {
+    const ci = readFileSync(".github/workflows/ci.yml", "utf8");
+    expect(ci).toContain('node-version: "22.23.3"');
+    expect(ci).toContain("NODE_OPTIONS: --experimental-sqlite");
   });
 });
