@@ -194,6 +194,8 @@ export const JobSchema = z.object({
   companyWebsite: z.string().nullable().optional(),
   firstSeenAt: z.number().int().positive(),
   lastSeenAt: z.number().int().positive(),
+  lastVerifiedAt: z.number().int().positive().optional(),
+  linkStatus: z.string().optional(),
   isMidwest: z.boolean().optional(),
   usRegion: UsRegionEnum.optional(),
 });

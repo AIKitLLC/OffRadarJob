@@ -868,8 +868,9 @@ export class PublicSourceManager {
           lastSeenAt: now,
         };
 
-        await this.jobRepo.upsert(job);
-        directJobsCount++;
+        if (await this.jobRepo.upsert(job)) {
+          directJobsCount++;
+        }
       }
 
       if (p.inlineRoles && p.inlineRoles.length > 0) {
