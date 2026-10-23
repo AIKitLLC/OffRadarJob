@@ -7,6 +7,8 @@ describe("public dashboard static HTML", () => {
   it("does not contain the sample match score or the unsupported outcome claim", () => {
     const html = renderDashboardHtml();
     expect(html).not.toMatch(/<a[^>]*href="\/admin"/);
+    expect(html).not.toContain('id="seed-ingest"');
+    expect(html).not.toContain("/api/admin/session");
     expect(html).not.toContain("55%");
     expect(html).not.toContain("94%");
     expect(html).not.toContain("Significantly boosts interview conversion");
