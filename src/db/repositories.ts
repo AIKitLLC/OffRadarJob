@@ -1,3 +1,4 @@
+import { isAcceptableApplyTarget } from "../services/link-checker.js";
 import { ID1Database } from "./types.js";
 import {
   Company,
@@ -799,10 +800,21 @@ export const MOUNTAIN_SQL_CONDITION = `(
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, id %'
 )`;
 
+/** Public listings only show open jobs (closed = dead link or stale). */
+export const OPEN_JOB_SQL = "j.status = 'open'";
+
 export class JobRepository {
   constructor(private readonly db: ID1Database) {}
 
-  public async upsert(job: Job): Promise<void> {
+  /**
+   * Insert or refresh a job. Returns false (and writes nothing) when the apply
+   * target fails ingest validation: LinkedIn, `?error=true`, or a generic careers page.
+   * A job closed by the link checker stays closed on re-crawl unless its apply URL changed.
+   */
+  public async upsert(job: Job): Promise<boolean> {
+    if (!isAcceptableApplyTarget(job.applyType, job.applyTarget)) {
+      return false;
+    }
     const query = `
       INSERT INTO jobs (
         id, company_id, career_page_id, title, department,
@@ -817,7 +829,15 @@ export class JobRepository {
         seniority_level = excluded.seniority_level,
         tech_category = excluded.tech_category,
         is_tech_role = excluded.is_tech_role,
-        status = excluded.status,
+        status = CASE
+          WHEN jobs.closed_reason = 'link_check' AND jobs.apply_target = excluded.apply_target THEN jobs.status
+          ELSE excluded.status
+        END,
+        closed_reason = CASE
+          WHEN jobs.closed_reason = 'link_check' AND jobs.apply_target = excluded.apply_target THEN jobs.closed_reason
+          ELSE NULL
+        END,
+        link_fail_count = CASE WHEN jobs.apply_target = excluded.apply_target THEN jobs.link_fail_count ELSE 0 END,
         last_seen_at = excluded.last_seen_at,
         description_summary = COALESCE(excluded.description_summary, jobs.description_summary),
         apply_target = excluded.apply_target
@@ -852,6 +872,7 @@ export class JobRepository {
         job.lastSeenAt
       )
       .run();
+    return true;
   }
 
   public async findByContentHash(hash: string): Promise<Job | null> {
@@ -909,7 +930,7 @@ export class JobRepository {
     const techOnly = options.techOnly !== false ? 1 : 0;
     const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
 
-    let query = `SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")} AND j.status = 'open'`;
+    let query = `SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}`;
     const bindings: unknown[] = [];
 
     if (techOnly === 1) {
@@ -983,7 +1004,7 @@ export class JobRepository {
     const techOnly = options.techOnly !== false ? 1 : 0;
     const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
 
-    let whereClause = `WHERE ${ignoredSourceSql("c")} AND j.status = 'open'`;
+    let whereClause = `WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}`;
     const bindings: unknown[] = [];
 
     if (techOnly === 1) {
@@ -1120,7 +1141,7 @@ export class JobRepository {
           ) THEN 1 ELSE 0 END) as mountain_count
         FROM jobs j
         LEFT JOIN companies c ON j.company_id = c.id
-        WHERE ${ignoredSourceSql("c")} AND j.status = 'open'
+        WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}
       `)
       .first<{
         total: number;
@@ -1162,7 +1183,7 @@ export class JobRepository {
           SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) as updated_last_7d
         FROM jobs j
         LEFT JOIN companies c ON j.company_id = c.id
-        WHERE ${ignoredSourceSql("c")} AND j.status = 'open'
+        WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}
       `)
       .bind(oneDayAgo, oneDayAgo, sevenDaysAgo)
       .first<{
@@ -1180,9 +1201,14 @@ export class JobRepository {
     };
   }
 
-  public async count(): Promise<number> {
+  /**
+   * Count publicly visible jobs (open, not from ignored sources).
+   * With `techOnly: true` this matches the default `/api/jobs` pagination total.
+   */
+  public async count(options: { techOnly?: boolean } = {}): Promise<number> {
+    const techSql = options.techOnly ? " AND j.is_tech_role = 1" : "";
     const res = await this.db
-      .prepare(`SELECT COUNT(*) as count FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")} AND j.status = 'open'`)
+      .prepare(`SELECT COUNT(*) as count FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}${techSql}`)
       .first<{ count: number }>();
     return res?.count ?? 0;
   }
@@ -1240,6 +1266,8 @@ export class JobRepository {
       companyWebsite: row["company_website"] != null ? String(row["company_website"]) : undefined,
       firstSeenAt: Number(row["first_seen_at"]),
       lastSeenAt: Number(row["last_seen_at"]),
+      lastVerifiedAt: row["last_verified_at"] != null ? Number(row["last_verified_at"]) : undefined,
+      linkStatus: row["link_status"] != null ? String(row["link_status"]) : undefined,
       isMidwest: isMidwestMatch,
       usRegion: detectedRegion,
     };
