@@ -192,6 +192,37 @@ describe("validateApplyUrl (ingest validation)", () => {
     expect(isAcceptableApplyTarget("form", "https://www.linkedin.com/jobs/view/1")).toBe(false);
   });
 
+  it.each([
+    "http://127.0.0.1/jobs/1",
+    "http://127.0.0.1:8080/jobs/1",
+    "http://0.0.0.0/jobs/1",
+    "http://10.1.2.3/jobs/1",
+    "http://172.16.0.1/jobs/1",
+    "http://192.168.1.1/jobs/1",
+    "http://169.254.169.254/latest",
+    "https://8.8.8.8/jobs/1",
+    "http://[::1]/jobs/1",
+    "http://[fe80::1]/jobs/1",
+    "http://[fd00::1]/jobs/1",
+    "http://[::ffff:127.0.0.1]/jobs/1",
+    "http://2130706433/jobs/1",
+    "http://0x7f000001/jobs/1",
+    "http://0177.0.0.1/jobs/1",
+    "http://127.1/jobs/1",
+    "http://localhost/jobs/1",
+    "http://localhost./jobs/1",
+    "http://foo.localhost/jobs/1",
+    "http://metadata.google.internal/jobs/1",
+    "http://printer.local/jobs/1",
+    "http://app.internal/jobs/1",
+    "https://127.0.0.1.nip.io/jobs/1",
+    "https://user:pass@127.0.0.1/jobs/1",
+    "http://jobs/1",
+  ])("rejects non-public host %s", (url) => {
+    expect(validateApplyUrl(url)).toEqual({ ok: false, reason: "blocked_host" });
+    expect(isAcceptableApplyTarget("url", url)).toBe(false);
+  });
+
   it("JobRepository.upsert skips rejected apply targets and keeps valid ones", async () => {
     const db = new InMemoryD1Database();
     const repo = new JobRepository(db);
@@ -250,6 +281,73 @@ describe("checkApplyLink (HEAD with GET fallback)", () => {
     expect((await checkApplyLink(U, fakeFetch({ [U]: { head: [429], get: [429] } }).fn)).status).toBe("unverifiable");
     expect((await checkApplyLink(U, fakeFetch({ [U]: { head: [503], get: [502] } }).fn)).status).toBe("server_error");
     expect((await checkApplyLink(U, fakeFetch({}).fn)).status).toBe("network_error");
+  });
+
+  it("does not request a redirect target that fails the host policy", async () => {
+    const calls: string[] = [];
+    const fn: FetchLike = async (url) => {
+      calls.push(url);
+      if (url === U) return new Response(null, { status: 302, headers: { Location: "http://127.0.0.1/latest" } });
+      return new Response("secret", { status: 200 });
+    };
+    const result = await checkApplyLink(U, fn);
+    expect(result.status).toBe("invalid");
+    expect(result.subrequests).toBe(1);
+    expect(calls).toEqual([U]);
+  });
+
+  it("re-checks every redirect hop and stops before an internal address", async () => {
+    const hop = "https://jobs.example/careers/role-2";
+    const calls: string[] = [];
+    const fn: FetchLike = async (url) => {
+      calls.push(url);
+      if (url === U) return new Response(null, { status: 302, headers: { Location: hop } });
+      if (url === hop) return new Response(null, { status: 302, headers: { Location: "http://169.254.169.254/latest/meta-data" } });
+      return new Response("secret", { status: 200 });
+    };
+    const result = await checkApplyLink(U, fn);
+    expect(result.status).toBe("invalid");
+    expect(calls).toEqual([U, hop]);
+  });
+
+  it("does not request an address written in an alternate literal form", async () => {
+    const calls: string[] = [];
+    const fn: FetchLike = async (url) => {
+      calls.push(url);
+      return new Response(null, { status: 302, headers: { Location: "http://2130706433/" } });
+    };
+    expect((await checkApplyLink(U, fn)).status).toBe("invalid");
+    expect(calls).toEqual([U]);
+  });
+
+  it("follows a redirect only when the next hop is still an acceptable apply URL", async () => {
+    const next = "https://boards.greenhouse.io/acme/jobs/4012345";
+    const calls: string[] = [];
+    const fn: FetchLike = async (url) => {
+      calls.push(url);
+      if (url === U) return new Response(null, { status: 301, headers: { Location: "/careers/role-2" } });
+      const res = new Response("ok", { status: 200 });
+      Object.defineProperty(res, "url", { value: next });
+      return res;
+    };
+    // Relative Location stays on the original host; the second response is the job page.
+    const relative = new URL("/careers/role-2", U).href;
+    const result = await checkApplyLink(U, fn);
+    expect(result.status).toBe("ok");
+    expect(calls[0]).toBe(U);
+    expect(calls[1]).toBe(relative);
+    expect(result.subrequests).toBe(2);
+  });
+
+  it("does not fetch a URL that fails the host policy before any request", async () => {
+    const calls: string[] = [];
+    const fn: FetchLike = async (url) => {
+      calls.push(url);
+      return new Response("no", { status: 200 });
+    };
+    expect((await checkApplyLink("http://localhost/jobs/1", fn)).status).toBe("invalid");
+    expect((await checkApplyLink("http://10.0.0.8/jobs/1", fn)).status).toBe("invalid");
+    expect(calls).toEqual([]);
   });
 });
 

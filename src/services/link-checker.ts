@@ -5,8 +5,21 @@
  * Worker limits: every fetch (and every redirect hop) is a subrequest. The checker
  * works on a small, bounded batch per invocation, uses HEAD first and only falls
  * back to GET when HEAD is not conclusive, and caps the GET body it scans.
+ * Redirects are followed manually so each hop is validated before it is requested.
  */
 import type { ID1Database } from "../db/types.js";
+import { validateApplyUrl, type StaticValidation } from "./apply-url-guard.js";
+import { fetchValidatedApplyUrl, type FetchLike } from "./guarded-apply-fetch.js";
+
+export {
+  validateApplyUrl,
+  isAcceptableApplyTarget,
+  isBlockedApplyHost,
+  decodeCloudflareEmailProtection,
+  isCloudflareEmailProtectionUrl,
+  normalizeApplyTarget,
+} from "./apply-url-guard.js";
+export type { StaticValidation, FetchLike };
 
 export type LinkStatus =
   | "ok"
@@ -18,83 +31,6 @@ export type LinkStatus =
   | "network_error"
   | "server_error"
   | "invalid";
-
-export interface StaticValidation {
-  ok: boolean;
-  reason?:
-    | "not_http"
-    | "malformed"
-    | "linkedin"
-    | "error_param"
-    | "generic_careers_page"
-    | "email_protection";
-}
-
-const GENERIC_PATH_RE =
-  /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:careers?|jobs|join(?:-us)?|work-with-us|open-positions|openings|positions|about\/careers|company\/careers)?\/?$/i;
-
-const CF_EMAIL_PROTECTION_RE =
-  /(?:\/cdn-cgi\/l\/email-protection(?:#|\?)|data-cfemail=["']?)\s*([0-9a-fA-F]{4,})/i;
-
-/**
- * Decode a Cloudflare email-protection hex payload (XOR with first byte).
- * Accepts a full `/cdn-cgi/l/email-protection#...` URL, `?` query, `data-cfemail` attribute, or raw hex.
- * Returns a lowercase email address when valid, or null if not decodable.
- */
-export function decodeCloudflareEmailProtection(input: string | null | undefined): string | null {
-  if (!input) return null;
-  const raw = input.trim();
-  const match = raw.match(CF_EMAIL_PROTECTION_RE);
-  const hex = match?.[1] ?? (/^[0-9a-fA-F]{6,}$/.test(raw) ? raw : null);
-  if (!hex || hex.length < 6 || hex.length % 2 !== 0) return null;
-
-  const key = Number.parseInt(hex.slice(0, 2), 16);
-  if (!Number.isFinite(key)) return null;
-
-  let decoded = "";
-  for (let i = 2; i < hex.length; i += 2) {
-    const byte = Number.parseInt(hex.slice(i, i + 2), 16);
-    if (!Number.isFinite(byte)) return null;
-    decoded += String.fromCharCode(byte ^ key);
-  }
-
-  const email = decoded.trim().split("?")[0]?.trim().toLowerCase() ?? "";
-  if (/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(email)) {
-    return email;
-  }
-  return null;
-}
-
-/** True when a string or URL points to Cloudflare's `/cdn-cgi/l/email-protection` obfuscator. */
-export function isCloudflareEmailProtectionUrl(raw: string | null | undefined): boolean {
-  if (!raw) return false;
-  return /\/cdn-cgi\/l\/email-protection/i.test(raw);
-}
-
-/**
- * Normalize an apply target before validation/upsert:
- * - Decodes Cloudflare `/cdn-cgi/l/email-protection#...` URLs into `{ applyType: 'email', applyTarget: decodedEmail }`.
- * - Converts `mailto:...` URLs passed with `url`/`form` into `{ applyType: 'email', applyTarget: email }`.
- */
-export function normalizeApplyTarget(
-  applyType: string,
-  applyTarget: string
-): { applyType: string; applyTarget: string } {
-  const trimmed = (applyTarget ?? "").trim();
-  if (/^mailto:/i.test(trimmed)) {
-    const mail = trimmed.replace(/^mailto:/i, "").split("?")[0]?.trim().toLowerCase() ?? "";
-    if (mail && mail.includes("@")) {
-      return { applyType: "email", applyTarget: mail };
-    }
-  }
-  if (isCloudflareEmailProtectionUrl(trimmed)) {
-    const decoded = decodeCloudflareEmailProtection(trimmed);
-    if (decoded) {
-      return { applyType: "email", applyTarget: decoded };
-    }
-  }
-  return { applyType, applyTarget: trimmed };
-}
 
 const CLOSED_PHRASES = [
   "job closed",
@@ -110,74 +46,20 @@ const CLOSED_PHRASES = [
   "this job posting is no longer",
 ];
 
-/** Static, network-free check of an apply URL. Used at ingest and after redirects. */
-export function validateApplyUrl(raw: string): StaticValidation {
-  let url: URL;
-  try {
-    url = new URL(raw.trim());
-  } catch {
-    return { ok: false, reason: "malformed" };
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") return { ok: false, reason: "not_http" };
-  if (
-    url.pathname.toLowerCase().includes("/cdn-cgi/l/email-protection") ||
-    url.pathname.toLowerCase().startsWith("/cdn-cgi/")
-  ) {
-    return { ok: false, reason: "email_protection" };
-  }
-  const host = url.hostname.toLowerCase();
-  if (host === "linkedin.com" || host.endsWith(".linkedin.com") || host === "lnkd.in") {
-    return { ok: false, reason: "linkedin" };
-  }
-  if ((url.searchParams.get("error") ?? "").toLowerCase() === "true") return { ok: false, reason: "error_param" };
-  if (GENERIC_PATH_RE.test(url.pathname) && !hasJobIdentifierQuery(url)) {
-    return { ok: false, reason: "generic_careers_page" };
-  }
-  return { ok: true };
-}
-
-function hasJobIdentifierQuery(url: URL): boolean {
-  for (const key of ["gh_jid", "jobid", "job_id", "jid", "id", "pid", "posting"]) {
-    if (url.searchParams.get(key)) return true;
-  }
-  return false;
-}
-
-/** Ingest gate: email/handle applies must be valid non-cdn-cgi targets; URL applies must pass validateApplyUrl. */
-export function isAcceptableApplyTarget(applyType: string, applyTarget: string): boolean {
-  if (isCloudflareEmailProtectionUrl(applyTarget)) return false;
-  if (applyType === "email") {
-    const clean = applyTarget.trim();
-    return clean.includes("@") && !clean.startsWith("http://") && !clean.startsWith("https://");
-  }
-  if (applyType === "discord" || applyType === "x_dm") return true;
-  return validateApplyUrl(applyTarget).ok;
-}
-
 export interface LinkCheckResult {
   status: LinkStatus;
   httpStatus?: number;
   finalUrl?: string;
   subrequests: number;
+  /** True when the caller budget stopped the check before a useful result. */
+  budgetExhausted?: boolean;
 }
-
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export interface CheckOptions {
   timeoutMs?: number;
   maxBodyBytes?: number;
-}
-
-const UA = "Mozilla/5.0 (compatible; OffRadarJobsLinkChecker/1.0; +https://jobs.ai-kit.net)";
-
-async function timedFetch(fetchFn: FetchLike, url: string, method: "HEAD" | "GET", timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetchFn(url, { method, redirect: "follow", signal: controller.signal, headers: { "user-agent": UA } });
-  } finally {
-    clearTimeout(timer);
-  }
+  /** Return false to refuse another outbound request. */
+  allowSubrequest?: () => boolean;
 }
 
 async function readCapped(res: Response, maxBytes: number): Promise<string> {
@@ -199,16 +81,24 @@ async function readCapped(res: Response, maxBytes: number): Promise<string> {
   return text;
 }
 
+function statusForReason(reason: StaticValidation["reason"] | undefined): LinkStatus {
+  if (reason === "error_param") return "error_redirect";
+  if (reason === "generic_careers_page") return "generic_redirect";
+  return "invalid";
+}
+
 function classifyFinal(originalUrl: string, res: Response): LinkStatus | null {
   const finalUrl = res.url || originalUrl;
+  const verdict = validateApplyUrl(finalUrl);
+  if (!verdict.ok && verdict.reason === "blocked_host") return "invalid";
   if (res.status === 404 || res.status === 410) return "dead";
   if (res.status === 403 || res.status === 429 || res.status === 999 || res.status === 401) return "unverifiable";
   if (res.status >= 500) return "server_error";
   if (res.status >= 400) return "dead";
   if (finalUrl !== originalUrl) {
-    const v = validateApplyUrl(finalUrl);
-    if (!v.ok && v.reason === "error_param") return "error_redirect";
-    if (!v.ok && v.reason === "generic_careers_page") return "generic_redirect";
+    if (!verdict.ok && verdict.reason === "email_protection") return "invalid";
+    if (!verdict.ok && verdict.reason === "error_param") return "error_redirect";
+    if (!verdict.ok && verdict.reason === "generic_careers_page") return "generic_redirect";
   }
   return null;
 }
@@ -218,38 +108,47 @@ export async function checkApplyLink(url: string, fetchFn: FetchLike, opts: Chec
   const timeoutMs = opts.timeoutMs ?? 8000;
   const maxBodyBytes = opts.maxBodyBytes ?? 64 * 1024;
   const pre = validateApplyUrl(url);
-  if (!pre.ok) {
-    return { status: pre.reason === "error_param" ? "error_redirect" : pre.reason === "generic_careers_page" ? "generic_redirect" : "invalid", subrequests: 0 };
-  }
+  if (!pre.ok) return { status: statusForReason(pre.reason), subrequests: 0 };
 
   let subrequests = 0;
-  try {
-    subrequests++;
-    const head = await timedFetch(fetchFn, url, "HEAD", timeoutMs);
-    const headClass = classifyFinal(url, head);
-    if (head.status >= 200 && head.status < 300 && headClass === null) {
-      return { status: "ok", httpStatus: head.status, finalUrl: head.url || url, subrequests };
+  const attempt = async (method: "HEAD" | "GET"): Promise<LinkCheckResult | "continue"> => {
+    const fetched = await fetchValidatedApplyUrl(url, fetchFn, method, {
+      timeoutMs,
+      ...(opts.allowSubrequest ? { allowSubrequest: opts.allowSubrequest } : {}),
+    });
+    subrequests += fetched.subrequests;
+    if (fetched.outcome === "budget") {
+      return { status: "unverifiable", subrequests, budgetExhausted: true, finalUrl: fetched.finalUrl };
     }
-    if (headClass === "error_redirect" || headClass === "generic_redirect" || head.status === 404 || head.status === 410) {
-      return { status: headClass ?? "dead", httpStatus: head.status, finalUrl: head.url || url, subrequests };
+    if (fetched.outcome === "rejected") {
+      return { status: statusForReason(fetched.reason), finalUrl: fetched.finalUrl, subrequests };
     }
-  } catch {
-    // fall through to GET: some hosts reject or hang on HEAD
-  }
-
-  try {
-    subrequests++;
-    const get = await timedFetch(fetchFn, url, "GET", timeoutMs);
-    const getClass = classifyFinal(url, get);
-    if (getClass !== null) return { status: getClass, httpStatus: get.status, finalUrl: get.url || url, subrequests };
-    const body = (await readCapped(get, maxBodyBytes)).toLowerCase();
+    if (fetched.outcome === "network") return "continue";
+    const res = fetched.response;
+    const klass = classifyFinal(url, res);
+    const finalUrl = res.url || fetched.finalUrl || url;
+    if (method === "HEAD") {
+      if (res.status >= 200 && res.status < 300 && klass === null) {
+        return { status: "ok", httpStatus: res.status, finalUrl, subrequests };
+      }
+      if (klass === "error_redirect" || klass === "generic_redirect" || klass === "invalid" || res.status === 404 || res.status === 410) {
+        return { status: klass ?? "dead", httpStatus: res.status, finalUrl, subrequests };
+      }
+      return "continue";
+    }
+    if (klass !== null) return { status: klass, httpStatus: res.status, finalUrl, subrequests };
+    const body = (await readCapped(res, maxBodyBytes)).toLowerCase();
     if (CLOSED_PHRASES.some((p) => body.includes(p))) {
-      return { status: "closed_page", httpStatus: get.status, finalUrl: get.url || url, subrequests };
+      return { status: "closed_page", httpStatus: res.status, finalUrl, subrequests };
     }
-    return { status: "ok", httpStatus: get.status, finalUrl: get.url || url, subrequests };
-  } catch {
-    return { status: "network_error", subrequests };
-  }
+    return { status: "ok", httpStatus: res.status, finalUrl, subrequests };
+  };
+
+  const head = await attempt("HEAD");
+  if (head !== "continue") return head;
+  const get = await attempt("GET");
+  if (get !== "continue") return get;
+  return { status: "network_error", subrequests };
 }
 
 /** Statuses that count as a failed check. 'unverifiable' (403/429/999) neither fails nor verifies. */
@@ -328,8 +227,9 @@ interface QueueRow {
 
 /**
  * Check a bounded batch of open URL jobs, oldest-checked first.
- * Each URL costs at most 2 fetches (HEAD + GET); jobs are skipped once the
- * subrequest budget cannot cover another worst-case check.
+ * Each URL costs at least a HEAD and maybe a GET, plus one request per redirect
+ * hop. Jobs are skipped once the subrequest budget cannot cover another check,
+ * and a hop is not requested once the budget is spent.
  */
 export async function runLinkCheckBatch(
   db: ID1Database,
@@ -358,19 +258,29 @@ export async function runLinkCheckBatch(
 
   const summary: LinkCheckBatchSummary = { checked: 0, ok: 0, failed: 0, unverifiable: 0, closed: 0, skippedForBudget: 0, subrequests: 0 };
   const updates: Array<{ id: string; status: LinkStatus; failCount: number; close: boolean; verified: boolean }> = [];
-  let reserved = 0;
+  let spent = 0;
   let idx = 0;
+  const allowSubrequest = () => {
+    if (spent >= maxSubrequests) return false;
+    spent += 1;
+    return true;
+  };
 
   const worker = async () => {
     while (idx < rows.length) {
       const row = rows[idx++]!;
-      if (reserved + 2 > maxSubrequests) {
+      if (spent + 2 > maxSubrequests) {
         summary.skippedForBudget++;
         continue;
       }
-      reserved += 2;
-      const result = await checkApplyLink(row.apply_target, fetchFn, { timeoutMs: opts.timeoutMs ?? 8000 });
-      reserved -= 2 - result.subrequests;
+      const result = await checkApplyLink(row.apply_target, fetchFn, {
+        timeoutMs: opts.timeoutMs ?? 8000,
+        allowSubrequest,
+      });
+      if (result.budgetExhausted && result.subrequests === 0) {
+        summary.skippedForBudget++;
+        continue;
+      }
       summary.subrequests += result.subrequests;
       summary.checked++;
       const prev = Number(row.link_fail_count ?? 0);
