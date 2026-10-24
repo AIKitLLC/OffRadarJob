@@ -3,6 +3,7 @@ import { BaseAgent } from "./base.js";
 import { Result, Ok, Err, Company } from "../types/domain.js";
 import { ProfileMessage, HuntMessage } from "../types/queues.js";
 import { CompanyRepository, LogRepository } from "../db/repositories.js";
+import { decodeCloudflareEmailProtection, isCloudflareEmailProtectionUrl } from "../services/link-checker.js";
 
 export class CompanyProfilerAgent extends BaseAgent {
   public readonly name = "profiler_agent";
@@ -188,6 +189,15 @@ export class CompanyProfilerAgent extends BaseAgent {
       if (email && email.includes("@")) return email.toLowerCase();
     }
 
+    // 1b. Cloudflare email protection links / attributes (first decodable one wins)
+    let cfDecoded: string | null = null;
+    $("[data-cfemail], a[href*='/cdn-cgi/l/email-protection']").each((_, el) => {
+      if (cfDecoded) return;
+      const rawCf = $(el).attr("data-cfemail") || $(el).attr("href") || "";
+      cfDecoded = decodeCloudflareEmailProtection(rawCf);
+    });
+    if (cfDecoded) return cfDecoded;
+
     // 2. Regex search in footer or contact sections
     const match = html.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
     if (match && match[1]) {
@@ -296,10 +306,10 @@ export class CompanyProfilerAgent extends BaseAgent {
     $("a[href]").each((_, el) => {
       const href = $(el).attr("href")?.trim();
       const text = $(el).text().toLowerCase().trim();
-      if (!href) return;
+      if (!href || isCloudflareEmailProtectionUrl(href)) return;
 
       const fullUrl = this.resolveUrl(href, baseUrl);
-      if (!fullUrl) return;
+      if (!fullUrl || isCloudflareEmailProtectionUrl(fullUrl)) return;
 
       const hrefLower = href.toLowerCase();
 

@@ -2353,7 +2353,7 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null): string
               '<div style="font-size: 20px; font-weight: 800; color: #38bdf8;">' + r.compositeScore + ' <span style="font-size: 12px; color: var(--text-muted);">/100</span></div>' +
               '<div style="font-size: 11px; font-weight: 700; color: ' + trendColor + ';">' + trendIcon + '</div>' +
             '</div>' +
-            '<a href="' + escapeHtml(j.applyTarget) + '" target="_blank" rel="noopener noreferrer" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 8px 14px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-block;">Direct Apply ↗</a>' +
+            '<a href="' + escapeHtml(j.applyType === 'email' ? ('mailto:' + j.applyTarget) : j.applyTarget) + '" target="_blank" rel="noopener noreferrer" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 8px 14px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-block;">Direct Apply ↗</a>' +
           '</div>' +
         '</div>';
       }).join('');

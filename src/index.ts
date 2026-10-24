@@ -51,6 +51,8 @@ import { CvTagCloudService } from "./services/cv-tag-cloud.js";
 import { handleCandidateMatchRoutes } from "./http/candidate-match-routes.js";
 import { CandidateMatchService } from "./pipeline/candidate-match-service.js";
 import { LINK_CHECK_CRON, runLinkQualityCron } from "./services/link-quality-cron.js";
+import { runLinkCheckBatch } from "./services/link-checker.js";
+import { recoverBrokenLinksData } from "./services/broken-link-recovery.js";
 
 export interface KvNamespace {
   get(key: string, type?: "text" | "json"): Promise<any>;
@@ -1127,6 +1129,7 @@ export default {
             `🌾 \`/harvest [hn|github|newgrad|all]\` - Thu thập jobs từ HackerNews, GitHub, hoặc New Grad 2025/2026`,
             `👥 \`/users\` - Thống kê users & danh sách tài khoản MCP`,
             `💡 \`/feedbacks\` - Xem danh sách phản hồi từ LLM & Người dùng qua MCP`,
+            `🛠️ \`/fixlinks\` - Chạy async fix data & dọn dẹp các link lỗi (\`cdn-cgi\`, generic URLs)`,
             `🔗 \`/adminlink\` - Lấy link 1-click vào thẳng Web Admin Control Center`,
             `🔔 \`/testalert\` - Kiểm tra hệ thống gửi thông báo khẩn cấp`,
             `❓ \`/admin help\` - Xem lại menu này`,
@@ -1633,6 +1636,27 @@ export default {
 
           if (botToken) await sendTelegramMessage(botToken, chatId, reply);
           return Response.json({ ok: true });
+        }
+
+        // M. /fixlinks - Admin trigger async broken-links data repair
+        if (text === "/fixlinks" && chatId) {
+          if (!isAdmin) {
+            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Bạn cần quyền Admin để dùng /fixlinks.");
+            return Response.json({ ok: false, error: "Unauthorized" });
+          }
+          const repair = await recoverBrokenLinksData(env.DB, (input, init) => fetch(input, init));
+          const reply = [
+            `🛠️ *OFFRADARJOB - KHÔI PHỤC LINK LỖI HOÀN TẤT*`,
+            ``,
+            `• *Jobs lỗi đã tìm thấy:* \`${repair.scannedJobs}\``,
+            `• *Emails giải mã từ Cloudflare cdn-cgi:* \`${repair.decodedEmails}\``,
+            `• *Jobs tìm lại được từ trang nguồn:* \`${repair.recoveredJobsFromSource}\` (mở lại: \`${repair.reopenedJobs}\`)`,
+            `• *Jobs không cứu được (cách ly, giữ bản ghi):* \`${repair.closedInvalidJobs}\``,
+            `• *Công ty khôi phục contact_email:* \`${repair.fixedCompanies}\` (từ trang chủ: \`${repair.recoveredCompaniesFromSource}\`)`,
+            `• *Career pages tìm lại được:* \`${repair.recoveredCareerPages}\` / vô hiệu hóa tạm (giữ bản ghi): \`${repair.deactivatedCareerPages}\``,
+          ].join("\n");
+          if (botToken) await sendTelegramMessage(botToken, chatId, reply);
+          return Response.json({ ok: true, repair });
         }
 
         return Response.json({ ok: true });
@@ -3118,6 +3142,77 @@ export default {
       }
       const ok = await feedbackRepo.delete(id);
       return Response.json({ success: ok, id });
+    }
+
+    // 15f. Admin API: Async Data Repair & Broken Links Sanitizer
+    if (path === "/api/admin/links/repair" && request.method === "POST") {
+      if (!(await isAuthorized(request, url, env))) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      try {
+        const rawBody: unknown = await request.json().catch(() => ({}));
+        const body: Record<string, unknown> =
+          rawBody !== null && typeof rawBody === "object" && !Array.isArray(rawBody)
+            ? (rawBody as Record<string, unknown>)
+            : {};
+        const batchSize =
+          typeof body.batchSize === "number" && Number.isFinite(body.batchSize)
+            ? Math.min(Math.max(Math.trunc(body.batchSize), 10), 2000)
+            : 500;
+        const runAsync = typeof body.async === "boolean" ? body.async : false;
+        const runLiveCheck = body.runLiveCheck === true;
+        const now = Date.now();
+
+        const executeRepair = async () => {
+          const started = Date.now();
+          const repair = await recoverBrokenLinksData(env.DB, (input, init) => fetch(input, init), { batchSize, now, maxFetches: 20 });
+          const liveCheck = runLiveCheck
+            ? await runLinkCheckBatch(env.DB, (input, init) => fetch(input, init), {
+                batchSize: 20,
+                maxSubrequests: 40,
+                now,
+              })
+            : null;
+          await logRepo.log({
+            id: `log_links_repair_${now}`,
+            agentName: "link_data_repair",
+            targetUrl: "admin://links-repair",
+            status: "success",
+            durationMs: Date.now() - started,
+            message: `Recovered broken links: ${repair.decodedEmails} emails decoded, ${repair.recoveredJobsFromSource} jobs recovered from source (${repair.reopenedJobs} reopened), ${repair.closedInvalidJobs} invalid jobs quarantined, ${repair.fixedCompanies} companies recovered, ${repair.recoveredCareerPages} career pages rediscovered, ${repair.deactivatedCareerPages} career pages deactivated (retained).`,
+            metadata: { repair, liveCheck },
+            createdAt: Date.now(),
+          });
+          return { repair, liveCheck };
+        };
+
+        if (runAsync) {
+          ctx.waitUntil(
+            executeRepair().catch((err) => {
+              console.error("[AdminLinksRepair] Background recovery failed:", err);
+            })
+          );
+          return Response.json(
+            {
+              success: true,
+              status: "accepted",
+              message: "Broken-link recovery started in the background. Results are written to the crawl log (agent: link_data_repair) when it completes.",
+            },
+            { status: 202 }
+          );
+        }
+
+        const result = await executeRepair();
+        return Response.json({
+          success: true,
+          status: "completed",
+          ...result,
+          message: `Data recovery completed: ${result.repair.decodedEmails} obfuscated emails decoded, ${result.repair.recoveredJobsFromSource} jobs recovered from source, ${result.repair.closedInvalidJobs} invalid links quarantined (retained), ${result.repair.recoveredCareerPages} career pages rediscovered.`,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return Response.json({ error: msg }, { status: 500 });
+      }
     }
 
     // 16. API: Trigger Ingest / Crawl Seed (Public)

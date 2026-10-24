@@ -291,11 +291,11 @@ export class NewGradHarvester {
 
         await companyRepo.upsert(company);
         await careerPageRepo.upsert(careerPage);
-        await jobRepo.upsert(job);
-
-        importedJobs++;
-        if (isMidwest) {
-          midwestJobs++;
+        if (await jobRepo.upsert(job)) {
+          importedJobs++;
+          if (isMidwest) {
+            midwestJobs++;
+          }
         }
       } catch (err) {
         console.warn(`[NewGradHarvester] Error importing job for ${row.companyName}:`, err);

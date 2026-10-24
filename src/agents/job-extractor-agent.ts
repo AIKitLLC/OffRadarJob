@@ -13,6 +13,7 @@ import {
 import { ExtractMessage } from "../types/queues.js";
 import { JobRepository, LogRepository, CompanyRepository } from "../db/repositories.js";
 import { isIgnoredSourceDomain } from "../utils/source-policy.js";
+import { decodeCloudflareEmailProtection, isCloudflareEmailProtectionUrl } from "../services/link-checker.js";
 
 const TECH_SKILLS = [
   "TypeScript", "JavaScript", "Python", "Rust", "Go", "Golang", "C++",
@@ -191,13 +192,21 @@ export class JobExtractorAgent extends BaseAgent {
       }
     });
 
-    // Default fallback apply target: mailto on page or the page URL itself
+    // Default fallback apply target: mailto / cf-email on page or the page URL itself
     let pageApplyEmail: string | null = null;
     $('a[href^="mailto:"]').each((_, el) => {
       if (!pageApplyEmail) {
         pageApplyEmail = $(el).attr("href")?.replace(/^mailto:/i, "").split("?")[0]?.trim() ?? null;
       }
     });
+    if (!pageApplyEmail) {
+      $("[data-cfemail], a[href*='/cdn-cgi/l/email-protection']").each((_, el) => {
+        if (pageApplyEmail) return;
+        const raw = $(el).attr("data-cfemail") || $(el).attr("href") || "";
+        const decoded = decodeCloudflareEmailProtection(raw);
+        if (decoded) pageApplyEmail = decoded;
+      });
+    }
 
     for (const $heading of candidateHeadings) {
       const title = $heading.text().trim();
@@ -221,14 +230,28 @@ export class JobExtractorAgent extends BaseAgent {
       let applyTarget = baseUrl;
 
       const directMail = container.find('a[href^="mailto:"]').attr("href");
+      let cfDecodedMail: string | null = null;
+      container.find("[data-cfemail], a[href*='/cdn-cgi/l/email-protection']").each((_, el) => {
+        if (cfDecodedMail) return;
+        const raw = $(el).attr("data-cfemail") || $(el).attr("href") || "";
+        cfDecodedMail = decodeCloudflareEmailProtection(raw);
+      });
+
       if (directMail) {
         applyType = "email";
         applyTarget = directMail.replace(/^mailto:/i, "").split("?")[0]?.trim() || baseUrl;
+      } else if (cfDecodedMail) {
+        applyType = "email";
+        applyTarget = cfDecodedMail;
       } else if (pageApplyEmail) {
         applyType = "email";
         applyTarget = pageApplyEmail;
       } else {
-        const directLink = container.find("a[href]").first().attr("href");
+        const directLink = container
+          .find("a[href]")
+          .filter((_, el) => !isCloudflareEmailProtectionUrl($(el).attr("href")))
+          .first()
+          .attr("href");
         if (directLink) {
           try {
             applyTarget = new URL(directLink, baseUrl).toString();

@@ -21,11 +21,80 @@ export type LinkStatus =
 
 export interface StaticValidation {
   ok: boolean;
-  reason?: "not_http" | "malformed" | "linkedin" | "error_param" | "generic_careers_page";
+  reason?:
+    | "not_http"
+    | "malformed"
+    | "linkedin"
+    | "error_param"
+    | "generic_careers_page"
+    | "email_protection";
 }
 
 const GENERIC_PATH_RE =
   /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:careers?|jobs|join(?:-us)?|work-with-us|open-positions|openings|positions|about\/careers|company\/careers)?\/?$/i;
+
+const CF_EMAIL_PROTECTION_RE =
+  /(?:\/cdn-cgi\/l\/email-protection(?:#|\?)|data-cfemail=["']?)\s*([0-9a-fA-F]{4,})/i;
+
+/**
+ * Decode a Cloudflare email-protection hex payload (XOR with first byte).
+ * Accepts a full `/cdn-cgi/l/email-protection#...` URL, `?` query, `data-cfemail` attribute, or raw hex.
+ * Returns a lowercase email address when valid, or null if not decodable.
+ */
+export function decodeCloudflareEmailProtection(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const raw = input.trim();
+  const match = raw.match(CF_EMAIL_PROTECTION_RE);
+  const hex = match?.[1] ?? (/^[0-9a-fA-F]{6,}$/.test(raw) ? raw : null);
+  if (!hex || hex.length < 6 || hex.length % 2 !== 0) return null;
+
+  const key = Number.parseInt(hex.slice(0, 2), 16);
+  if (!Number.isFinite(key)) return null;
+
+  let decoded = "";
+  for (let i = 2; i < hex.length; i += 2) {
+    const byte = Number.parseInt(hex.slice(i, i + 2), 16);
+    if (!Number.isFinite(byte)) return null;
+    decoded += String.fromCharCode(byte ^ key);
+  }
+
+  const email = decoded.trim().split("?")[0]?.trim().toLowerCase() ?? "";
+  if (/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(email)) {
+    return email;
+  }
+  return null;
+}
+
+/** True when a string or URL points to Cloudflare's `/cdn-cgi/l/email-protection` obfuscator. */
+export function isCloudflareEmailProtectionUrl(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  return /\/cdn-cgi\/l\/email-protection/i.test(raw);
+}
+
+/**
+ * Normalize an apply target before validation/upsert:
+ * - Decodes Cloudflare `/cdn-cgi/l/email-protection#...` URLs into `{ applyType: 'email', applyTarget: decodedEmail }`.
+ * - Converts `mailto:...` URLs passed with `url`/`form` into `{ applyType: 'email', applyTarget: email }`.
+ */
+export function normalizeApplyTarget(
+  applyType: string,
+  applyTarget: string
+): { applyType: string; applyTarget: string } {
+  const trimmed = (applyTarget ?? "").trim();
+  if (/^mailto:/i.test(trimmed)) {
+    const mail = trimmed.replace(/^mailto:/i, "").split("?")[0]?.trim().toLowerCase() ?? "";
+    if (mail && mail.includes("@")) {
+      return { applyType: "email", applyTarget: mail };
+    }
+  }
+  if (isCloudflareEmailProtectionUrl(trimmed)) {
+    const decoded = decodeCloudflareEmailProtection(trimmed);
+    if (decoded) {
+      return { applyType: "email", applyTarget: decoded };
+    }
+  }
+  return { applyType, applyTarget: trimmed };
+}
 
 const CLOSED_PHRASES = [
   "job closed",
@@ -50,6 +119,12 @@ export function validateApplyUrl(raw: string): StaticValidation {
     return { ok: false, reason: "malformed" };
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return { ok: false, reason: "not_http" };
+  if (
+    url.pathname.toLowerCase().includes("/cdn-cgi/l/email-protection") ||
+    url.pathname.toLowerCase().startsWith("/cdn-cgi/")
+  ) {
+    return { ok: false, reason: "email_protection" };
+  }
   const host = url.hostname.toLowerCase();
   if (host === "linkedin.com" || host.endsWith(".linkedin.com") || host === "lnkd.in") {
     return { ok: false, reason: "linkedin" };
@@ -68,9 +143,14 @@ function hasJobIdentifierQuery(url: URL): boolean {
   return false;
 }
 
-/** Ingest gate: email/handle applies pass through; URL applies must pass validateApplyUrl. */
+/** Ingest gate: email/handle applies must be valid non-cdn-cgi targets; URL applies must pass validateApplyUrl. */
 export function isAcceptableApplyTarget(applyType: string, applyTarget: string): boolean {
-  if (applyType === "email" || applyType === "discord" || applyType === "x_dm") return true;
+  if (isCloudflareEmailProtectionUrl(applyTarget)) return false;
+  if (applyType === "email") {
+    const clean = applyTarget.trim();
+    return clean.includes("@") && !clean.startsWith("http://") && !clean.startsWith("https://");
+  }
+  if (applyType === "discord" || applyType === "x_dm") return true;
   return validateApplyUrl(applyTarget).ok;
 }
 

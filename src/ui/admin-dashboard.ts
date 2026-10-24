@@ -724,6 +724,22 @@ export function renderAdminDashboardHtml(): string {
             </p>
             <button class="btn btn-sm" style="background: #0284c7; color: #fff; width: 100%;" onclick="triggerWeeklySweep()">🔄 Run Weekly Continuous Scan Now</button>
           </div>
+
+          <!-- Card 5: Async Broken Link & Cloudflare Email-Protection Repair -->
+          <div style="background: rgba(13, 20, 36, 0.6); padding: 16px; border-radius: 10px; border: 1px solid rgba(244, 63, 94, 0.4);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <div style="font-size: 14px; font-weight: 700; color: #fda4af;">
+                🛠️ Async Broken Links & Data Repair
+              </div>
+              <span style="font-size: 10px; background: rgba(244, 63, 94, 0.15); color: #fda4af; padding: 2px 8px; border-radius: 9999px; border: 1px solid rgba(244, 63, 94, 0.3); font-weight: 600;">
+                🛡️ Trigger Guarded
+              </span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+              Find broken records, decode Cloudflare <code>/cdn-cgi/l/email-protection</code> links, and re-research the source career page / company homepage to recover the real apply target. Unrecoverable records are quarantined — never deleted.
+            </p>
+            <button class="btn btn-sm" style="background: #e11d48; color: #fff; width: 100%;" onclick="triggerBrokenLinksRepair()">🛠️ Run Async Link & Data Repair</button>
+          </div>
         </div>
       </div>
     </div>
@@ -734,6 +750,7 @@ export function renderAdminDashboardHtml(): string {
         <div class="card-header">
           <div class="card-title">📋 Extracted Jobs Moderation</div>
           <div class="filters-bar" style="margin-bottom: 0;">
+            <button class="btn btn-sm" style="background: #e11d48; color: #fff;" onclick="triggerBrokenLinksRepair()">🛠️ Fix Broken Links (Async)</button>
             <select id="mod-filter-category" class="form-select" style="width: auto;" onchange="loadModerationJobs()">
               <option value="all">All Tech Disciplines</option>
               <option value="ai_ml">AI / ML</option>
@@ -1473,6 +1490,24 @@ export function renderAdminDashboardHtml(): string {
       } else {
         const err = await res.json();
         alert("Error: " + (err.error || "Failed to trigger weekly sweep"));
+      }
+    }
+
+    async function triggerBrokenLinksRepair() {
+      showToast("Searching broken records & re-researching sources to recover them...");
+      const res = await apiFetch('/api/admin/links/repair', {
+        method: 'POST',
+        body: { async: false, batchSize: 500, runLiveCheck: true }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(data.message || "Async data repair completed!");
+        loadModerationJobs();
+        loadStats();
+        loadTelemetry();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert("Error: " + (err.error || "Failed to trigger broken links repair"));
       }
     }
 
