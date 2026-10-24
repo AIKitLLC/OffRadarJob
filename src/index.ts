@@ -53,6 +53,7 @@ import { CandidateMatchService } from "./pipeline/candidate-match-service.js";
 import { LINK_CHECK_CRON, runLinkQualityCron } from "./services/link-quality-cron.js";
 import { runLinkCheckBatch } from "./services/link-checker.js";
 import { recoverBrokenLinksData } from "./services/broken-link-recovery.js";
+import { DENYLISTED_ADMIN_TOKEN_HASHES } from "./admin-token-denylist.js";
 
 export interface KvNamespace {
   get(key: string, type?: "text" | "json"): Promise<any>;
@@ -149,6 +150,8 @@ async function getOrSetKvCache<T>(
  */
 export const LEAKED_ADMIN_TOKEN_SHA256 = "8def82a2adab551529187ce033d1da734c0483c2cb4c6756110957314cabfbb1";
 
+DENYLISTED_ADMIN_TOKEN_HASHES.add(LEAKED_ADMIN_TOKEN_SHA256);
+
 export const ADMIN_COOKIE_NAME = "admin_session";
 
 async function sha256Bytes(value: string): Promise<Uint8Array> {
@@ -171,7 +174,7 @@ export async function timingSafeEqualStr(a: string, b: string): Promise<boolean>
 export async function getAdminSecret(env?: Pick<Env, "ADMIN_TOKEN">): Promise<string | null> {
   const secret = (env?.ADMIN_TOKEN ?? "").trim();
   if (secret.length < 32) return null;
-  if (toHex(await sha256Bytes(secret)) === LEAKED_ADMIN_TOKEN_SHA256) return null;
+  if (DENYLISTED_ADMIN_TOKEN_HASHES.has(toHex(await sha256Bytes(secret)))) return null;
   return secret;
 }
 

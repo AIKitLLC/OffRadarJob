@@ -1,0 +1,23 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "offradar-admin-token"
+description = "OffRadar hardcoded admin token (old DEFAULT_ADMIN_TOKEN)"
+regex = '''DEFAULT_ADMIN_TOKEN\s*=\s*["']([^"']{8,})["']'''
+secretGroup = 1
+
+[[allowlists]]
+description = "SHA-256 denylist digest, not a credential"
+targetRules = ["generic-api-key"]
+regexTarget = "line"
+regexes = ['''^\s*export const LEAKED_ADMIN_TOKEN_SHA256 = "[0-9a-f]{64}";\s*$''']
+paths = ['''^src/index\.ts$''']
+condition = "AND"
+
+[[allowlists]]
+description = "Reviewed synthetic test-DB tokens (introduced in def8369 / c7d9491)"
+targetRules = ["generic-api-key"]
+commits = ["def8369974e25f0688d33b4118fcacc37e04b227", "c7d94911b45b94c2b730e174b732af04ba383241"]
+paths = ['''^tests/newgrad\.test\.ts$''', '''^tests/telegram-admin\.test\.ts$''']
+condition = "AND"
