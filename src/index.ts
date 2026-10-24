@@ -53,6 +53,7 @@ import { CandidateMatchService } from "./pipeline/candidate-match-service.js";
 import { LINK_CHECK_CRON, runLinkQualityCron } from "./services/link-quality-cron.js";
 import { runLinkCheckBatch } from "./services/link-checker.js";
 import { recoverBrokenLinksData } from "./services/broken-link-recovery.js";
+import { DENYLISTED_ADMIN_TOKEN_HASHES } from "./admin-token-denylist.js";
 
 export interface KvNamespace {
   get(key: string, type?: "text" | "json"): Promise<any>;
@@ -149,22 +150,7 @@ async function getOrSetKvCache<T>(
  */
 export const LEAKED_ADMIN_TOKEN_SHA256 = "8def82a2adab551529187ce033d1da734c0483c2cb4c6756110957314cabfbb1";
 
-/** SHA-256 hashes of admin tokens that must never be accepted (leaked values). */
-const DENYLISTED_ADMIN_TOKEN_HASHES = new Set<string>([LEAKED_ADMIN_TOKEN_SHA256]);
-
-/**
- * Test-only hook: denylist an extra SHA-256 hash so the leaked-token rejection path
- * can be exercised on CI with a synthetic fixture instead of the real leaked value.
- * Returns a function that removes it again.
- */
-export function __denylistAdminTokenHashForTests(sha256Hex: string): () => void {
-  const h = sha256Hex.toLowerCase();
-  const added = !DENYLISTED_ADMIN_TOKEN_HASHES.has(h);
-  DENYLISTED_ADMIN_TOKEN_HASHES.add(h);
-  return () => {
-    if (added) DENYLISTED_ADMIN_TOKEN_HASHES.delete(h);
-  };
-}
+DENYLISTED_ADMIN_TOKEN_HASHES.add(LEAKED_ADMIN_TOKEN_SHA256);
 
 export const ADMIN_COOKIE_NAME = "admin_session";
 

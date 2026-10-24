@@ -7,7 +7,6 @@ import worker, {
   verifyAdminToken,
   timingSafeEqualStr,
   LEAKED_ADMIN_TOKEN_SHA256,
-  __denylistAdminTokenHashForTests,
   ADMIN_COOKIE_NAME,
   ADMIN_AUTH_MAX_FAILURES,
   resetAdminAuthRateLimit,
@@ -16,6 +15,7 @@ import worker, {
   ADMIN_SESSION_TTL_SECONDS,
 } from "../src/index.js";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
+import { denylistAdminTokenHashForTests } from "./helpers/admin-token-denylist.js";
 
 // Test-only secret (never a real token).
 const SECRET = "test-admin-secret-0123456789abcdef";
@@ -100,7 +100,7 @@ describe("leaked-token denylist", () => {
   const FAKE_LEAKED = "synthetic-leaked-admin-token-for-tests-only";
   let undo: () => void = () => {};
   beforeAll(() => {
-    undo = __denylistAdminTokenHashForTests(createHash("sha256").update(FAKE_LEAKED).digest("hex"));
+    undo = denylistAdminTokenHashForTests(createHash("sha256").update(FAKE_LEAKED).digest("hex"));
   });
   afterAll(() => undo());
 

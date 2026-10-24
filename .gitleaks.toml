@@ -1,18 +1,23 @@
-# Gitleaks config: default rules plus an allowlist for reviewed, confirmed-fake findings.
 [extend]
 useDefault = true
 
-[allowlist]
-description = "Reviewed false positives (2026-10-24)"
-# Each entry was inspected manually:
-# - src/index.ts LEAKED_ADMIN_TOKEN_SHA256: a SHA-256 digest used as a denylist, not a credential.
-# - tests/newgrad.test.ts testToken / tests/telegram-admin.test.ts apiToken: synthetic
-#   app-internal user tokens seeded into the in-memory test DB only.
+[[rules]]
+id = "offradar-admin-token"
+description = "OffRadar hardcoded admin token (old DEFAULT_ADMIN_TOKEN)"
+regex = '''DEFAULT_ADMIN_TOKEN\s*=\s*["']([^"']{8,})["']'''
+secretGroup = 1
+
+[[allowlists]]
+description = "SHA-256 denylist digest, not a credential"
+targetRules = ["generic-api-key"]
 regexTarget = "line"
-regexes = [
-  '''LEAKED_ADMIN_TOKEN_SHA256 = "[0-9a-f]{64}"''',
-]
-paths = [
-  '''^tests/newgrad\.test\.ts$''',
-  '''^tests/telegram-admin\.test\.ts$''',
-]
+regexes = ['''^\s*export const LEAKED_ADMIN_TOKEN_SHA256 = "[0-9a-f]{64}";\s*$''']
+paths = ['''^src/index\.ts$''']
+condition = "AND"
+
+[[allowlists]]
+description = "Reviewed synthetic test-DB tokens (introduced in def8369 / c7d9491)"
+targetRules = ["generic-api-key"]
+commits = ["def8369974e25f0688d33b4118fcacc37e04b227", "c7d94911b45b94c2b730e174b732af04ba383241"]
+paths = ['''^tests/newgrad\.test\.ts$''', '''^tests/telegram-admin\.test\.ts$''']
+condition = "AND"
