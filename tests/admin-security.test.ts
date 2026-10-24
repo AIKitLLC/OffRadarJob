@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -7,6 +7,7 @@ import worker, {
   verifyAdminToken,
   timingSafeEqualStr,
   LEAKED_ADMIN_TOKEN_SHA256,
+  __denylistAdminTokenHashForTests,
   ADMIN_COOKIE_NAME,
   ADMIN_AUTH_MAX_FAILURES,
   resetAdminAuthRateLimit,
@@ -89,24 +90,39 @@ describe("token checks", () => {
   });
 });
 
-describe.skipIf(!LEAKED)("old hardcoded default token", () => {
-  it("matches the denylisted hash", () => {
-    expect(createHash("sha256").update(LEAKED!).digest("hex")).toBe(LEAKED_ADMIN_TOKEN_SHA256);
+describe("leaked-token denylist", () => {
+  it("stores the old token only as a SHA-256 hex digest", () => {
+    expect(LEAKED_ADMIN_TOKEN_SHA256).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  // Synthetic stand-in for a leaked token: its hash is denylisted at test time, so the
+  // rejection paths run on CI (shallow checkout, no history) without the real value.
+  const FAKE_LEAKED = "synthetic-leaked-admin-token-for-tests-only";
+  let undo: () => void = () => {};
+  beforeAll(() => {
+    undo = __denylistAdminTokenHashForTests(createHash("sha256").update(FAKE_LEAKED).digest("hex"));
+  });
+  afterAll(() => undo());
+
   it("is rejected when a different secret is configured", async () => {
-    expect((await call("/api/admin/stats", { headers: { "x-admin-token": LEAKED! } })).status).toBe(401);
-    const tg = await call("/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: LEAKED }) });
+    expect((await call("/api/admin/stats", { headers: { "x-admin-token": FAKE_LEAKED } })).status).toBe(401);
+    const tg = await call("/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: FAKE_LEAKED }) });
     expect(tg.status).toBe(401);
   });
 
   it("is rejected with no secret configured (no fallback)", async () => {
-    expect((await call("/api/admin/stats", { headers: { "x-admin-token": LEAKED! } }, {})).status).toBe(401);
+    expect((await call("/api/admin/stats", { headers: { "x-admin-token": FAKE_LEAKED } }, {})).status).toBe(401);
   });
 
   it("keeps admin closed even if someone re-sets it as the secret", async () => {
-    expect((await call("/admin", undefined, { ADMIN_TOKEN: LEAKED })).status).toBe(404);
-    expect((await call("/api/admin/stats", { headers: { "x-admin-token": LEAKED! } }, { ADMIN_TOKEN: LEAKED })).status).toBe(401);
+    expect((await call("/admin", undefined, { ADMIN_TOKEN: FAKE_LEAKED })).status).toBe(404);
+    expect((await call("/api/admin/stats", { headers: { "x-admin-token": FAKE_LEAKED } }, { ADMIN_TOKEN: FAKE_LEAKED })).status).toBe(401);
+  });
+});
+
+describe.skipIf(!LEAKED)("real leaked token (local only, needs full git history)", () => {
+  it("matches the denylisted hash", () => {
+    expect(createHash("sha256").update(LEAKED!).digest("hex")).toBe(LEAKED_ADMIN_TOKEN_SHA256);
   });
 });
 

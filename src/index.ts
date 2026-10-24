@@ -149,6 +149,23 @@ async function getOrSetKvCache<T>(
  */
 export const LEAKED_ADMIN_TOKEN_SHA256 = "8def82a2adab551529187ce033d1da734c0483c2cb4c6756110957314cabfbb1";
 
+/** SHA-256 hashes of admin tokens that must never be accepted (leaked values). */
+const DENYLISTED_ADMIN_TOKEN_HASHES = new Set<string>([LEAKED_ADMIN_TOKEN_SHA256]);
+
+/**
+ * Test-only hook: denylist an extra SHA-256 hash so the leaked-token rejection path
+ * can be exercised on CI with a synthetic fixture instead of the real leaked value.
+ * Returns a function that removes it again.
+ */
+export function __denylistAdminTokenHashForTests(sha256Hex: string): () => void {
+  const h = sha256Hex.toLowerCase();
+  const added = !DENYLISTED_ADMIN_TOKEN_HASHES.has(h);
+  DENYLISTED_ADMIN_TOKEN_HASHES.add(h);
+  return () => {
+    if (added) DENYLISTED_ADMIN_TOKEN_HASHES.delete(h);
+  };
+}
+
 export const ADMIN_COOKIE_NAME = "admin_session";
 
 async function sha256Bytes(value: string): Promise<Uint8Array> {
@@ -171,7 +188,7 @@ export async function timingSafeEqualStr(a: string, b: string): Promise<boolean>
 export async function getAdminSecret(env?: Pick<Env, "ADMIN_TOKEN">): Promise<string | null> {
   const secret = (env?.ADMIN_TOKEN ?? "").trim();
   if (secret.length < 32) return null;
-  if (toHex(await sha256Bytes(secret)) === LEAKED_ADMIN_TOKEN_SHA256) return null;
+  if (DENYLISTED_ADMIN_TOKEN_HASHES.has(toHex(await sha256Bytes(secret)))) return null;
   return secret;
 }
 

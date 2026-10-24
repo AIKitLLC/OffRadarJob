@@ -1,0 +1,18 @@
+# Gitleaks config: default rules plus an allowlist for reviewed, confirmed-fake findings.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Reviewed false positives (2026-10-24)"
+# Each entry was inspected manually:
+# - src/index.ts LEAKED_ADMIN_TOKEN_SHA256: a SHA-256 digest used as a denylist, not a credential.
+# - tests/newgrad.test.ts testToken / tests/telegram-admin.test.ts apiToken: synthetic
+#   app-internal user tokens seeded into the in-memory test DB only.
+regexTarget = "line"
+regexes = [
+  '''LEAKED_ADMIN_TOKEN_SHA256 = "[0-9a-f]{64}"''',
+]
+paths = [
+  '''^tests/newgrad\.test\.ts$''',
+  '''^tests/telegram-admin\.test\.ts$''',
+]
