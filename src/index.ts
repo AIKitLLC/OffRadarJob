@@ -3150,14 +3150,17 @@ export default {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       try {
-        const body = (await request.json().catch(() => ({}))) as {
-          async?: boolean;
-          batchSize?: number;
-          runLiveCheck?: boolean;
-        };
-        const batchSize = Math.min(Math.max(body.batchSize ?? 500, 10), 2000);
-        const runAsync = body.async !== false;
-        const runLiveCheck = Boolean(body.runLiveCheck);
+        const rawBody: unknown = await request.json().catch(() => ({}));
+        const body: Record<string, unknown> =
+          rawBody !== null && typeof rawBody === "object" && !Array.isArray(rawBody)
+            ? (rawBody as Record<string, unknown>)
+            : {};
+        const batchSize =
+          typeof body.batchSize === "number" && Number.isFinite(body.batchSize)
+            ? Math.min(Math.max(Math.trunc(body.batchSize), 10), 2000)
+            : 500;
+        const runAsync = typeof body.async === "boolean" ? body.async : false;
+        const runLiveCheck = body.runLiveCheck === true;
         const now = Date.now();
 
         const executeRepair = async () => {
@@ -3184,28 +3187,28 @@ export default {
         };
 
         if (runAsync) {
-          const repairPromise = executeRepair();
           ctx.waitUntil(
-            repairPromise.catch((err) => {
-              console.error("[AdminLinksRepair] Background repair failed:", err);
+            executeRepair().catch((err) => {
+              console.error("[AdminLinksRepair] Background recovery failed:", err);
             })
           );
-          const result = await repairPromise;
-          return Response.json({
-            success: true,
-            status: "completed_async",
-            ...result,
-            message: `Data recovery completed: ${result.repair.decodedEmails} obfuscated emails decoded, ${result.repair.recoveredJobsFromSource} jobs recovered from source, ${result.repair.closedInvalidJobs} invalid links quarantined (retained), ${result.repair.recoveredCareerPages} career pages rediscovered.`,
-          });
-        } else {
-          const result = await executeRepair();
-          return Response.json({
-            success: true,
-            status: "completed",
-            ...result,
-            message: `Data recovery completed: ${result.repair.decodedEmails} obfuscated emails decoded, ${result.repair.recoveredJobsFromSource} jobs recovered from source, ${result.repair.closedInvalidJobs} invalid links quarantined (retained), ${result.repair.recoveredCareerPages} career pages rediscovered.`,
-          });
+          return Response.json(
+            {
+              success: true,
+              status: "accepted",
+              message: "Broken-link recovery started in the background. Results are written to the crawl log (agent: link_data_repair) when it completes.",
+            },
+            { status: 202 }
+          );
         }
+
+        const result = await executeRepair();
+        return Response.json({
+          success: true,
+          status: "completed",
+          ...result,
+          message: `Data recovery completed: ${result.repair.decodedEmails} obfuscated emails decoded, ${result.repair.recoveredJobsFromSource} jobs recovered from source, ${result.repair.closedInvalidJobs} invalid links quarantined (retained), ${result.repair.recoveredCareerPages} career pages rediscovered.`,
+        });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         return Response.json({ error: msg }, { status: 500 });

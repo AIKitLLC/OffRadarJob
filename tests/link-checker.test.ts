@@ -163,6 +163,9 @@ describe("validateApplyUrl (ingest validation)", () => {
     const saved = await repo.findByContentHash("h_cf");
     expect(saved?.applyType).toBe("email");
     expect(saved?.applyTarget).toBe("careers@alphavantage.co");
+    // upsert normalizes what it stores without mutating the caller's object
+    expect(cfJob.applyType).toBe("url");
+    expect(cfJob.applyTarget).toContain("/cdn-cgi/l/email-protection#");
 
     const brokenCfJob: Job = {
       ...cfJob,
@@ -440,7 +443,7 @@ describe("recoverBrokenLinksData & POST /api/admin/links/repair (search & recove
         "Content-Type": "application/json",
         "x-admin-token": adminToken,
       },
-      body: JSON.stringify({ async: true, batchSize: 100 }),
+      body: JSON.stringify({ async: false, batchSize: 100 }),
     });
     const res = await worker.fetch(req, { DB: db, ADMIN_TOKEN: adminToken } as any, {
       waitUntil: () => {},
@@ -638,5 +641,81 @@ describe("recoverBrokenLinksData & POST /api/admin/links/repair (search & recove
 
     const company = await companyRepo.findByDomain("home.example");
     expect(company?.contactEmail).toBe("hiring@home.example");
+  });
+
+  it("POST /api/admin/links/repair with async:true returns 202 immediately and completes in the background via waitUntil", async () => {
+    const db = new InMemoryD1Database();
+    const jobRepo = new JobRepository(db);
+
+    db.tables.get("jobs")!.set("j_async_cf", {
+      id: "j_async_cf",
+      company_id: "comp_none",
+      career_page_id: "cp_none",
+      title: "Backend Engineer",
+      seniority_level: "senior",
+      tech_category: "backend_systems",
+      is_tech_role: 1,
+      employment_type: "full-time",
+      is_remote: 1,
+      remote_scope: "worldwide",
+      skills: "[]",
+      apply_type: "url",
+      apply_target: "https://alphavantage.co/cdn-cgi/l/email-protection#dcbfbdaeb9b9aeaf9cbdb0acb4bdaabdb2a8bdbbb9f2bfb3",
+      status: "open",
+      content_hash: "h_async_cf",
+      first_seen_at: 1,
+      last_seen_at: 1,
+    });
+
+    const adminToken = "test-admin-secret-0123456789abcdef";
+    const req = new Request("http://localhost/api/admin/links/repair", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({ async: true, batchSize: "not-a-number" }),
+    });
+
+    let background: Promise<unknown> | null = null;
+    const res = await worker.fetch(req, { DB: db, ADMIN_TOKEN: adminToken } as any, {
+      waitUntil: (p: Promise<unknown>) => {
+        background = p;
+      },
+      passThroughOnException: () => {},
+    } as any);
+
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as any;
+    expect(body).toMatchObject({ success: true, status: "accepted" });
+    expect(body.repair).toBeUndefined();
+
+    expect(background).not.toBeNull();
+    await background;
+
+    const repaired = await jobRepo.getById("j_async_cf");
+    expect(repaired?.applyType).toBe("email");
+    expect(repaired?.applyTarget).toBe("careers@alphavantage.co");
+  });
+
+  it("POST /api/admin/links/repair rejects malformed batchSize values by falling back to defaults", async () => {
+    const db = new InMemoryD1Database();
+    const adminToken = "test-admin-secret-0123456789abcdef";
+    const req = new Request("http://localhost/api/admin/links/repair", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({ async: false, batchSize: Number.NaN, runLiveCheck: "yes" }),
+    });
+    const res = await worker.fetch(req, { DB: db, ADMIN_TOKEN: adminToken } as any, {
+      waitUntil: () => {},
+      passThroughOnException: () => {},
+    } as any);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(body.liveCheck).toBeNull();
   });
 });

@@ -802,7 +802,7 @@ export const MOUNTAIN_SQL_CONDITION = `(
 
 /** Public listings only show open jobs and exclude un-decoded Cloudflare email-protection URLs. */
 export const OPEN_JOB_SQL =
-  "j.status = 'open' AND LOWER(COALESCE(j.apply_target, '')) NOT LIKE '%/cdn-cgi/%' AND LOWER(COALESCE(j.apply_target, '')) NOT LIKE '%email-protection%'";
+  "j.status = 'open' AND LOWER(COALESCE(j.apply_target, '')) NOT LIKE '%/cdn-cgi/%'";
 
 export class JobRepository {
   constructor(private readonly db: ID1Database) {}
@@ -819,8 +819,6 @@ export class JobRepository {
     if (!isAcceptableApplyTarget(applyType, applyTarget)) {
       return false;
     }
-    job.applyType = applyType;
-    job.applyTarget = applyTarget;
     const query = `
       INSERT INTO jobs (
         id, company_id, career_page_id, title, department,
@@ -1246,11 +1244,6 @@ export class JobRepository {
       row["is_midwest"] === true ||
       detectedRegion === "midwest";
 
-    const normalizedApply = normalizeApplyTarget(
-      String(row["apply_type"] ?? "url"),
-      String(row["apply_target"] ?? "")
-    );
-
     return {
       id: String(row["id"]),
       companyId: String(row["company_id"]),
@@ -1270,8 +1263,8 @@ export class JobRepository {
       skills,
       descriptionSummary: row["description_summary"] != null ? String(row["description_summary"]) : undefined,
       rawContent: row["raw_content"] != null ? String(row["raw_content"]) : undefined,
-      applyType: (normalizedApply.applyType as any) ?? "url",
-      applyTarget: normalizedApply.applyTarget,
+      applyType: (row["apply_type"] as any) ?? "url",
+      applyTarget: String(row["apply_target"]),
       status: (row["status"] as any) ?? "open",
       contentHash: String(row["content_hash"]),
       companyName: row["company_name"] != null ? String(row["company_name"]) : undefined,

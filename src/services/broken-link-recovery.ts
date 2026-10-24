@@ -156,9 +156,19 @@ export async function recoverBrokenLinksData(
   opts: BrokenLinkRecoveryOptions = {}
 ): Promise<BrokenLinkRecoverySummary> {
   const now = opts.now ?? Date.now();
-  const batchSize = Math.max(10, Math.min(opts.batchSize ?? 500, 2000));
-  const retryAfterMs = opts.retryAfterMs ?? DEFAULT_RETRY_AFTER_MS;
-  const researcher = new SourceReResearcher(fetchFn, { maxFetches: opts.maxFetches ?? 20 });
+  const batchSize =
+    typeof opts.batchSize === "number" && Number.isFinite(opts.batchSize)
+      ? Math.max(10, Math.min(Math.trunc(opts.batchSize), 2000))
+      : 500;
+  const retryAfterMs =
+    typeof opts.retryAfterMs === "number" && Number.isFinite(opts.retryAfterMs) && opts.retryAfterMs > 0
+      ? opts.retryAfterMs
+      : DEFAULT_RETRY_AFTER_MS;
+  const maxFetches =
+    typeof opts.maxFetches === "number" && Number.isFinite(opts.maxFetches) && opts.maxFetches >= 0
+      ? Math.trunc(opts.maxFetches)
+      : 20;
+  const researcher = new SourceReResearcher(fetchFn, { maxFetches });
   const summary = emptyBrokenLinkRecoverySummary();
   const stmts: ReturnType<ID1Database["prepare"]>[] = [];
 
@@ -170,6 +180,7 @@ export async function recoverBrokenLinksData(
           OR LOWER(apply_target) LIKE 'mailto:%'
           OR closed_reason = 'invalid_link'
           OR link_status = 'invalid'
+       ORDER BY link_checked_at ASC
        LIMIT ?`
     )
     .bind(batchSize)

@@ -230,9 +230,12 @@ export class JobExtractorAgent extends BaseAgent {
       let applyTarget = baseUrl;
 
       const directMail = container.find('a[href^="mailto:"]').attr("href");
-      const cfProtectedEl = container.find("[data-cfemail], a[href*='/cdn-cgi/l/email-protection']").first();
-      const cfProtectedRaw = cfProtectedEl.attr("data-cfemail") || cfProtectedEl.attr("href") || "";
-      const cfDecodedMail = cfProtectedRaw ? decodeCloudflareEmailProtection(cfProtectedRaw) : null;
+      let cfDecodedMail: string | null = null;
+      container.find("[data-cfemail], a[href*='/cdn-cgi/l/email-protection']").each((_, el) => {
+        if (cfDecodedMail) return;
+        const raw = $(el).attr("data-cfemail") || $(el).attr("href") || "";
+        cfDecodedMail = decodeCloudflareEmailProtection(raw);
+      });
 
       if (directMail) {
         applyType = "email";

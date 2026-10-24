@@ -1497,7 +1497,7 @@ export function renderAdminDashboardHtml(): string {
       showToast("Searching broken records & re-researching sources to recover them...");
       const res = await apiFetch('/api/admin/links/repair', {
         method: 'POST',
-        body: { async: true, batchSize: 500, runLiveCheck: true }
+        body: { async: false, batchSize: 500, runLiveCheck: true }
       });
       if (res.ok) {
         const data = await res.json();

@@ -138,7 +138,10 @@ export class SourceReResearcher {
   }
 
   private async fetchHtmlUncached(url: string): Promise<string | null> {
-    const maxFetches = this.opts.maxFetches ?? 20;
+    const maxFetches =
+      typeof this.opts.maxFetches === "number" && Number.isFinite(this.opts.maxFetches) && this.opts.maxFetches >= 0
+        ? Math.trunc(this.opts.maxFetches)
+        : 20;
     if (this.fetches >= maxFetches) return null;
     if (isCloudflareEmailProtectionUrl(url)) return null;
 

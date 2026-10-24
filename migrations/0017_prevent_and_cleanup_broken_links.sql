@@ -27,8 +27,7 @@ WHERE LOWER(url) LIKE '%/cdn-cgi/%'
 CREATE TRIGGER IF NOT EXISTS trg_jobs_reject_broken_links_insert
 BEFORE INSERT ON jobs
 FOR EACH ROW
-WHEN LOWER(NEW.apply_target) LIKE '%/cdn-cgi/%'
-  OR LOWER(NEW.apply_target) LIKE '%email-protection%'
+WHEN LOWER(NEW.apply_target) LIKE '%/cdn-cgi/l/email-protection%'
 BEGIN
   SELECT RAISE(ABORT, 'Rejected broken apply_target: Cloudflare email-protection URL is not allowed');
 END;
@@ -37,8 +36,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_jobs_reject_broken_links_update
 BEFORE UPDATE OF apply_target ON jobs
 FOR EACH ROW
-WHEN LOWER(NEW.apply_target) LIKE '%/cdn-cgi/%'
-  OR LOWER(NEW.apply_target) LIKE '%email-protection%'
+WHEN LOWER(NEW.apply_target) LIKE '%/cdn-cgi/l/email-protection%'
 BEGIN
   SELECT RAISE(ABORT, 'Rejected broken apply_target: Cloudflare email-protection URL is not allowed');
 END;
@@ -47,8 +45,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_career_pages_reject_broken_links_insert
 BEFORE INSERT ON career_pages
 FOR EACH ROW
-WHEN LOWER(NEW.url) LIKE '%/cdn-cgi/%'
-  OR LOWER(NEW.url) LIKE '%email-protection%'
+WHEN LOWER(NEW.url) LIKE '%/cdn-cgi/l/email-protection%'
 BEGIN
   SELECT RAISE(ABORT, 'Rejected broken career_page url: Cloudflare email-protection URL is not allowed');
 END;
@@ -57,8 +54,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_career_pages_reject_broken_links_update
 BEFORE UPDATE OF url ON career_pages
 FOR EACH ROW
-WHEN LOWER(NEW.url) LIKE '%/cdn-cgi/%'
-  OR LOWER(NEW.url) LIKE '%email-protection%'
+WHEN LOWER(NEW.url) LIKE '%/cdn-cgi/l/email-protection%'
 BEGIN
   SELECT RAISE(ABORT, 'Rejected broken career_page url: Cloudflare email-protection URL is not allowed');
 END;

@@ -189,13 +189,14 @@ export class CompanyProfilerAgent extends BaseAgent {
       if (email && email.includes("@")) return email.toLowerCase();
     }
 
-    // 1b. Cloudflare email protection links / attributes
-    const cfEl = $("[data-cfemail], a[href*='/cdn-cgi/l/email-protection']").first();
-    if (cfEl.length > 0) {
-      const rawCf = cfEl.attr("data-cfemail") || cfEl.attr("href") || "";
-      const decoded = decodeCloudflareEmailProtection(rawCf);
-      if (decoded) return decoded;
-    }
+    // 1b. Cloudflare email protection links / attributes (first decodable one wins)
+    let cfDecoded: string | null = null;
+    $("[data-cfemail], a[href*='/cdn-cgi/l/email-protection']").each((_, el) => {
+      if (cfDecoded) return;
+      const rawCf = $(el).attr("data-cfemail") || $(el).attr("href") || "";
+      cfDecoded = decodeCloudflareEmailProtection(rawCf);
+    });
+    if (cfDecoded) return cfDecoded;
 
     // 2. Regex search in footer or contact sections
     const match = html.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
