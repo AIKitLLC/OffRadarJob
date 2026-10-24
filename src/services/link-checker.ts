@@ -21,11 +21,80 @@ export type LinkStatus =
 
 export interface StaticValidation {
   ok: boolean;
-  reason?: "not_http" | "malformed" | "linkedin" | "error_param" | "generic_careers_page";
+  reason?:
+    | "not_http"
+    | "malformed"
+    | "linkedin"
+    | "error_param"
+    | "generic_careers_page"
+    | "email_protection";
 }
 
 const GENERIC_PATH_RE =
   /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:careers?|jobs|join(?:-us)?|work-with-us|open-positions|openings|positions|about\/careers|company\/careers)?\/?$/i;
+
+const CF_EMAIL_PROTECTION_RE =
+  /(?:\/cdn-cgi\/l\/email-protection(?:#|\?)|data-cfemail=["']?)\s*([0-9a-fA-F]{4,})/i;
+
+/**
+ * Decode a Cloudflare email-protection hex payload (XOR with first byte).
+ * Accepts a full `/cdn-cgi/l/email-protection#...` URL, `?` query, `data-cfemail` attribute, or raw hex.
+ * Returns a lowercase email address when valid, or null if not decodable.
+ */
+export function decodeCloudflareEmailProtection(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const raw = input.trim();
+  const match = raw.match(CF_EMAIL_PROTECTION_RE);
+  const hex = match?.[1] ?? (/^[0-9a-fA-F]{6,}$/.test(raw) ? raw : null);
+  if (!hex || hex.length < 6 || hex.length % 2 !== 0) return null;
+
+  const key = Number.parseInt(hex.slice(0, 2), 16);
+  if (!Number.isFinite(key)) return null;
+
+  let decoded = "";
+  for (let i = 2; i < hex.length; i += 2) {
+    const byte = Number.parseInt(hex.slice(i, i + 2), 16);
+    if (!Number.isFinite(byte)) return null;
+    decoded += String.fromCharCode(byte ^ key);
+  }
+
+  const email = decoded.trim().split("?")[0]?.trim().toLowerCase() ?? "";
+  if (/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(email)) {
+    return email;
+  }
+  return null;
+}
+
+/** True when a string or URL points to Cloudflare's `/cdn-cgi/l/email-protection` obfuscator. */
+export function isCloudflareEmailProtectionUrl(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  return /\/cdn-cgi\/l\/email-protection/i.test(raw);
+}
+
+/**
+ * Normalize an apply target before validation/upsert:
+ * - Decodes Cloudflare `/cdn-cgi/l/email-protection#...` URLs into `{ applyType: 'email', applyTarget: decodedEmail }`.
+ * - Converts `mailto:...` URLs passed with `url`/`form` into `{ applyType: 'email', applyTarget: email }`.
+ */
+export function normalizeApplyTarget(
+  applyType: string,
+  applyTarget: string
+): { applyType: string; applyTarget: string } {
+  const trimmed = (applyTarget ?? "").trim();
+  if (/^mailto:/i.test(trimmed)) {
+    const mail = trimmed.replace(/^mailto:/i, "").split("?")[0]?.trim().toLowerCase() ?? "";
+    if (mail && mail.includes("@")) {
+      return { applyType: "email", applyTarget: mail };
+    }
+  }
+  if (isCloudflareEmailProtectionUrl(trimmed)) {
+    const decoded = decodeCloudflareEmailProtection(trimmed);
+    if (decoded) {
+      return { applyType: "email", applyTarget: decoded };
+    }
+  }
+  return { applyType, applyTarget: trimmed };
+}
 
 const CLOSED_PHRASES = [
   "job closed",
@@ -50,6 +119,12 @@ export function validateApplyUrl(raw: string): StaticValidation {
     return { ok: false, reason: "malformed" };
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return { ok: false, reason: "not_http" };
+  if (
+    url.pathname.toLowerCase().includes("/cdn-cgi/l/email-protection") ||
+    url.pathname.toLowerCase().startsWith("/cdn-cgi/")
+  ) {
+    return { ok: false, reason: "email_protection" };
+  }
   const host = url.hostname.toLowerCase();
   if (host === "linkedin.com" || host.endsWith(".linkedin.com") || host === "lnkd.in") {
     return { ok: false, reason: "linkedin" };
@@ -68,9 +143,14 @@ function hasJobIdentifierQuery(url: URL): boolean {
   return false;
 }
 
-/** Ingest gate: email/handle applies pass through; URL applies must pass validateApplyUrl. */
+/** Ingest gate: email/handle applies must be valid non-cdn-cgi targets; URL applies must pass validateApplyUrl. */
 export function isAcceptableApplyTarget(applyType: string, applyTarget: string): boolean {
-  if (applyType === "email" || applyType === "discord" || applyType === "x_dm") return true;
+  if (isCloudflareEmailProtectionUrl(applyTarget)) return false;
+  if (applyType === "email") {
+    const clean = applyTarget.trim();
+    return clean.includes("@") && !clean.startsWith("http://") && !clean.startsWith("https://");
+  }
+  if (applyType === "discord" || applyType === "x_dm") return true;
   return validateApplyUrl(applyTarget).ok;
 }
 
@@ -343,4 +423,132 @@ export async function expireStaleJobs(db: ID1Database, opts: { staleDays?: numbe
     .bind(cutoff)
     .run();
   return Number((res as { meta?: { changes?: number } }).meta?.changes ?? 0);
+}
+
+export interface BrokenLinksRepairSummary {
+  scannedJobs: number;
+  decodedEmails: number;
+  closedInvalidJobs: number;
+  fixedCompanies: number;
+  deletedCareerPages: number;
+}
+
+/**
+ * Async data repair pass for broken links already in the database:
+ * 1. Decodes Cloudflare `/cdn-cgi/l/email-protection#...` and `mailto:` URLs on `jobs` into `apply_type = 'email'` with the decoded email.
+ * 2. Closes any remaining open `url`/`form` jobs whose `apply_target` fails `validateApplyUrl` (e.g. un-decodable `cdn-cgi`, generic `/careers`, `?error=true`, LinkedIn).
+ * 3. Cleans up `companies.contact_email` and `career_pages` that contain `/cdn-cgi/l/email-protection`.
+ */
+export async function repairBrokenLinksData(
+  db: ID1Database,
+  opts: { batchSize?: number; now?: number } = {}
+): Promise<BrokenLinksRepairSummary> {
+  const now = opts.now ?? Date.now();
+  const batchSize = Math.max(10, Math.min(opts.batchSize ?? 500, 2000));
+  const summary: BrokenLinksRepairSummary = {
+    scannedJobs: 0,
+    decodedEmails: 0,
+    closedInvalidJobs: 0,
+    fixedCompanies: 0,
+    deletedCareerPages: 0,
+  };
+
+  // 1. Scan open jobs (or jobs with cdn-cgi in apply_target regardless of status so they have clean targets)
+  const jobsRes = await db
+    .prepare(
+      `SELECT id, apply_type, apply_target, status FROM jobs
+       WHERE status = 'open' OR LOWER(apply_target) LIKE '%cdn-cgi%' OR LOWER(apply_target) LIKE 'mailto:%'
+       LIMIT ?`
+    )
+    .bind(batchSize)
+    .all<{ id: string; apply_type: string; apply_target: string; status: string }>();
+
+  const jobRows = jobsRes.results ?? [];
+  summary.scannedJobs = jobRows.length;
+
+  const stmts: ReturnType<ID1Database["prepare"]>[] = [];
+
+  for (const row of jobRows) {
+    const normalized = normalizeApplyTarget(row.apply_type, row.apply_target);
+    if (normalized.applyType !== row.apply_type || normalized.applyTarget !== row.apply_target) {
+      if (isAcceptableApplyTarget(normalized.applyType, normalized.applyTarget)) {
+        summary.decodedEmails++;
+        stmts.push(
+          db
+            .prepare(
+              `UPDATE jobs
+               SET apply_type = ?, apply_target = ?, link_status = 'ok', link_fail_count = 0, link_checked_at = ?, last_verified_at = ?
+               WHERE id = ?`
+            )
+            .bind(normalized.applyType, normalized.applyTarget, now, now, row.id)
+        );
+        continue;
+      }
+    }
+
+    if (row.status === "open" && !isAcceptableApplyTarget(row.apply_type, row.apply_target)) {
+      summary.closedInvalidJobs++;
+      stmts.push(
+        db
+          .prepare(
+            `UPDATE jobs
+             SET status = 'closed', closed_reason = 'invalid_link', link_status = 'invalid', link_checked_at = ?
+             WHERE id = ?`
+          )
+          .bind(now, row.id)
+      );
+    }
+  }
+
+  // 2. Clean companies.contact_email if any contain cdn-cgi or mailto:
+  const compRes = await db
+    .prepare(
+      `SELECT id, contact_email FROM companies
+       WHERE contact_email IS NOT NULL
+         AND (LOWER(contact_email) LIKE '%cdn-cgi%' OR LOWER(contact_email) LIKE 'mailto:%')
+       LIMIT ?`
+    )
+    .bind(batchSize)
+    .all<{ id: string; contact_email: string }>();
+
+  for (const comp of compRes.results ?? []) {
+    const norm = normalizeApplyTarget("email", comp.contact_email);
+    const fixedEmail =
+      norm.applyType === "email" && isAcceptableApplyTarget("email", norm.applyTarget)
+        ? norm.applyTarget
+        : null;
+    summary.fixedCompanies++;
+    stmts.push(
+      db
+        .prepare(`UPDATE companies SET contact_email = ?, updated_at = ? WHERE id = ?`)
+        .bind(fixedEmail, now, comp.id)
+    );
+  }
+
+  // 3. Remove career_pages pointing to cdn-cgi email protection
+  const cpRes = await db
+    .prepare(
+      `SELECT id FROM career_pages WHERE LOWER(url) LIKE '%cdn-cgi%' LIMIT ?`
+    )
+    .bind(batchSize)
+    .all<{ id: string }>();
+
+  for (const cp of cpRes.results ?? []) {
+    summary.deletedCareerPages++;
+    stmts.push(db.prepare(`DELETE FROM career_pages WHERE id = ?`).bind(cp.id));
+  }
+
+  if (stmts.length > 0) {
+    if (db.batch) {
+      for (let i = 0; i < stmts.length; i += 50) {
+        await db.batch(stmts.slice(i, i + 50));
+      }
+    } else {
+      for (const s of stmts) {
+        await s.run();
+      }
+    }
+  }
+
+  return summary;
 }

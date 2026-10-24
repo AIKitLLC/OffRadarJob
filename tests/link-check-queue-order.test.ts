@@ -109,4 +109,28 @@ d("link-check queue order (real SQL)", () => {
     expect((await repo.getStatsSummary()).total).toBe(2);
     expect((await repo.getFreshnessMetrics()).updatedLast7d).toBe(2);
   });
+
+  it("SQLite trigger rejects inserting or updating /cdn-cgi/l/email-protection apply_target in jobs and career_pages", () => {
+    expect(() =>
+      insert(
+        "cf_bad",
+        "https://alphavantage.co/cdn-cgi/l/email-protection#dcbfbdaeb9b9aeaf9cbdb0acb4bdaabdb2a8bdbbb9f2bfb3"
+      )
+    ).toThrow(/Cloudflare email-protection URL is not allowed/);
+
+    insert("valid_job", "https://q.example/careers/engineer-1");
+    expect(() =>
+      raw
+        .prepare("UPDATE jobs SET apply_target = ? WHERE id = 'valid_job'")
+        .run("https://q.example/cdn-cgi/l/email-protection#123456")
+    ).toThrow(/Cloudflare email-protection URL is not allowed/);
+
+    expect(() =>
+      raw
+        .prepare(
+          "INSERT INTO career_pages (id, company_id, url, page_type, last_checked_at, created_at) VALUES ('cp_bad','c_q',?,'custom',1,1)"
+        )
+        .run("https://q.example/cdn-cgi/l/email-protection#123456")
+    ).toThrow(/Cloudflare email-protection URL is not allowed/);
+  });
 });

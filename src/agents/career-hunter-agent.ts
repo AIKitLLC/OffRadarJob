@@ -3,6 +3,7 @@ import { BaseAgent } from "./base.js";
 import { Result, Ok, Err, CareerPage, CareerPageType } from "../types/domain.js";
 import { HuntMessage, ExtractMessage } from "../types/queues.js";
 import { CareerPageRepository, LogRepository } from "../db/repositories.js";
+import { isCloudflareEmailProtectionUrl } from "../services/link-checker.js";
 
 const STANDARD_CAREER_PATHS = [
   "/careers",
@@ -64,9 +65,13 @@ export class CareerHunterAgent extends BaseAgent {
       let foundPagesCount = 0;
 
       for (const targetUrl of targets) {
+        if (isCloudflareEmailProtectionUrl(targetUrl)) {
+          continue;
+        }
         try {
           const parsed = new URL(targetUrl);
           if (
+            parsed.pathname.toLowerCase().startsWith("/cdn-cgi/") ||
             (parsed.hostname.includes("ashbyhq.com") && parsed.pathname.length <= 1) ||
             (parsed.hostname.includes("forms.gle") && parsed.pathname.length <= 1) ||
             (parsed.hostname.includes("linkedin.com") && !targetUrl.includes("/jobs/view/"))

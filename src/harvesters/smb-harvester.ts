@@ -5,6 +5,7 @@
 
 import { AtsHarvester, AtsJobPosting } from "./ats-harvester.js";
 import { ID1Database } from "../db/types.js";
+import { isAcceptableApplyTarget, normalizeApplyTarget } from "../services/link-checker.js";
 import crypto from "node:crypto";
 
 export interface SmbTarget {
@@ -790,7 +791,11 @@ export class SmbHarvester {
       `.trim());
 
       for (const j of jobs) {
-        const hashInput = `${target.domain}|${j.title}|${j.applyUrl}`;
+        const normalized = normalizeApplyTarget("url", j.applyUrl);
+        if (!isAcceptableApplyTarget(normalized.applyType, normalized.applyTarget)) {
+          continue;
+        }
+        const hashInput = `${target.domain}|${j.title}|${normalized.applyTarget}`;
         const contentHash = crypto.createHash("sha256").update(hashInput).digest("hex").substring(0, 32);
         const jobId = `job_smb_${contentHash.substring(0, 16)}`;
 
@@ -816,8 +821,8 @@ export class SmbHarvester {
             ${this.escapeSql(JSON.stringify(j.skills || []))},
             ${this.escapeSql(j.descriptionSummary || `${target.name} is hiring for ${j.title}`)},
             NULL,
-            'url',
-            ${this.escapeSql(j.applyUrl)},
+            ${this.escapeSql(normalized.applyType)},
+            ${this.escapeSql(normalized.applyTarget)},
             'open',
             ${this.escapeSql(contentHash)},
             ${now},
@@ -830,7 +835,10 @@ export class SmbHarvester {
           WHERE c.domain = ${this.escapeSql(target.domain)}
           ON CONFLICT(content_hash) DO UPDATE SET
             last_seen_at = ${now},
-            status = 'open';
+            status = CASE
+              WHEN jobs.closed_reason = 'link_check' AND jobs.apply_target = excluded.apply_target THEN jobs.status
+              ELSE 'open'
+            END;
         `.trim());
       }
     }

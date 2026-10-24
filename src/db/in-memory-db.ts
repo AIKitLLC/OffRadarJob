@@ -152,6 +152,17 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: [{ count: filtered.length, total: filtered.length } as T], success: true };
     }
 
+    if (q.includes("FROM companies") && q.includes("LIKE '%cdn-cgi%'")) {
+      const limit = Number(this.boundValues[0] ?? 500);
+      const rows = Array.from(this.db.tables.get("companies")!.values())
+        .filter((r) => {
+          const email = String(r["contact_email"] ?? "").toLowerCase();
+          return Boolean(email) && (email.includes("cdn-cgi") || email.startsWith("mailto:"));
+        })
+        .slice(0, limit);
+      return { results: rows as T[], success: true };
+    }
+
     if (q.includes("FROM companies")) {
       let rows = Array.from(this.db.tables.get("companies")!.values());
       if (sourcePolicyApplied(q)) rows = rows.filter(visibleCompany);
@@ -209,6 +220,14 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
     }
 
     // Career Pages queries
+    if (q.includes("FROM career_pages") && q.includes("LIKE '%cdn-cgi%'")) {
+      const limit = Number(this.boundValues[0] ?? 500);
+      const rows = Array.from(this.db.tables.get("career_pages")!.values())
+        .filter((r) => String(r["url"] ?? "").toLowerCase().includes("cdn-cgi"))
+        .slice(0, limit);
+      return { results: rows as T[], success: true };
+    }
+
     if (q.includes("FROM career_pages") && q.includes("WHERE url = ?")) {
       const url = String(this.boundValues[0]);
       const table = this.db.tables.get("career_pages")!;
@@ -278,6 +297,31 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         return { results: [enriched as T], success: true };
       }
       return { results: [], success: true };
+    }
+
+    if (q.includes("FROM jobs") && q.includes("LIKE '%cdn-cgi%'")) {
+      const limit = Number(this.boundValues[0] ?? 500);
+      const rows = Array.from(this.db.tables.get("jobs")!.values())
+        .filter((r) => {
+          const status = String(r["status"] ?? "open");
+          const target = String(r["apply_target"] ?? "").toLowerCase();
+          return status === "open" || target.includes("cdn-cgi") || target.startsWith("mailto:");
+        })
+        .slice(0, limit);
+      return { results: rows as T[], success: true };
+    }
+
+    if (q.includes("FROM jobs") && q.includes("link_checked_at IS NULL OR link_checked_at < ?")) {
+      const [cutoff, limit] = this.boundValues as [number, number];
+      const rows = Array.from(this.db.tables.get("jobs")!.values())
+        .filter((r) => {
+          const status = String(r["status"] ?? "open");
+          const applyType = String(r["apply_type"] ?? "url");
+          const checkedAt = r["link_checked_at"] != null ? Number(r["link_checked_at"]) : null;
+          return status === "open" && (applyType === "url" || applyType === "form") && (checkedAt === null || checkedAt < cutoff);
+        })
+        .slice(0, limit || 20);
+      return { results: rows as T[], success: true };
     }
 
     if (q.includes("FROM jobs")) {
@@ -876,10 +920,30 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { success: true };
     }
 
+    if (q.includes("UPDATE companies SET contact_email = ?")) {
+      const [contactEmail, updatedAt, companyId] = this.boundValues;
+      const row = this.db.tables.get("companies")!.get(String(companyId));
+      if (row) {
+        row["contact_email"] = contactEmail ?? null;
+        row["updated_at"] = Number(updatedAt);
+      }
+      return { success: true, meta: { changes: row ? 1 : 0 } };
+    }
+
+    if (q.includes("DELETE FROM career_pages WHERE id = ?")) {
+      const id = String(this.boundValues[0]);
+      const existed = this.db.tables.get("career_pages")!.delete(id);
+      return { success: true, meta: { changes: existed ? 1 : 0 } };
+    }
+
     // INSERT/UPDATE career_pages
     if (q.includes("INTO career_pages")) {
       const [id, companyId, url, pageType, status, contentHash, lastCheckedAt, createdAt] =
         this.boundValues;
+      const urlLower = String(url ?? "").toLowerCase();
+      if (urlLower.includes("/cdn-cgi/") || urlLower.includes("email-protection")) {
+        throw new Error("Rejected broken career_page url: Cloudflare email-protection URL is not allowed");
+      }
 
       const record: Record<string, unknown> = {
         id: String(id),
@@ -913,6 +977,11 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         skills, descriptionSummary, rawContent, applyType, applyTarget,
         status, contentHash, firstSeenAt, lastSeenAt
       ] = this.boundValues;
+
+      const targetLower = String(applyTarget ?? "").toLowerCase();
+      if (targetLower.includes("/cdn-cgi/") || targetLower.includes("email-protection")) {
+        throw new Error("Rejected broken apply_target: Cloudflare email-protection URL is not allowed");
+      }
 
       const record: Record<string, unknown> = {
         id: String(id),
@@ -984,6 +1053,65 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       const [skills, id] = this.boundValues;
       const existing = this.db.tables.get("jobs")!.get(String(id));
       if (existing) existing["skills"] = String(skills);
+      return { success: true, meta: { changes: existing ? 1 : 0 } };
+    }
+
+    if (q.includes("UPDATE jobs") && q.includes("SET apply_type = ?, apply_target = ?")) {
+      const [applyType, applyTarget, checkedAt, verifiedAt, id] = this.boundValues;
+      const targetLower = String(applyTarget ?? "").toLowerCase();
+      if (targetLower.includes("/cdn-cgi/") || targetLower.includes("email-protection")) {
+        throw new Error("Rejected broken apply_target: Cloudflare email-protection URL is not allowed");
+      }
+      const existing = this.db.tables.get("jobs")!.get(String(id));
+      if (existing) {
+        existing["apply_type"] = String(applyType);
+        existing["apply_target"] = String(applyTarget);
+        existing["link_status"] = "ok";
+        existing["link_fail_count"] = 0;
+        existing["link_checked_at"] = Number(checkedAt);
+        existing["last_verified_at"] = Number(verifiedAt);
+      }
+      return { success: true, meta: { changes: existing ? 1 : 0 } };
+    }
+
+    if (q.includes("UPDATE jobs") && q.includes("closed_reason = 'invalid_link'")) {
+      const [checkedAt, id] = this.boundValues;
+      const existing = this.db.tables.get("jobs")!.get(String(id));
+      if (existing) {
+        existing["status"] = "closed";
+        existing["closed_reason"] = "invalid_link";
+        existing["link_status"] = "invalid";
+        existing["link_checked_at"] = Number(checkedAt);
+      }
+      return { success: true, meta: { changes: existing ? 1 : 0 } };
+    }
+
+    if (q.includes("UPDATE jobs SET status = 'closed', closed_reason = 'stale'")) {
+      const cutoff = Number(this.boundValues[0] ?? 0);
+      let changes = 0;
+      for (const r of this.db.tables.get("jobs")!.values()) {
+        if (r["status"] === "open" && Number(r["last_seen_at"] ?? 0) < cutoff) {
+          r["status"] = "closed";
+          r["closed_reason"] = "stale";
+          changes++;
+        }
+      }
+      return { success: true, meta: { changes } };
+    }
+
+    if (q.includes("UPDATE jobs SET link_status = ?")) {
+      const [status, failCount, checkedAt, verified, verifiedAt, close, , id] = this.boundValues;
+      const existing = this.db.tables.get("jobs")!.get(String(id));
+      if (existing) {
+        existing["link_status"] = String(status);
+        existing["link_fail_count"] = Number(failCount);
+        existing["link_checked_at"] = Number(checkedAt);
+        if (Number(verified) === 1) existing["last_verified_at"] = Number(verifiedAt);
+        if (Number(close) === 1) {
+          existing["status"] = "closed";
+          existing["closed_reason"] = "link_check";
+        }
+      }
       return { success: true, meta: { changes: existing ? 1 : 0 } };
     }
 

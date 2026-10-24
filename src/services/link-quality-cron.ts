@@ -1,6 +1,13 @@
 import type { ID1Database } from "../db/types.js";
 import { LogRepository } from "../db/repositories.js";
-import { expireStaleJobs, runLinkCheckBatch, type FetchLike, type LinkCheckBatchSummary } from "./link-checker.js";
+import {
+  expireStaleJobs,
+  repairBrokenLinksData,
+  runLinkCheckBatch,
+  type BrokenLinksRepairSummary,
+  type FetchLike,
+  type LinkCheckBatchSummary,
+} from "./link-checker.js";
 
 /**
  * Link-check cron. Runs 18 times a day right after the 02:00 UTC crawl
@@ -26,8 +33,15 @@ export async function runLinkQualityCron(
   env: LinkQualityEnv,
   fetchFn: FetchLike = (input, init) => fetch(input, init),
   now: number = Date.now()
-): Promise<{ expired: number; check: LinkCheckBatchSummary }> {
+): Promise<{ expired: number; repair: BrokenLinksRepairSummary; check: LinkCheckBatchSummary }> {
   const started = Date.now();
+  const repair = await repairBrokenLinksData(env.DB, { now }).catch(() => ({
+    scannedJobs: 0,
+    decodedEmails: 0,
+    closedInvalidJobs: 0,
+    fixedCompanies: 0,
+    deletedCareerPages: 0,
+  }));
   const expired = await expireStaleJobs(env.DB, { staleDays: intVar(env.JOB_STALE_DAYS, 14), now });
   const check = await runLinkCheckBatch(env.DB, fetchFn, {
     batchSize: intVar(env.LINK_CHECK_BATCH_SIZE, 20),
@@ -41,12 +55,12 @@ export async function runLinkQualityCron(
       targetUrl: "cron://link-check",
       status: "success",
       durationMs: Date.now() - started,
-      message: `Link check: ${check.checked} checked, ${check.ok} ok, ${check.failed} failed, ${check.unverifiable} unverifiable, ${check.closed} closed; ${expired} stale jobs expired.`,
-      metadata: { ...check, expired },
+      message: `Link check: ${check.checked} checked, ${check.ok} ok, ${check.failed} failed, ${check.unverifiable} unverifiable, ${check.closed} closed; ${expired} stale jobs expired; ${repair.decodedEmails} emails decoded, ${repair.closedInvalidJobs} invalid closed.`,
+      metadata: { ...check, expired, repair },
       createdAt: now,
     });
   } catch (err) {
     console.error("[LinkCheckCron] failed to write crawl log", err);
   }
-  return { expired, check };
+  return { expired, repair, check };
 }

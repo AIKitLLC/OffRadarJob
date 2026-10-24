@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   validateApplyUrl,
   isAcceptableApplyTarget,
+  decodeCloudflareEmailProtection,
+  normalizeApplyTarget,
+  repairBrokenLinksData,
   checkApplyLink,
   runLinkCheckBatch,
   expireStaleJobs,
@@ -9,9 +12,10 @@ import {
 } from "../src/services/link-checker.js";
 import { runLinkQualityCron, LINK_CHECK_CRON } from "../src/services/link-quality-cron.js";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
-import { JobRepository } from "../src/db/repositories.js";
+import { JobRepository, CompanyRepository, CareerPageRepository } from "../src/db/repositories.js";
 import type { ID1Database, ID1PreparedStatement } from "../src/db/types.js";
 import type { Job } from "../src/types/domain.js";
+import worker from "../src/index.js";
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -51,6 +55,16 @@ class FakeD1 implements ID1Database {
       bind(...v: unknown[]) { binds = v; return stmt; },
       async first() { return null; },
       async all<T>() {
+        if (sql.includes("FROM companies") || sql.includes("FROM career_pages")) {
+          return { results: [] as unknown as T[], success: true };
+        }
+        if (sql.includes("LIKE '%cdn-cgi%'")) {
+          const [limit] = binds as [number];
+          const res = db.rows
+            .filter((r) => r.status === "open" || r.apply_target.toLowerCase().includes("cdn-cgi") || r.apply_target.toLowerCase().startsWith("mailto:"))
+            .slice(0, limit);
+          return { results: res as unknown as T[], success: true };
+        }
         const [cutoff, limit] = binds as [number, number];
         const res = db.rows
           .filter((r) => r.status === "open" && ["url", "form"].includes(r.apply_type) && (r.link_checked_at == null || r.link_checked_at < cutoff))
@@ -60,6 +74,22 @@ class FakeD1 implements ID1Database {
       },
       async run() { return { success: true, meta: { changes: stmt.exec() } }; },
       exec() {
+        if (sql.includes("SET apply_type = ?, apply_target = ?")) {
+          const [applyType, applyTarget, now, verifiedAt, id] = binds as any[];
+          const r = db.rows.find((x) => x.id === id);
+          if (r) {
+            r.apply_type = applyType; r.apply_target = applyTarget; r.link_status = "ok"; r.link_fail_count = 0; r.link_checked_at = now; r.last_verified_at = verifiedAt;
+          }
+          return r ? 1 : 0;
+        }
+        if (sql.includes("closed_reason = 'invalid_link'")) {
+          const [now, id] = binds as any[];
+          const r = db.rows.find((x) => x.id === id);
+          if (r) {
+            r.status = "closed"; r.closed_reason = "invalid_link"; r.link_status = "invalid"; r.link_checked_at = now;
+          }
+          return r ? 1 : 0;
+        }
         if (sql.includes("link_status = ?")) {
           const [status, fails, now, verified, now2, close, , id] = binds as any[];
           const r = db.rows.find((x) => x.id === id)!;
@@ -97,10 +127,50 @@ describe("validateApplyUrl (ingest validation)", () => {
     ["https://acme.com/", "generic_careers_page"],
     ["https://acme.com/en-us/careers", "generic_careers_page"],
     ["https://acme.com/join-us", "generic_careers_page"],
+    ["https://alphavantage.co/cdn-cgi/l/email-protection#dcbfbdaeb9b9aeaf9cbdb0acb4bdaabdb2a8bdbbb9f2bfb3", "email_protection"],
+    ["https://acme.com/cdn-cgi/l/email-protection", "email_protection"],
     ["ftp://acme.com/job/1", "not_http"],
     ["not a url", "malformed"],
   ])("rejects %s (%s)", (url, reason) => {
     expect(validateApplyUrl(url)).toEqual({ ok: false, reason });
+  });
+
+  it("decodes Cloudflare email-protection hex and normalizes apply targets", () => {
+    const cfUrl = "https://alphavantage.co/cdn-cgi/l/email-protection#dcbfbdaeb9b9aeaf9cbdb0acb4bdaabdb2a8bdbbb9f2bfb3";
+    expect(decodeCloudflareEmailProtection(cfUrl)).toBe("careers@alphavantage.co");
+    expect(normalizeApplyTarget("url", cfUrl)).toEqual({
+      applyType: "email",
+      applyTarget: "careers@alphavantage.co",
+    });
+    expect(normalizeApplyTarget("url", "mailto:Hiring@Acme.io?subject=Role")).toEqual({
+      applyType: "email",
+      applyTarget: "hiring@acme.io",
+    });
+  });
+
+  it("JobRepository.upsert automatically decodes Cloudflare email-protection URLs into email apply targets and rejects un-decodable cdn-cgi links", async () => {
+    const db = new InMemoryD1Database();
+    const repo = new JobRepository(db);
+    const cfJob: Job = {
+      id: "job_cf", companyId: "comp_av", careerPageId: "cp_av", title: "Quant Engineer", seniorityLevel: "senior",
+      techCategory: "backend_systems", isTechRole: true, employmentType: "full-time", isRemote: true, remoteScope: "worldwide",
+      skills: [], applyType: "url",
+      applyTarget: "https://alphavantage.co/cdn-cgi/l/email-protection#dcbfbdaeb9b9aeaf9cbdb0acb4bdaabdb2a8bdbbb9f2bfb3",
+      status: "open", contentHash: "h_cf", firstSeenAt: 1, lastSeenAt: 1,
+    } as unknown as Job;
+
+    expect(await repo.upsert(cfJob)).toBe(true);
+    const saved = await repo.findByContentHash("h_cf");
+    expect(saved?.applyType).toBe("email");
+    expect(saved?.applyTarget).toBe("careers@alphavantage.co");
+
+    const brokenCfJob: Job = {
+      ...cfJob,
+      id: "job_cf_broken",
+      contentHash: "h_cf_broken",
+      applyTarget: "https://alphavantage.co/cdn-cgi/l/email-protection#invalid",
+    };
+    expect(await repo.upsert(brokenCfJob)).toBe(false);
   });
 
   it.each([
@@ -265,5 +335,132 @@ describe("public listings hide closed jobs", () => {
     const page = await repo.listPaged({ techOnly: false });
     expect(page.items.map((j) => j.id)).toEqual(["open1"]);
     expect(await repo.count()).toBe(1);
+  });
+});
+
+describe("repairBrokenLinksData & POST /api/admin/links/repair (async data fix)", () => {
+  it("repairs existing cdn-cgi jobs into email targets, closes invalid URLs, cleans companies & career_pages, and enforces trigger guards", async () => {
+    const db = new InMemoryD1Database();
+    const jobRepo = new JobRepository(db);
+    const companyRepo = new CompanyRepository(db);
+    const cpRepo = new CareerPageRepository(db);
+
+    await companyRepo.upsert({
+      id: "comp_av",
+      domain: "alphavantage.co",
+      name: "Alpha Vantage",
+      websiteUrl: "https://alphavantage.co",
+      techStack: ["Python"],
+      socialLinks: {},
+      contactEmail: "https://alphavantage.co/cdn-cgi/l/email-protection#dcbfbdaeb9b9aeaf9cbdb0acb4bdaabdb2a8bdbbb9f2bfb3",
+      discoverySource: "seed",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    // Simulate legacy broken rows already stored in DB before the trigger existed
+    db.tables.get("jobs")!.set("j_cf_legacy", {
+      id: "j_cf_legacy",
+      company_id: "comp_av",
+      career_page_id: "cp_av",
+      title: "Backend Engineer",
+      seniority_level: "senior",
+      tech_category: "backend_systems",
+      is_tech_role: 1,
+      employment_type: "full-time",
+      is_remote: 1,
+      remote_scope: "worldwide",
+      skills: "[]",
+      apply_type: "url",
+      apply_target: "https://alphavantage.co/cdn-cgi/l/email-protection#dcbfbdaeb9b9aeaf9cbdb0acb4bdaabdb2a8bdbbb9f2bfb3",
+      status: "open",
+      content_hash: "h_legacy_cf",
+      first_seen_at: 1,
+      last_seen_at: 1,
+    });
+
+    db.tables.get("jobs")!.set("j_generic_legacy", {
+      id: "j_generic_legacy",
+      company_id: "comp_av",
+      career_page_id: "cp_av",
+      title: "Frontend Engineer",
+      seniority_level: "mid",
+      tech_category: "frontend_ui",
+      is_tech_role: 1,
+      employment_type: "full-time",
+      is_remote: 1,
+      remote_scope: "worldwide",
+      skills: "[]",
+      apply_type: "url",
+      apply_target: "https://alphavantage.co/careers",
+      status: "open",
+      content_hash: "h_legacy_generic",
+      first_seen_at: 1,
+      last_seen_at: 1,
+    });
+
+    db.tables.get("career_pages")!.set("cp_bad_cf", {
+      id: "cp_bad_cf",
+      company_id: "comp_av",
+      url: "https://alphavantage.co/cdn-cgi/l/email-protection#dcbfbdaeb9b9aeaf9cbdb0acb4bdaabdb2a8bdbbb9f2bfb3",
+      page_type: "internal_page",
+      status: "active",
+      last_checked_at: 1,
+      created_at: 1,
+    });
+
+    // Trigger guard rejects direct insert of un-normalized cdn-cgi URL into career_pages
+    await expect(
+      cpRepo.upsert({
+        id: "cp_reject",
+        companyId: "comp_av",
+        url: "https://alphavantage.co/cdn-cgi/l/email-protection#dcbfbdaeb9b9aeaf9cbdb0acb4bdaabdb2a8bdbbb9f2bfb3",
+        pageType: "internal_page",
+        status: "active",
+        lastCheckedAt: 1,
+        createdAt: 1,
+      })
+    ).rejects.toThrow(/Cloudflare email-protection URL is not allowed/);
+
+    // Run async repair endpoint via admin API
+    const adminToken = "test-admin-secret-0123456789abcdef";
+    const req = new Request("http://localhost/api/admin/links/repair", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({ async: true, batchSize: 100 }),
+    });
+    const res = await worker.fetch(req, { DB: db, ADMIN_TOKEN: adminToken } as any, {
+      waitUntil: () => {},
+      passThroughOnException: () => {},
+    } as any);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(body.repair).toMatchObject({
+      decodedEmails: 1,
+      closedInvalidJobs: 1,
+      fixedCompanies: 1,
+      deletedCareerPages: 1,
+    });
+
+    // Verify j_cf_legacy was repaired into email apply
+    const repairedJob = await jobRepo.getById("j_cf_legacy");
+    expect(repairedJob?.applyType).toBe("email");
+    expect(repairedJob?.applyTarget).toBe("careers@alphavantage.co");
+    expect(repairedJob?.status).toBe("open");
+
+    // Verify j_generic_legacy was closed
+    const closedJob = await jobRepo.getById("j_generic_legacy");
+    expect(closedJob?.status).toBe("closed");
+
+    // Verify company contact_email was decoded
+    const repairedComp = await companyRepo.findByDomain("alphavantage.co");
+    expect(repairedComp?.contactEmail).toBe("careers@alphavantage.co");
+
+    // Verify bad career_page was deleted
+    expect(db.tables.get("career_pages")!.has("cp_bad_cf")).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { isAcceptableApplyTarget } from "../services/link-checker.js";
+import { isAcceptableApplyTarget, normalizeApplyTarget } from "../services/link-checker.js";
 import { ID1Database } from "./types.js";
 import {
   Company,
@@ -800,8 +800,9 @@ export const MOUNTAIN_SQL_CONDITION = `(
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, id %'
 )`;
 
-/** Public listings only show open jobs (closed = dead link or stale). */
-export const OPEN_JOB_SQL = "j.status = 'open'";
+/** Public listings only show open jobs and exclude un-decoded Cloudflare email-protection URLs. */
+export const OPEN_JOB_SQL =
+  "j.status = 'open' AND LOWER(COALESCE(j.apply_target, '')) NOT LIKE '%/cdn-cgi/%' AND LOWER(COALESCE(j.apply_target, '')) NOT LIKE '%email-protection%'";
 
 export class JobRepository {
   constructor(private readonly db: ID1Database) {}
@@ -812,9 +813,14 @@ export class JobRepository {
    * A job closed by the link checker stays closed on re-crawl unless its apply URL changed.
    */
   public async upsert(job: Job): Promise<boolean> {
-    if (!isAcceptableApplyTarget(job.applyType, job.applyTarget)) {
+    const normalized = normalizeApplyTarget(job.applyType, job.applyTarget);
+    const applyType = normalized.applyType as Job["applyType"];
+    const applyTarget = normalized.applyTarget;
+    if (!isAcceptableApplyTarget(applyType, applyTarget)) {
       return false;
     }
+    job.applyType = applyType;
+    job.applyTarget = applyTarget;
     const query = `
       INSERT INTO jobs (
         id, company_id, career_page_id, title, department,
@@ -840,6 +846,7 @@ export class JobRepository {
         link_fail_count = CASE WHEN jobs.apply_target = excluded.apply_target THEN jobs.link_fail_count ELSE 0 END,
         last_seen_at = excluded.last_seen_at,
         description_summary = COALESCE(excluded.description_summary, jobs.description_summary),
+        apply_type = excluded.apply_type,
         apply_target = excluded.apply_target
     `;
 
@@ -864,8 +871,8 @@ export class JobRepository {
         JSON.stringify(job.skills),
         job.descriptionSummary ?? null,
         job.rawContent ?? null,
-        job.applyType,
-        job.applyTarget,
+        applyType,
+        applyTarget,
         job.status,
         job.contentHash,
         job.firstSeenAt,
@@ -1239,6 +1246,11 @@ export class JobRepository {
       row["is_midwest"] === true ||
       detectedRegion === "midwest";
 
+    const normalizedApply = normalizeApplyTarget(
+      String(row["apply_type"] ?? "url"),
+      String(row["apply_target"] ?? "")
+    );
+
     return {
       id: String(row["id"]),
       companyId: String(row["company_id"]),
@@ -1258,8 +1270,8 @@ export class JobRepository {
       skills,
       descriptionSummary: row["description_summary"] != null ? String(row["description_summary"]) : undefined,
       rawContent: row["raw_content"] != null ? String(row["raw_content"]) : undefined,
-      applyType: (row["apply_type"] as any) ?? "url",
-      applyTarget: String(row["apply_target"]),
+      applyType: (normalizedApply.applyType as any) ?? "url",
+      applyTarget: normalizedApply.applyTarget,
       status: (row["status"] as any) ?? "open",
       contentHash: String(row["content_hash"]),
       companyName: row["company_name"] != null ? String(row["company_name"]) : undefined,
