@@ -11,6 +11,7 @@ import {
 } from "../src/services/link-checker.js";
 import { runLinkQualityCron, LINK_CHECK_CRON } from "../src/services/link-quality-cron.js";
 import { recoverBrokenLinksData } from "../src/services/broken-link-recovery.js";
+import { SourceReResearcher } from "../src/services/source-re-research.js";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 import { JobRepository, CompanyRepository, CareerPageRepository } from "../src/db/repositories.js";
 import type { ID1Database, ID1PreparedStatement } from "../src/db/types.js";
@@ -815,5 +816,19 @@ describe("recoverBrokenLinksData & POST /api/admin/links/repair (search & recove
     const body = (await res.json()) as any;
     expect(body.success).toBe(true);
     expect(body.liveCheck).toBeNull();
+  });
+
+  it("SourceReResearcher refuses to fetch non-public/blocked hosts during recovery", async () => {
+    const calls: string[] = [];
+    const fetchFn: FetchLike = async (url) => {
+      calls.push(url);
+      return new Response("<html><a href='mailto:leak@internal'>apply</a></html>", { status: 200 });
+    };
+    const researcher = new SourceReResearcher(fetchFn);
+    expect(await researcher.findApplyTargetOnPage("http://127.0.0.1/careers")).toBeNull();
+    expect(await researcher.findApplyTargetOnPage("http://localhost:8080/jobs")).toBeNull();
+    expect(await researcher.findApplyTargetOnPage("https://127.0.0.1.nip.io/careers")).toBeNull();
+    expect(calls).toHaveLength(0);
+    expect(researcher.fetchesUsed).toBe(0);
   });
 });
