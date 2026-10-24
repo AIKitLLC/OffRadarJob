@@ -51,7 +51,8 @@ import { CvTagCloudService } from "./services/cv-tag-cloud.js";
 import { handleCandidateMatchRoutes } from "./http/candidate-match-routes.js";
 import { CandidateMatchService } from "./pipeline/candidate-match-service.js";
 import { LINK_CHECK_CRON, runLinkQualityCron } from "./services/link-quality-cron.js";
-import { repairBrokenLinksData, runLinkCheckBatch } from "./services/link-checker.js";
+import { runLinkCheckBatch } from "./services/link-checker.js";
+import { recoverBrokenLinksData } from "./services/broken-link-recovery.js";
 
 export interface KvNamespace {
   get(key: string, type?: "text" | "json"): Promise<any>;
@@ -1643,15 +1644,16 @@ export default {
             if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Bạn cần quyền Admin để dùng /fixlinks.");
             return Response.json({ ok: false, error: "Unauthorized" });
           }
-          const repair = await repairBrokenLinksData(env.DB);
+          const repair = await recoverBrokenLinksData(env.DB, (input, init) => fetch(input, init));
           const reply = [
-            `🛠️ *OFFRADARJOB - ASYNC DATA REPAIR HOÀN TẤT*`,
+            `🛠️ *OFFRADARJOB - KHÔI PHỤC LINK LỖI HOÀN TẤT*`,
             ``,
-            `• *Jobs đã quét:* \`${repair.scannedJobs}\``,
+            `• *Jobs lỗi đã tìm thấy:* \`${repair.scannedJobs}\``,
             `• *Emails giải mã từ Cloudflare cdn-cgi:* \`${repair.decodedEmails}\``,
-            `• *Jobs link lỗi đã đóng:* \`${repair.closedInvalidJobs}\``,
-            `• *Công ty đã làm sạch contact_email:* \`${repair.fixedCompanies}\``,
-            `• *Career pages lỗi đã xóa:* \`${repair.deletedCareerPages}\``,
+            `• *Jobs tìm lại được từ trang nguồn:* \`${repair.recoveredJobsFromSource}\` (mở lại: \`${repair.reopenedJobs}\`)`,
+            `• *Jobs không cứu được (cách ly, giữ bản ghi):* \`${repair.closedInvalidJobs}\``,
+            `• *Công ty khôi phục contact_email:* \`${repair.fixedCompanies}\` (từ trang chủ: \`${repair.recoveredCompaniesFromSource}\`)`,
+            `• *Career pages tìm lại được:* \`${repair.recoveredCareerPages}\` / vô hiệu hóa tạm (giữ bản ghi): \`${repair.deactivatedCareerPages}\``,
           ].join("\n");
           if (botToken) await sendTelegramMessage(botToken, chatId, reply);
           return Response.json({ ok: true, repair });
@@ -3160,7 +3162,7 @@ export default {
 
         const executeRepair = async () => {
           const started = Date.now();
-          const repair = await repairBrokenLinksData(env.DB, { batchSize, now });
+          const repair = await recoverBrokenLinksData(env.DB, (input, init) => fetch(input, init), { batchSize, now, maxFetches: 20 });
           const liveCheck = runLiveCheck
             ? await runLinkCheckBatch(env.DB, (input, init) => fetch(input, init), {
                 batchSize: 20,
@@ -3174,7 +3176,7 @@ export default {
             targetUrl: "admin://links-repair",
             status: "success",
             durationMs: Date.now() - started,
-            message: `Repaired broken links: ${repair.decodedEmails} emails decoded, ${repair.closedInvalidJobs} invalid jobs closed, ${repair.fixedCompanies} companies cleaned, ${repair.deletedCareerPages} career pages removed.`,
+            message: `Recovered broken links: ${repair.decodedEmails} emails decoded, ${repair.recoveredJobsFromSource} jobs recovered from source (${repair.reopenedJobs} reopened), ${repair.closedInvalidJobs} invalid jobs quarantined, ${repair.fixedCompanies} companies recovered, ${repair.recoveredCareerPages} career pages rediscovered, ${repair.deactivatedCareerPages} career pages deactivated (retained).`,
             metadata: { repair, liveCheck },
             createdAt: Date.now(),
           });
@@ -3193,7 +3195,7 @@ export default {
             success: true,
             status: "completed_async",
             ...result,
-            message: `Data repair completed: ${result.repair.decodedEmails} obfuscated emails decoded, ${result.repair.closedInvalidJobs} invalid links closed, ${result.repair.deletedCareerPages} broken career pages removed.`,
+            message: `Data recovery completed: ${result.repair.decodedEmails} obfuscated emails decoded, ${result.repair.recoveredJobsFromSource} jobs recovered from source, ${result.repair.closedInvalidJobs} invalid links quarantined (retained), ${result.repair.recoveredCareerPages} career pages rediscovered.`,
           });
         } else {
           const result = await executeRepair();
@@ -3201,7 +3203,7 @@ export default {
             success: true,
             status: "completed",
             ...result,
-            message: `Data repair completed: ${result.repair.decodedEmails} obfuscated emails decoded, ${result.repair.closedInvalidJobs} invalid links closed, ${result.repair.deletedCareerPages} broken career pages removed.`,
+            message: `Data recovery completed: ${result.repair.decodedEmails} obfuscated emails decoded, ${result.repair.recoveredJobsFromSource} jobs recovered from source, ${result.repair.closedInvalidJobs} invalid links quarantined (retained), ${result.repair.recoveredCareerPages} career pages rediscovered.`,
           });
         }
       } catch (err: unknown) {

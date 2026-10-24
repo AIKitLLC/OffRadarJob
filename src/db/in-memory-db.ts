@@ -228,6 +228,12 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: rows as T[], success: true };
     }
 
+    if (q.includes("FROM career_pages") && q.includes("WHERE id = ?")) {
+      const id = String(this.boundValues[0]);
+      const row = this.db.tables.get("career_pages")!.get(id);
+      return { results: row ? [row as T] : [], success: true };
+    }
+
     if (q.includes("FROM career_pages") && q.includes("WHERE url = ?")) {
       const url = String(this.boundValues[0]);
       const table = this.db.tables.get("career_pages")!;
@@ -303,9 +309,14 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       const limit = Number(this.boundValues[0] ?? 500);
       const rows = Array.from(this.db.tables.get("jobs")!.values())
         .filter((r) => {
-          const status = String(r["status"] ?? "open");
           const target = String(r["apply_target"] ?? "").toLowerCase();
-          return status === "open" || target.includes("cdn-cgi") || target.startsWith("mailto:");
+          return (
+            target.includes("/cdn-cgi/") ||
+            target.includes("email-protection") ||
+            target.startsWith("mailto:") ||
+            r["closed_reason"] === "invalid_link" ||
+            r["link_status"] === "invalid"
+          );
         })
         .slice(0, limit);
       return { results: rows as T[], success: true };
@@ -930,6 +941,31 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { success: true, meta: { changes: row ? 1 : 0 } };
     }
 
+    if (q.includes("UPDATE career_pages SET url = ?, status = 'active'")) {
+      const [url, checkedAt, id] = this.boundValues;
+      const urlLower = String(url ?? "").toLowerCase();
+      if (urlLower.includes("/cdn-cgi/") || urlLower.includes("email-protection")) {
+        throw new Error("Rejected broken career_page url: Cloudflare email-protection URL is not allowed");
+      }
+      const row = this.db.tables.get("career_pages")!.get(String(id));
+      if (row) {
+        row["url"] = String(url);
+        row["status"] = "active";
+        row["last_checked_at"] = Number(checkedAt);
+      }
+      return { success: true, meta: { changes: row ? 1 : 0 } };
+    }
+
+    if (q.includes("UPDATE career_pages SET status = 'not_found'")) {
+      const [checkedAt, id] = this.boundValues;
+      const row = this.db.tables.get("career_pages")!.get(String(id));
+      if (row) {
+        row["status"] = "not_found";
+        row["last_checked_at"] = Number(checkedAt);
+      }
+      return { success: true, meta: { changes: row ? 1 : 0 } };
+    }
+
     if (q.includes("DELETE FROM career_pages WHERE id = ?")) {
       const id = String(this.boundValues[0]);
       const existed = this.db.tables.get("career_pages")!.delete(id);
@@ -1066,10 +1102,24 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       if (existing) {
         existing["apply_type"] = String(applyType);
         existing["apply_target"] = String(applyTarget);
+        if (q.includes("status = 'open'")) {
+          existing["status"] = "open";
+          existing["closed_reason"] = null;
+        }
         existing["link_status"] = "ok";
         existing["link_fail_count"] = 0;
         existing["link_checked_at"] = Number(checkedAt);
         existing["last_verified_at"] = Number(verifiedAt);
+      }
+      return { success: true, meta: { changes: existing ? 1 : 0 } };
+    }
+
+    if (q.includes("UPDATE jobs") && q.includes("SET link_status = 'invalid', link_checked_at = ?")) {
+      const [checkedAt, id] = this.boundValues;
+      const existing = this.db.tables.get("jobs")!.get(String(id));
+      if (existing) {
+        existing["link_status"] = "invalid";
+        existing["link_checked_at"] = Number(checkedAt);
       }
       return { success: true, meta: { changes: existing ? 1 : 0 } };
     }

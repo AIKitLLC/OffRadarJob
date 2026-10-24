@@ -2,12 +2,15 @@ import type { ID1Database } from "../db/types.js";
 import { LogRepository } from "../db/repositories.js";
 import {
   expireStaleJobs,
-  repairBrokenLinksData,
   runLinkCheckBatch,
-  type BrokenLinksRepairSummary,
   type FetchLike,
   type LinkCheckBatchSummary,
 } from "./link-checker.js";
+import {
+  emptyBrokenLinkRecoverySummary,
+  recoverBrokenLinksData,
+  type BrokenLinkRecoverySummary,
+} from "./broken-link-recovery.js";
 
 /**
  * Link-check cron. Runs 18 times a day right after the 02:00 UTC crawl
@@ -33,15 +36,12 @@ export async function runLinkQualityCron(
   env: LinkQualityEnv,
   fetchFn: FetchLike = (input, init) => fetch(input, init),
   now: number = Date.now()
-): Promise<{ expired: number; repair: BrokenLinksRepairSummary; check: LinkCheckBatchSummary }> {
+): Promise<{ expired: number; repair: BrokenLinkRecoverySummary; check: LinkCheckBatchSummary }> {
   const started = Date.now();
-  const repair = await repairBrokenLinksData(env.DB, { now }).catch(() => ({
-    scannedJobs: 0,
-    decodedEmails: 0,
-    closedInvalidJobs: 0,
-    fixedCompanies: 0,
-    deletedCareerPages: 0,
-  }));
+  const repair = await recoverBrokenLinksData(env.DB, fetchFn, { now, maxFetches: 20 }).catch((err) => {
+    console.error("[LinkCheckCron] broken-link recovery failed", err);
+    return emptyBrokenLinkRecoverySummary();
+  });
   const expired = await expireStaleJobs(env.DB, { staleDays: intVar(env.JOB_STALE_DAYS, 14), now });
   const check = await runLinkCheckBatch(env.DB, fetchFn, {
     batchSize: intVar(env.LINK_CHECK_BATCH_SIZE, 20),
@@ -55,7 +55,7 @@ export async function runLinkQualityCron(
       targetUrl: "cron://link-check",
       status: "success",
       durationMs: Date.now() - started,
-      message: `Link check: ${check.checked} checked, ${check.ok} ok, ${check.failed} failed, ${check.unverifiable} unverifiable, ${check.closed} closed; ${expired} stale jobs expired; ${repair.decodedEmails} emails decoded, ${repair.closedInvalidJobs} invalid closed.`,
+      message: `Link check: ${check.checked} checked, ${check.ok} ok, ${check.failed} failed, ${check.unverifiable} unverifiable, ${check.closed} closed; ${expired} stale jobs expired; ${repair.decodedEmails} emails decoded, ${repair.recoveredJobsFromSource} jobs recovered from source, ${repair.closedInvalidJobs} invalid quarantined.`,
       metadata: { ...check, expired, repair },
       createdAt: now,
     });

@@ -736,7 +736,7 @@ export function renderAdminDashboardHtml(): string {
               </span>
             </div>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-              Decode Cloudflare <code>/cdn-cgi/l/email-protection</code> links into direct <code>mailto:</code> targets, close invalid/generic apply URLs, and run a live link-check pass asynchronously.
+              Find broken records, decode Cloudflare <code>/cdn-cgi/l/email-protection</code> links, and re-research the source career page / company homepage to recover the real apply target. Unrecoverable records are quarantined — never deleted.
             </p>
             <button class="btn btn-sm" style="background: #e11d48; color: #fff; width: 100%;" onclick="triggerBrokenLinksRepair()">🛠️ Run Async Link & Data Repair</button>
           </div>
@@ -1494,7 +1494,7 @@ export function renderAdminDashboardHtml(): string {
     }
 
     async function triggerBrokenLinksRepair() {
-      showToast("Running async broken-links & cdn-cgi data repair...");
+      showToast("Searching broken records & re-researching sources to recover them...");
       const res = await apiFetch('/api/admin/links/repair', {
         method: 'POST',
         body: { async: true, batchSize: 500, runLiveCheck: true }

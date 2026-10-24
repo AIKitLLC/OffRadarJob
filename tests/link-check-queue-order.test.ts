@@ -132,5 +132,16 @@ d("link-check queue order (real SQL)", () => {
         )
         .run("https://q.example/cdn-cgi/l/email-protection#123456")
     ).toThrow(/Cloudflare email-protection URL is not allowed/);
+
+    raw
+      .prepare(
+        "INSERT INTO career_pages (id, company_id, url, page_type, last_checked_at, created_at) VALUES ('cp_ok','c_q','https://q.example/careers-ok-page','custom',1,1)"
+      )
+      .run();
+    expect(() =>
+      raw
+        .prepare("UPDATE career_pages SET url = ? WHERE id = 'cp_ok'")
+        .run("https://q.example/cdn-cgi/l/email-protection#123456")
+    ).toThrow(/Cloudflare email-protection URL is not allowed/);
   });
 });
