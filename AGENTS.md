@@ -89,3 +89,16 @@ gh issue create \
 - Target personal or organization repositories (`AIKitLLC/OffRadarJob` or `tuannx/*`) as designated by configuration.
 - Do not add blanket linter/type suppressions (`any`, `@ts-ignore`) to pass CI.
 - Always include automated test coverage for newly introduced services and endpoints.
+
+---
+
+## 5. Dev standards
+
+Always-on rules live in `.cursor/rules/` (`workflow.mdc`, `architecture.mdc`, `output-style.mdc`).
+
+- Skills: `.agents/skills/ponytail` (coding style: smallest change that works) and `.agents/skills/i-have-adhd` (output style). Each file names its source, commit, and MIT license.
+- Every change has an issue; the pull request says `Closes #N` and updates `docs/STATUS.md`.
+- Never merge without maintainer approval. Never deploy from a local machine (#9), never touch cloud accounts or secrets, never add a paid service.
+- Cloudflare skills (https://github.com/cloudflare/skills, commit `0871daceb347e3c51693fbe9c77555468df7e410`), consulted, not vendored: `wrangler` for `wrangler.jsonc`, bindings and migrations; `workers-best-practices` for Worker, Queue, cron and Durable Object code; `web-perf` for `src/ui` pages.
+- Decoupling: modules in `src/` talk through explicit entry points; external services sit behind adapters (`src/services`, `src/harvesters`). No speculative abstractions or single-implementation interfaces. Map: `docs/ARCHITECTURE.md`.
+- arcade-agent: before a large refactor, use the MCP server in `.cursor/mcp.json` (`arcade-agent==0.4.2`): run `context_for_task`, then `diff_impact`. CI runs it report-only in `.github/workflows/architecture.yml` (actions pinned to commit SHAs, hash-locked install, read-only permissions).
