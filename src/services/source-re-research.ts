@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 import {
   decodeCloudflareEmailProtection,
   isAcceptableApplyTarget,
+  isBlockedApplyHost,
   isCloudflareEmailProtectionUrl,
   validateApplyUrl,
   type FetchLike,
@@ -48,6 +49,7 @@ function resolveHttpUrl(href: string, baseUrl: string): string | null {
   try {
     const url = new URL(href, baseUrl);
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    if (isBlockedApplyHost(url.hostname)) return null;
     return url.toString();
   } catch {
     return null;
@@ -152,6 +154,7 @@ export class SourceReResearcher {
       return null;
     }
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    if (isBlockedApplyHost(parsed.hostname)) return null;
 
     this.fetches++;
     const timeoutMs = this.opts.timeoutMs ?? 8000;
