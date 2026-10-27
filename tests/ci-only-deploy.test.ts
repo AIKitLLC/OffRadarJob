@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 // Issue #9: deploys and remote D1 migrations run only in GitHub Actions.
 
@@ -63,5 +63,23 @@ describe(".github/workflows/ci.yml deploy job", () => {
     expect(workflow).toContain("run: npm run db:migrate:remote");
     expect(workflow).toContain("run: npm run deploy");
     expect(workflow).not.toMatch(/run: npm exec -- wrangler/);
+  });
+});
+
+describe("src/scripts remote D1 writes", () => {
+  it("requireCi throws outside GitHub Actions and passes inside", async () => {
+    const { requireCi } = await import("../src/utils/require-ci.js");
+    expect(() => requireCi("write", {})).toThrow(/only in GitHub Actions/);
+    expect(() => requireCi("write", { GITHUB_ACTIONS: "1" })).toThrow();
+    expect(() => requireCi("write", { GITHUB_ACTIONS: "true" })).not.toThrow();
+  });
+
+  it("every script that writes a SQL file to remote D1 calls requireCi", () => {
+    const files = readdirSync("src/scripts").filter((f) => f.endsWith(".ts"));
+    const writers = files.filter((f) => /--remote --file=/.test(readFileSync(`src/scripts/${f}`, "utf8")));
+    expect(writers.length).toBeGreaterThan(0);
+    for (const file of writers) {
+      expect(readFileSync(`src/scripts/${file}`, "utf8"), file).toMatch(/requireCi\("/);
+    }
   });
 });

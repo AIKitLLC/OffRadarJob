@@ -18,6 +18,7 @@
 
 import { SMB_CATALOGUE, SmbHarvester } from "../harvesters/smb-harvester.js";
 import { execSync } from "node:child_process";
+import { requireCi } from "../utils/require-ci.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -89,6 +90,7 @@ async function main() {
     console.log("\nℹ️  To execute directly against remote D1, re-run with --execute");
     return;
   }
+  requireCi("write SMB chunks to remote D1");
 
   console.log("\n[4/4] Executing chunks against Remote Cloudflare D1 (off_radar_db)...");
   let idx = 0;
