@@ -15,6 +15,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
+import { requireCi } from "../utils/require-ci.js";
 
 const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || "05130ca1f0bdabbab4d08a5d75544e92";
 
@@ -332,6 +333,7 @@ async function main() {
     console.log("\nℹ️  Dry-run complete. Re-run with --execute to apply to Cloudflare D1.");
     return;
   }
+  requireCi("write company chunks to remote D1");
 
   console.log(`\n🚀 Executing ${chunkFiles.length} chunks against Remote D1 (off_radar_db)...`);
   let executedCount = 0;

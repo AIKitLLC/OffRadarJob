@@ -177,15 +177,14 @@ for file in migrations/*.sql; do
 done
 ```
 
-### Running Locally & Deployment
+### Running Locally
 ```bash
 # Start local development server
 npm run dev
 # Open http://localhost:8787
-
-# Deploy to Cloudflare Production (https://jobs.ai-kit.net)
-npm run deploy
 ```
+
+Production (https://jobs.ai-kit.net) deploys only from CI after a merge to `main` (issue #9). `npm run deploy` and `npm run db:migrate:remote` stop with an error outside GitHub Actions. Do not run `wrangler deploy` or `wrangler d1 migrations apply --remote` from a local machine.
 
 ### Testing & Type Checking
 ```bash
@@ -200,7 +199,7 @@ npm run typecheck
 
 Pull requests run `npm ci`, `npm run typecheck`, and `npm test`. A failure fails the workflow.
 
-A push to `main`, or a manual run of the CI workflow from `main`, repeats those checks, applies remote D1 migrations (`wrangler d1 migrations apply off_radar_db --remote`), then runs `npm run deploy`. Migrations run first. A migration failure stops the deploy. The deploy job uses the GitHub Environment `production` and a concurrency group of the same name, so production deploys do not overlap. Manual runs from any other branch run the checks only.
+A push to `main`, or a manual run of the CI workflow from `main`, repeats those checks, applies remote D1 migrations (`npm run db:migrate:remote`), then runs `npm run deploy`. Migrations run first. If the Cloudflare secrets below are missing, the deploy job fails; it does not skip. A migration failure stops the deploy. The deploy job uses the GitHub Environment `production` and a concurrency group of the same name, so production deploys do not overlap. Manual runs from any other branch run the checks only.
 
 Store these Actions secrets on the `production` environment. Do not commit the values.
 

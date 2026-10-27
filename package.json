@@ -12,7 +12,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "node scripts/require-ci.mjs && wrangler deploy",
+    "db:migrate:remote": "node scripts/require-ci.mjs && wrangler d1 migrations apply off_radar_db --remote",
     "typecheck": "tsc --noEmit",
     "test": "NODE_OPTIONS=\"--experimental-sqlite${NODE_OPTIONS:+ $NODE_OPTIONS}\" node --experimental-sqlite ./node_modules/vitest/vitest.mjs run",
     "demo": "tsx src/demo/local-runner.ts",

@@ -99,6 +99,8 @@ Every agent working on this repository must apply the following lessons distille
 1. **Zero Local Deployments (PR #7, Issue #9 — P0 Policy)**
    - **NEVER** run `wrangler deploy` or `wrangler d1 migrations apply --remote` from a local machine.
    - All production deployments and remote D1 migrations must run exclusively via `.github/workflows/ci.yml` after merging to `main`.
+   - `npm run deploy` and `npm run db:migrate:remote` call `scripts/require-ci.mjs` first and exit with an error outside GitHub Actions. Do not work around it; calling `wrangler` directly is the same violation.
+   - On `main`, missing Cloudflare secrets fail the deploy job. Never add a skip path that reports green without deploying.
 
 2. **Non-Destructive Migrations & 3-Tier Data Recovery (PR #10)**
    - Do **not** blindly `DELETE` or permanently close rows in SQL migrations when application-level recovery is possible. Flag broken rows (`link_status = 'invalid'`, `status = 'not_found'`) in the migration first.
