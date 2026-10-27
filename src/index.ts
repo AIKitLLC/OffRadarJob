@@ -57,6 +57,7 @@ import { JdRerankerService } from "./services/jd-reranker.js";
 import { DecisionApiService } from "./services/decision-api.js";
 import { CvTagCloudService } from "./services/cv-tag-cloud.js";
 import { handleCandidateMatchRoutes } from "./http/candidate-match-routes.js";
+import { handleApplyClickRoutes } from "./http/apply-click-routes.js";
 import { CandidateMatchService } from "./pipeline/candidate-match-service.js";
 import { LINK_CHECK_CRON, runLinkQualityCron } from "./services/link-quality-cron.js";
 import { runLinkCheckBatch } from "./services/link-checker.js";
@@ -636,6 +637,19 @@ export default {
       }
       if (await isAdminAuthRateLimited(request, env)) return rateLimitedResponse();
     }
+
+    // Apply-click measurement: /go/:jobId redirect and /api/admin/clicks (#39).
+    const applyClickResponse = await handleApplyClickRoutes({
+      request,
+      path,
+      url,
+      db: env.DB,
+      getJob: (id) => jobRepo.getById(id),
+      getUser: () => getAuthenticatedUser(request, userRepo),
+      authorizeAdmin: () => isAuthorized(request, url, env),
+      waitUntil: (promise) => ctx.waitUntil(promise),
+    });
+    if (applyClickResponse) return applyClickResponse;
 
     // Shared stats loader (KV-cached) used by /api/stats and the server-rendered dashboard.
     // v8: counts only open (not closed/hidden) jobs; jobsCount matches the default /api/jobs total (tech roles).
