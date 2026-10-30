@@ -1,0 +1,25 @@
+{
+  "name": "ai-kit-edge-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Stateless host-based reverse proxy that serves ai-kit.net from Workers that still live in the original Cloudflare account.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "clear-conflicting-records": "tsx src/clear-conflicting-dns-cli.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260903.1",
+    "@types/node": "^22.13.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.7",
+    "wrangler": "^4.129.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

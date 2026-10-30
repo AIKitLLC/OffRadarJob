@@ -1,0 +1,94 @@
+# Manual deploy of the stateless ai-kit.net edge proxy into the zone account.
+# workflow_dispatch only: pull requests and pushes to main do not deploy it.
+# Origin Workers, D1, R2, KV, queues, and Durable Objects stay on the existing
+# production workflow (.github/workflows/ci.yml) and the original account.
+name: Edge proxy deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      clear_conflicting_records:
+        description: Delete stale A/AAAA records for ai-kit.net and jobs.ai-kit.net before deploy
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: edge-proxy-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: test and deploy edge proxy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: ops/edge-proxy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.23.3"
+          cache: npm
+          cache-dependency-path: ops/edge-proxy/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      # Allowlist: A/AAAA whose name is exactly ai-kit.net or jobs.ai-kit.net.
+      # ar, crm, data, pop, crm-dev, MX, TXT, and every other name stay.
+      - name: Clear conflicting A/AAAA records
+        if: ${{ inputs.clear_conflicting_records == true || inputs.clear_conflicting_records == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_6ABA }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_6ABA }}
+        run: npm run clear-conflicting-records
+
+      - name: Deploy edge proxy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_6ABA }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_6ABA }}
+        run: npx wrangler deploy
+
+      - name: Smoke check public hosts
+        run: |
+          set -euo pipefail
+          urls=(
+            "https://ai-kit.net/"
+            "https://ai-kit.net/cloudflare/audit"
+            "https://jobs.ai-kit.net/"
+          )
+          smoke_one() {
+            local url="$1"
+            local deadline=$((SECONDS + 300))
+            local code="000"
+            while true; do
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$url" || true)"
+              if [[ "$code" == "200" ]]; then
+                echo "ok ${url}"
+                return 0
+              fi
+              if (( SECONDS >= deadline )); then
+                echo "smoke failed for ${url} (last status ${code})"
+                return 1
+              fi
+              echo "retry ${url} status ${code}"
+              sleep 15
+            done
+          }
+          for url in "${urls[@]}"; do
+            smoke_one "$url"
+          done

@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ai-kit-edge-proxy",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-02-24",
+  // Account is selected at deploy time via CLOUDFLARE_ACCOUNT_ID (zone account).
+  // Do not hardcode account_id: the origin Workers stay in a different account.
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "ai-kit.net", "custom_domain": true },
+    { "pattern": "jobs.ai-kit.net", "custom_domain": true }
+  ]
+}
