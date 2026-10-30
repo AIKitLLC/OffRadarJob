@@ -355,12 +355,24 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         rows = rows.filter((r) => r["tech_category"] === catVal);
       }
       if (q.includes("LOWER(j.title) LIKE ?") || q.includes("title LIKE ?")) {
-        const searchPattern = String(this.boundValues[bindingIdx++] || "").replace(/%/g, "").toLowerCase();
+        const wrapped = this.boundValues.find(
+          (value): value is string => typeof value === "string" && value.startsWith("%") && value.endsWith("%")
+        );
+        const searchPattern = String(wrapped ?? "").replace(/%/g, "").toLowerCase();
         if (searchPattern) {
-          rows = rows.filter((r) =>
-            String(r["title"] ?? "").toLowerCase().includes(searchPattern) ||
-            String(r["skills"] ?? "").toLowerCase().includes(searchPattern)
-          );
+          const companies = this.db.tables.get("companies");
+          rows = rows.filter((r) => {
+            const companyName = companies?.get(String(r["company_id"]))?.["name"];
+            return (
+              String(r["title"] ?? "").toLowerCase().includes(searchPattern) ||
+              String(r["skills"] ?? "").toLowerCase().includes(searchPattern) ||
+              String(r["location"] ?? "").toLowerCase().includes(searchPattern) ||
+              String(r["department"] ?? "").toLowerCase().includes(searchPattern) ||
+              String(r["description_summary"] ?? "").toLowerCase().includes(searchPattern) ||
+              String(r["raw_content"] ?? "").toLowerCase().includes(searchPattern) ||
+              String(companyName ?? "").toLowerCase().includes(searchPattern)
+            );
+          });
         }
       }
 
@@ -488,6 +500,17 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         });
       } else {
         rows.sort((a, b) => Number(b["first_seen_at"] ?? 0) - Number(a["first_seen_at"] ?? 0));
+      }
+      if (q.includes("LIMIT ?")) {
+        const hasOffset = q.includes("OFFSET ?");
+        const span = hasOffset ? 2 : 1;
+        if (this.boundValues.length >= span) {
+          const limit = Number(this.boundValues[this.boundValues.length - span]);
+          const offset = hasOffset ? Number(this.boundValues[this.boundValues.length - 1]) : 0;
+          if (Number.isFinite(limit) && limit >= 0 && Number.isFinite(offset) && offset >= 0) {
+            rows = rows.slice(offset, offset + limit);
+          }
+        }
       }
       return { results: rows as T[], success: true };
     }

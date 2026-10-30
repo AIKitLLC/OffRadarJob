@@ -57,6 +57,8 @@ import { JdRerankerService } from "./services/jd-reranker.js";
 import { DecisionApiService } from "./services/decision-api.js";
 import { CvTagCloudService } from "./services/cv-tag-cloud.js";
 import { handleCandidateMatchRoutes } from "./http/candidate-match-routes.js";
+import { handleJobExportRoute } from "./http/job-export-route.js";
+import { readJobCatalogFilters } from "./jobs/job-catalog-filters.js";
 import { CandidateMatchService } from "./pipeline/candidate-match-service.js";
 import { LINK_CHECK_CRON, runLinkQualityCron } from "./services/link-quality-cron.js";
 import { runLinkCheckBatch } from "./services/link-checker.js";
@@ -364,7 +366,11 @@ export function resetAdminAuthRateLimit(): void {
 
 /** Routes that require admin auth (and get the CSRF origin check on writes). */
 export function isAdminRoute(path: string): boolean {
-  return path.startsWith("/admin") || path.startsWith("/api/admin/") || path === "/api/telegram/setup-webhook" || path === "/api/crawl/seed";
+  return path.startsWith("/admin")
+    || path.startsWith("/api/admin/")
+    || path === "/api/telegram/setup-webhook"
+    || path === "/api/crawl/seed"
+    || path === "/api/jobs/export";
 }
 
 /**
@@ -757,21 +763,32 @@ export default {
       return Response.json({ admin: await isAuthorized(request, url, env) }, { headers: { "Cache-Control": "no-store" } });
     }
 
+    // Admin catalog download. Same filters as /api/jobs, same admin auth as /api/admin/*.
+    if (path === "/api/jobs/export") {
+      const exported = await handleJobExportRoute({
+        request,
+        url,
+        jobs: jobRepo,
+        authorizeAdmin: () => isAuthorized(request, url, env),
+      });
+      if (exported) return exported;
+    }
+
     // 3. API: List Gathered Jobs (Supports Paging & KV Caching)
     if (path === "/api/jobs" && request.method === "GET") {
+      const filters = readJobCatalogFilters(url.searchParams);
       const pageParam = url.searchParams.get("page");
       const paged = pageParam !== null || url.searchParams.get("paged") === "true";
       const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
       const limit = Math.min(parseInt(url.searchParams.get("limit") ?? (paged ? "30" : "50"), 10), 100);
-      const grade = url.searchParams.get("grade") ?? url.searchParams.get("seniority") ?? undefined;
-      const techCategory = url.searchParams.get("tech_category") ?? undefined;
-      const region = url.searchParams.get("region") ?? undefined;
-      const state = url.searchParams.get("state") ?? undefined;
-      const search = url.searchParams.get("search") ?? url.searchParams.get("q") ?? undefined;
-      const techOnlyParam = url.searchParams.get("tech_only");
-      const techOnly = techOnlyParam === "false" ? false : true;
+      const grade = filters.grade;
+      const techCategory = filters.techCategory;
+      const region = filters.region;
+      const state = filters.state;
+      const search = filters.search;
+      const techOnly = filters.techOnly;
 
-      const cacheKey = `api:jobs:v7:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:st${state || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
+      const cacheKey = `api:jobs:v8:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:st${state || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
 
       const data = await getOrSetKvCache(env, cacheKey, 120, async () => {
         if (paged) {

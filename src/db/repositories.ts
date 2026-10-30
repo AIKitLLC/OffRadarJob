@@ -26,6 +26,7 @@ import {
 } from "../types/domain.js";
 import { buildStateSqlCondition, getUsState } from "../utils/us-states.js";
 import { ignoredSourceSql } from "../utils/source-policy.js";
+import { JOB_CATALOG_TEXT_SEARCH_SQL, jobCatalogTextSearchBindings } from "./job-catalog-search.js";
 
 export const MIDWEST_COMPANY_SQL_CONDITION = `(
   COALESCE(location_hint, '') LIKE '%midwest%' 
@@ -804,6 +805,62 @@ export const MOUNTAIN_SQL_CONDITION = `(
 export const OPEN_JOB_SQL =
   "j.status = 'open' AND LOWER(COALESCE(j.apply_target, '')) NOT LIKE '%/cdn-cgi/%'";
 
+/**
+ * Shared WHERE for `list` and `listPaged` (including the pagination COUNT).
+ * `techOnly` defaults to true. Search covers title, company, skills, location,
+ * department, description_summary, and raw_content.
+ */
+export function buildJobCatalogWhere(options: {
+  grade?: string | undefined;
+  techCategory?: string | undefined;
+  region?: string | undefined;
+  state?: string | undefined;
+  techOnly?: boolean | undefined;
+  search?: string | undefined;
+}): { whereSql: string; bindings: unknown[] } {
+  const grade = options.grade && options.grade !== "all" ? options.grade : null;
+  const techCategory = options.techCategory && options.techCategory !== "all" ? options.techCategory : null;
+  const region = options.region && options.region !== "all" ? options.region : null;
+  const techOnly = options.techOnly !== false;
+  const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
+
+  let whereSql = `WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}`;
+  const bindings: unknown[] = [];
+
+  if (techOnly) whereSql += " AND j.is_tech_role = 1";
+  if (grade) {
+    whereSql += " AND j.seniority_level = ?";
+    bindings.push(grade);
+  }
+  if (techCategory) {
+    whereSql += " AND j.tech_category = ?";
+    bindings.push(techCategory);
+  }
+  if (region === "midwest") {
+    whereSql += ` AND ${MIDWEST_SQL_CONDITION}`;
+  } else if (region === "west") {
+    whereSql += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${WEST_SQL_CONDITION}`;
+  } else if (region === "northeast") {
+    whereSql += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${NORTHEAST_SQL_CONDITION}`;
+  } else if (region === "south") {
+    whereSql += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${SOUTH_SQL_CONDITION}`;
+  } else if (region === "mountain") {
+    whereSql += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${MOUNTAIN_SQL_CONDITION}`;
+  } else if (region === "remote") {
+    whereSql += " AND j.is_remote = 1";
+  }
+  if (options.state && options.state !== "all") {
+    const stateCond = buildStateSqlCondition(options.state, "COALESCE(j.location, c.location_hint)");
+    whereSql += ` AND ${stateCond.sql}`;
+    bindings.push(...stateCond.bindings);
+  }
+  if (search) {
+    whereSql += ` AND ${JOB_CATALOG_TEXT_SEARCH_SQL}`;
+    bindings.push(...jobCatalogTextSearchBindings(search));
+  }
+  return { whereSql, bindings };
+}
+
 export class JobRepository {
   constructor(private readonly db: ID1Database) {}
 
@@ -924,53 +981,19 @@ export class JobRepository {
     grade?: string | undefined;
     techCategory?: string | undefined;
     region?: string | undefined;
+    state?: string | undefined;
     techOnly?: boolean | undefined;
     search?: string | undefined;
   } = {}): Promise<Job[]> {
     const limit = options.limit ?? 50;
     const offset = options.offset ?? 0;
-    const grade = options.grade && options.grade !== "all" ? options.grade : null;
-    const techCategory = options.techCategory && options.techCategory !== "all" ? options.techCategory : null;
     const region = options.region && options.region !== "all" ? options.region : null;
-    const techOnly = options.techOnly !== false ? 1 : 0;
-    const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
-
-    let query = `SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}`;
-    const bindings: unknown[] = [];
-
-    if (techOnly === 1) {
-      query += " AND j.is_tech_role = 1";
-    }
-    if (grade) {
-      query += " AND j.seniority_level = ?";
-      bindings.push(grade);
-    }
-    if (techCategory) {
-      query += " AND j.tech_category = ?";
-      bindings.push(techCategory);
-    }
-    if (region === "midwest") {
-      query += ` AND ${MIDWEST_SQL_CONDITION}`;
-    } else if (region === "west") {
-      query += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${WEST_SQL_CONDITION}`;
-    } else if (region === "northeast") {
-      query += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${NORTHEAST_SQL_CONDITION}`;
-    } else if (region === "south") {
-      query += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${SOUTH_SQL_CONDITION}`;
-    } else if (region === "mountain") {
-      query += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${MOUNTAIN_SQL_CONDITION}`;
-    } else if (region === "remote") {
-      query += " AND j.is_remote = 1";
-    }
-    if (search) {
-      query += " AND (LOWER(j.title) LIKE ? OR LOWER(COALESCE(c.name, '')) LIKE ? OR LOWER(j.skills) LIKE ? OR LOWER(COALESCE(j.location, '')) LIKE ? OR LOWER(COALESCE(j.department, '')) LIKE ?)";
-      bindings.push(search, search, search, search, search);
-    }
+    const { whereSql, bindings } = buildJobCatalogWhere(options);
 
     const listOrderByClause = (!region || region === "all")
       ? `ORDER BY (CASE WHEN ${MIDWEST_SQL_CONDITION} THEN 1 ELSE 0 END) DESC, j.first_seen_at DESC`
       : `ORDER BY j.first_seen_at DESC`;
-    query += ` ${listOrderByClause} LIMIT ? OFFSET ?`;
+    const query = `SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id ${whereSql} ${listOrderByClause} LIMIT ? OFFSET ?`;
     bindings.push(limit, offset);
 
     const stmt = this.db.prepare(query);
@@ -982,6 +1005,7 @@ export class JobRepository {
   public async listPaged(options: {
     page?: number | undefined;
     limit?: number | undefined;
+    maxLimit?: number | undefined;
     grade?: string | undefined;
     techCategory?: string | undefined;
     region?: string | undefined;
@@ -1000,53 +1024,16 @@ export class JobRepository {
     };
   }> {
     const page = Math.max(1, options.page ?? 1);
-    const limit = Math.min(Math.max(1, options.limit ?? 30), 100);
+    const requestedCap = options.maxLimit;
+    const hardCap = typeof requestedCap === "number" && Number.isFinite(requestedCap) && requestedCap >= 1
+      ? Math.floor(requestedCap)
+      : 100;
+    const limit = Math.min(Math.max(1, options.limit ?? 30), hardCap);
     const offset = (page - 1) * limit;
-
-    const grade = options.grade && options.grade !== "all" ? options.grade : null;
-    const techCategory = options.techCategory && options.techCategory !== "all" ? options.techCategory : null;
     const region = options.region && options.region !== "all" ? options.region : null;
-    const techOnly = options.techOnly !== false ? 1 : 0;
-    const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
+    const { whereSql, bindings } = buildJobCatalogWhere(options);
 
-    let whereClause = `WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}`;
-    const bindings: unknown[] = [];
-
-    if (techOnly === 1) {
-      whereClause += " AND j.is_tech_role = 1";
-    }
-    if (grade) {
-      whereClause += " AND j.seniority_level = ?";
-      bindings.push(grade);
-    }
-    if (techCategory) {
-      whereClause += " AND j.tech_category = ?";
-      bindings.push(techCategory);
-    }
-    if (region === "midwest") {
-      whereClause += ` AND ${MIDWEST_SQL_CONDITION}`;
-    } else if (region === "west") {
-      whereClause += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${WEST_SQL_CONDITION}`;
-    } else if (region === "northeast") {
-      whereClause += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${NORTHEAST_SQL_CONDITION}`;
-    } else if (region === "south") {
-      whereClause += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${SOUTH_SQL_CONDITION}`;
-    } else if (region === "mountain") {
-      whereClause += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${MOUNTAIN_SQL_CONDITION}`;
-    } else if (region === "remote") {
-      whereClause += " AND j.is_remote = 1";
-    }
-    if (options.state && options.state !== "all") {
-      const stateCond = buildStateSqlCondition(options.state, "COALESCE(j.location, c.location_hint)");
-      whereClause += ` AND ${stateCond.sql}`;
-      bindings.push(...stateCond.bindings);
-    }
-    if (search) {
-      whereClause += " AND (LOWER(j.title) LIKE ? OR LOWER(COALESCE(c.name, '')) LIKE ? OR LOWER(j.skills) LIKE ? OR LOWER(COALESCE(j.location, '')) LIKE ? OR LOWER(COALESCE(j.department, '')) LIKE ?)";
-      bindings.push(search, search, search, search, search);
-    }
-
-    const countSql = `SELECT COUNT(*) as total FROM jobs j LEFT JOIN companies c ON j.company_id = c.id ${whereClause}`;
+    const countSql = `SELECT COUNT(*) as total FROM jobs j LEFT JOIN companies c ON j.company_id = c.id ${whereSql}`;
     const pagedOrderByClause = (!region || region === "all")
       ? `ORDER BY is_midwest_match DESC, j.first_seen_at DESC`
       : `ORDER BY j.first_seen_at DESC`;
@@ -1055,7 +1042,7 @@ export class JobRepository {
         (CASE WHEN ${MIDWEST_SQL_CONDITION} THEN 1 ELSE 0 END) AS is_midwest_match
       FROM jobs j 
       LEFT JOIN companies c ON j.company_id = c.id 
-      ${whereClause} 
+      ${whereSql} 
       ${pagedOrderByClause} 
       LIMIT ? OFFSET ?
     `;
@@ -1209,6 +1196,8 @@ export class JobRepository {
   /**
    * Count publicly visible jobs (open, not from ignored sources).
    * With `techOnly: true` this matches the default `/api/jobs` pagination total.
+   * Filtered totals (search, including description text, and tech_only) come from
+   * the COUNT inside `listPaged`, which uses the same WHERE as the page of rows.
    */
   public async count(options: { techOnly?: boolean } = {}): Promise<number> {
     const techSql = options.techOnly ? " AND j.is_tech_role = 1" : "";
