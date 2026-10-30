@@ -1,11 +1,18 @@
+import { redactExportedDescription } from "../export/redact-export-text.js";
 import { Job } from "../types/domain.js";
 
-/** Catalog payload. `rawContent` stays in the database and is not sent on `/api/jobs`. */
+/**
+ * Catalog payload. `rawContent` stays in the database.
+ * `descriptionSummary` has obvious emails and phone numbers removed.
+ */
 export type PublicJob = Omit<Job, "rawContent">;
 
 export function toPublicJob(job: Job): PublicJob {
   const published: Job = { ...job };
   delete published.rawContent;
+  if (typeof published.descriptionSummary === "string") {
+    published.descriptionSummary = redactExportedDescription(published.descriptionSummary);
+  }
   return published;
 }
 

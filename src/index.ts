@@ -60,7 +60,7 @@ import { handleCandidateMatchRoutes } from "./http/candidate-match-routes.js";
 import { jobCatalogSearchLengthError } from "./db/job-catalog-search.js";
 import { handleJobExportRoute } from "./http/job-export-route.js";
 import { readJobCatalogFilters } from "./jobs/job-catalog-filters.js";
-import { presentPublicJobCatalog } from "./jobs/public-job-view.js";
+import { presentPublicJobCatalog, toPublicJob } from "./jobs/public-job-view.js";
 import { CandidateMatchService } from "./pipeline/candidate-match-service.js";
 import { LINK_CHECK_CRON, runLinkQualityCron } from "./services/link-quality-cron.js";
 import { runLinkCheckBatch } from "./services/link-checker.js";
@@ -167,6 +167,15 @@ export const LEAKED_ADMIN_TOKEN_SHA256 = "8def82a2adab551529187ce033d1da734c0483
 DENYLISTED_ADMIN_TOKEN_HASHES.add(LEAKED_ADMIN_TOKEN_SHA256);
 
 export const ADMIN_COOKIE_NAME = "admin_session";
+
+const USER_SESSION_MAX_AGE_SECONDS = 2_592_000;
+
+/** HttpOnly session for a signed-in candidate. Secure so it is not sent on plain HTTP. */
+function userTokenSetCookie(token: string, maxAgeSeconds = USER_SESSION_MAX_AGE_SECONDS): string {
+  const clearing = maxAgeSeconds <= 0;
+  const expires = clearing ? "; Expires=Thu, 01 Jan 1970 00:00:00 GMT" : "";
+  return `user_token=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSeconds}${expires}`;
+}
 
 async function sha256Bytes(value: string): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
@@ -794,7 +803,7 @@ export default {
         return Response.json({ error: searchError }, { status: 400, headers: { "Cache-Control": "no-store" } });
       }
 
-      const cacheKey = `api:jobs:v9:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:st${state || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
+      const cacheKey = `api:jobs:v10:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:st${state || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
 
       const data = await getOrSetKvCache(env, cacheKey, 120, async () => {
         const listed = paged
@@ -833,12 +842,16 @@ export default {
       const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
       const limit = Math.min(parseInt(url.searchParams.get("limit") ?? (paged ? "30" : "50"), 10), 100);
       const search = url.searchParams.get("search") ?? url.searchParams.get("q") ?? undefined;
+      const companySearchError = jobCatalogSearchLengthError(search);
+      if (companySearchError) {
+        return Response.json({ error: companySearchError }, { status: 400, headers: { "Cache-Control": "no-store" } });
+      }
       const region = url.searchParams.get("region") ?? undefined;
       const state = url.searchParams.get("state") ?? undefined;
       const fundingStage = url.searchParams.get("funding_stage") ?? url.searchParams.get("stage") ?? undefined;
       const primaryDepartment = url.searchParams.get("primary_department") ?? url.searchParams.get("department") ?? undefined;
 
-      const cacheKey = `api:companies:v9:p${page}:l${limit}:r${region || "all"}:st${state || "all"}:fs${fundingStage || "all"}:pd${primaryDepartment || "all"}:s${search || ""}:paged${paged ? 1 : 0}`;
+      const cacheKey = `api:companies:v10:p${page}:l${limit}:r${region || "all"}:st${state || "all"}:fs${fundingStage || "all"}:pd${primaryDepartment || "all"}:s${search || ""}:paged${paged ? 1 : 0}`;
 
       const data = await getOrSetKvCache(env, cacheKey, 300, async () => {
         if (paged) {
@@ -870,7 +883,7 @@ export default {
       const targetGroup = url.searchParams.get("target_group") || "all";
       const limit = Math.min(Math.max(1, parseInt(url.searchParams.get("limit") || "20")), 100);
 
-      const cacheKey = `report:rerank:live:${targetGroup}:${limit}`;
+      const cacheKey = `report:rerank:live:v2:${targetGroup}:${limit}`;
       const data = await getOrSetKvCache(env, cacheKey, 180, async () => {
         const jobsRes = await jobRepo.listPaged({ page: 1, limit: 200, techOnly: true });
         const compRes = await companyRepo.listPaged({ page: 1, limit: 150 });
@@ -891,7 +904,10 @@ export default {
           marketSummary: report.marketSummary,
           targetGroupBreakdown: report.targetGroupBreakdown,
           trendingSkills: report.trendingSkills,
-          topRankedJobs: topJobs.slice(0, limit),
+          topRankedJobs: topJobs.slice(0, limit).map((entry) => ({
+            ...entry,
+            job: toPublicJob(entry.job),
+          })),
         };
       });
 
@@ -987,7 +1003,7 @@ export default {
             { status: "authenticated", user: sessionData.user, token: apiToken },
             {
               headers: {
-                "Set-Cookie": `user_token=${apiToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+                "Set-Cookie": userTokenSetCookie(apiToken),
               },
             }
           );
@@ -1776,7 +1792,7 @@ export default {
           { success: true, user: userRecord, token: apiToken },
           {
             headers: {
-              "Set-Cookie": `user_token=${apiToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+              "Set-Cookie": userTokenSetCookie(apiToken),
             },
           }
         );
@@ -1851,7 +1867,7 @@ export default {
           { success: true, user: userRecord },
           {
             headers: {
-              "Set-Cookie": `user_token=${apiToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+              "Set-Cookie": userTokenSetCookie(apiToken),
             },
           }
         );
@@ -1873,7 +1889,7 @@ export default {
         { success: true },
         {
           headers: {
-            "Set-Cookie": `user_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`,
+            "Set-Cookie": userTokenSetCookie("", 0),
           },
         }
       );
@@ -2823,7 +2839,11 @@ export default {
       const report = rerankerService.generateRealtimeReport(jobsRes.items, companiesMap);
 
       if (env.CACHE && typeof env.CACHE.put === "function") {
-        await env.CACHE.put("cache_realtime_jd_ranking_report", JSON.stringify(report), { expirationTtl: 600 });
+        const publicReport = {
+          ...report,
+          topRankedJobs: report.topRankedJobs.map((entry) => ({ ...entry, job: toPublicJob(entry.job) })),
+        };
+        await env.CACHE.put("cache_realtime_jd_ranking_report", JSON.stringify(publicReport), { expirationTtl: 600 });
       }
 
       return Response.json({
@@ -3161,6 +3181,10 @@ export default {
       const sentiment = url.searchParams.get("sentiment") || undefined;
       const status = url.searchParams.get("status") || undefined;
       const search = url.searchParams.get("search") || undefined;
+      const feedbackSearchError = jobCatalogSearchLengthError(search);
+      if (feedbackSearchError) {
+        return Response.json({ error: feedbackSearchError }, { status: 400, headers: { "Cache-Control": "private, no-store" } });
+      }
 
       const [feedbacksData, stats] = await Promise.all([
         feedbackRepo.listPaged({ page, limit, type, sentiment, status, search }),

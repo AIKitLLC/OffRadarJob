@@ -1,6 +1,22 @@
 import { ID1Database, ID1PreparedStatement, ID1Result, ID1Response } from "./types.js";
 import { literalFromWrappedLikePattern } from "./job-catalog-search.js";
 import { detectUsRegion } from "./repositories.js";
+
+function applyCompanyTextSearch(
+  sql: string,
+  bindings: unknown[],
+  rows: Record<string, unknown>[]
+): Record<string, unknown>[] {
+  if (sql.includes("1 = 0")) return [];
+  if (!sql.includes("LOWER(name) LIKE ?")) return rows;
+  const wrapped = bindings.find(
+    (value): value is string => typeof value === "string" && value.startsWith("%") && value.endsWith("%")
+  );
+  const literal = wrapped ? literalFromWrappedLikePattern(wrapped) : null;
+  if (!literal) return rows;
+  const fields = ["name", "domain", "industry", "tech_stack", "location_hint"];
+  return rows.filter((row) => fields.some((field) => String(row[field] ?? "").toLowerCase().includes(literal)));
+}
 import { matchesUsState } from "../utils/us-states.js";
 import { isIgnoredSourceDomain } from "../utils/source-policy.js";
 
@@ -150,6 +166,7 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
           filtered = filtered.filter((r) => matchesUsState(String(r["location_hint"] ?? ""), stateCode));
         }
       }
+      filtered = applyCompanyTextSearch(q, this.boundValues, filtered);
       return { results: [{ count: filtered.length, total: filtered.length } as T], success: true };
     }
 
@@ -203,6 +220,7 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
           rows = rows.filter((r) => matchesUsState(String(r["location_hint"] ?? ""), stateCode));
         }
       }
+      rows = applyCompanyTextSearch(q, this.boundValues, rows);
 
       if (q.includes("is_midwest_priority")) {
         rows.sort((a, b) => {
@@ -735,9 +753,12 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         const ss = String(this.boundValues[bIdx++]);
         filtered = filtered.filter((r) => r["status"] === ss);
       }
-      if (q.includes("LOWER(fb.comment) LIKE ?")) {
-        const searchPattern = String(this.boundValues[bIdx++] || "").replace(/%/g, "").toLowerCase();
-        bIdx += 2; // skips suggested_action and context_summary bindings
+      if (q.includes("1 = 0")) {
+        filtered = [];
+      } else if (q.includes("LOWER(fb.comment) LIKE ?")) {
+        const wrapped = String(this.boundValues[bIdx] ?? "");
+        bIdx += 3;
+        const searchPattern = literalFromWrappedLikePattern(wrapped) ?? "";
         if (searchPattern) {
           filtered = filtered.filter((r) =>
             String(r["comment"] ?? "").toLowerCase().includes(searchPattern) ||

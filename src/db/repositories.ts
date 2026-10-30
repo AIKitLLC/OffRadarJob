@@ -26,7 +26,7 @@ import {
 } from "../types/domain.js";
 import { buildStateSqlCondition, getUsState } from "../utils/us-states.js";
 import { ignoredSourceSql } from "../utils/source-policy.js";
-import { JOB_CATALOG_TEXT_SEARCH_SQL, jobCatalogLikePattern, jobCatalogTextSearchBindings } from "./job-catalog-search.js";
+import { JOB_CATALOG_SEARCH_MAX_CHARS, JOB_CATALOG_TEXT_SEARCH_SQL, jobCatalogLikePattern, jobCatalogTextSearchBindings } from "./job-catalog-search.js";
 
 export const MIDWEST_COMPANY_SQL_CONDITION = `(
   COALESCE(location_hint, '') LIKE '%midwest%' 
@@ -390,15 +390,19 @@ export class CompanyRepository {
     const page = Math.max(1, options.page ?? 1);
     const limit = Math.min(Math.max(1, options.limit ?? 30), 100);
     const offset = (page - 1) * limit;
-    const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
+    const trimmedSearch = options.search?.trim() ?? "";
+    const searchTooLong = trimmedSearch.length > JOB_CATALOG_SEARCH_MAX_CHARS;
+    const searchPattern = !searchTooLong && trimmedSearch ? jobCatalogLikePattern(trimmedSearch) : null;
     const region = options.region && options.region !== "all" ? options.region : null;
 
     let whereClause = `WHERE ${ignoredSourceSql("companies")}`;
     const bindings: unknown[] = [];
 
-    if (search) {
-      whereClause += " AND (LOWER(name) LIKE ? OR LOWER(domain) LIKE ? OR LOWER(COALESCE(industry, '')) LIKE ? OR LOWER(tech_stack) LIKE ? OR LOWER(COALESCE(location_hint, '')) LIKE ?)";
-      bindings.push(search, search, search, search, search);
+    if (searchTooLong) {
+      whereClause += " AND 1 = 0";
+    } else if (searchPattern) {
+      whereClause += " AND (LOWER(name) LIKE ? ESCAPE '\\' OR LOWER(domain) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(industry, '')) LIKE ? ESCAPE '\\' OR LOWER(tech_stack) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(location_hint, '')) LIKE ? ESCAPE '\\')";
+      bindings.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
     }
     if (region === "midwest") {
       whereClause += ` AND ${MIDWEST_COMPANY_SQL_CONDITION}`;
@@ -2014,9 +2018,12 @@ export class LlmFeedbackRepository {
       whereClauses.push("fb.status = ?");
       bindings.push(options.status);
     }
-    if (options.search) {
-      whereClauses.push("(LOWER(fb.comment) LIKE ? OR LOWER(COALESCE(fb.suggested_action, '')) LIKE ? OR LOWER(COALESCE(fb.context_summary, '')) LIKE ?)");
-      const term = `%${options.search.toLowerCase()}%`;
+    const feedbackSearch = options.search?.trim() ?? "";
+    if (feedbackSearch.length > JOB_CATALOG_SEARCH_MAX_CHARS) {
+      whereClauses.push("1 = 0");
+    } else if (feedbackSearch) {
+      whereClauses.push("(LOWER(fb.comment) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(fb.suggested_action, '')) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(fb.context_summary, '')) LIKE ? ESCAPE '\\')");
+      const term = jobCatalogLikePattern(feedbackSearch);
       bindings.push(term, term, term);
     }
 

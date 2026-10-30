@@ -14,7 +14,9 @@ The trimmed `search` or `q` value must be at most 100 characters. A longer value
 
 `\`, `%`, and `_` in the term are escaped and matched with `LIKE ... ESCAPE '\'`, so they are literal characters.
 
-The public response includes `descriptionSummary` and omits `rawContent`. The cache key is `api:jobs:v9`.
+The public response includes `descriptionSummary` and omits `rawContent`. Emails and phone numbers in that summary are replaced with `[redacted-email]` and `[redacted-phone]`, the same redaction the export uses. The cache key is `api:jobs:v10`. `GET /api/reports/realtime-jd-ranking` maps each ranked job through the same public view. Its cache key is `report:rerank:live:v2`.
+
+After deploy, purge the CDN cache. Older cached `/api/jobs` and ranking responses can still contain `rawContent` or unredacted contact text until that cache expires.
 
 ## Export
 
