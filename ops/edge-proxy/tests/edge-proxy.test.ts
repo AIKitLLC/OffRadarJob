@@ -68,7 +68,10 @@ describe("edge proxy", () => {
     expect(url).toBe("https://ai-kit-net.tuannx87.workers.dev/cloudflare/audit?check=1");
     expect(init?.method).toBe("POST");
     expect(init?.redirect).toBe("manual");
-    expect(init?.cache).toBe("no-store");
+    expect(init?.cache).toBeUndefined();
+    expect(init).not.toHaveProperty("cache");
+    expect(init).not.toHaveProperty("duplex");
+    expect(init?.cf).toEqual({ cacheTtl: 0 });
     expect(init?.body).toBeInstanceOf(ReadableStream);
     const headers = new Headers(init?.headers);
     expect(headers.get("host")).toBeNull();
@@ -99,6 +102,32 @@ describe("edge proxy", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     const [, init] = fetchImpl.mock.calls[0]!;
     expect(init?.redirect).toBe("manual");
+    expect(init?.cache).toBeUndefined();
+    expect(init?.cf).toEqual({ cacheTtl: 0 });
     expect(init?.body).toBeUndefined();
+  });
+
+  it("returns a plain 502 when request handling throws", async () => {
+    const secret = "CacheTtl: 0, is not compatible with cache: no-store header.";
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      throw new TypeError(secret);
+    });
+    try {
+      const response = await proxyWith(fetchImpl).handle(new Request("https://jobs.ai-kit.net/admin"));
+      expect(response.status).toBe(502);
+      expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      const text = await response.text();
+      expect(text).toBe("Bad Gateway");
+      expect(text).not.toContain("CacheTtl");
+      expect(text).not.toContain(secret);
+      const logged = errorSpy.mock.calls.flat().join(" ");
+      expect(JSON.parse(logged)).toEqual({ event: "edge_proxy_request_failed", name: "TypeError" });
+      expect(logged).not.toContain(secret);
+      expect(logged).not.toContain("stack");
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
