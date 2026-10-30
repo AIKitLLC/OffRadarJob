@@ -1,3 +1,4 @@
+import { jobCatalogSearchLengthError } from "../db/job-catalog-search.js";
 import { JobCatalogExportFactory, parseJobExportFormat } from "../export/job-catalog-export-factory.js";
 import { JobCatalogReader } from "../export/job-catalog-reader.js";
 import { JOB_EXPORT_JSON_MAX_ROWS, JOB_EXPORT_PRIVATE_HEADERS } from "../export/job-export-limits.js";
@@ -35,6 +36,8 @@ export async function handleJobExportRoute(input: {
   if (!format) return jsonError("format must be csv or json", 400);
 
   const filters = readJobCatalogFilters(input.url.searchParams);
+  const searchError = jobCatalogSearchLengthError(filters.search);
+  if (searchError) return jsonError(searchError, 400);
   const command = {
     filters,
     page: readPositiveInt(input.url.searchParams.get("page"), 1, 1_000_000),

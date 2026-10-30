@@ -1,3 +1,4 @@
+import { redactExportedDescription } from "./redact-export-text.js";
 import { Job } from "../types/domain.js";
 
 export const JOB_CSV_COLUMNS = [
@@ -17,7 +18,6 @@ export const JOB_CSV_COLUMNS = [
   "salaryCurrency",
   "skills",
   "descriptionSummary",
-  "rawContent",
   "applyType",
   "applyTarget",
   "status",
@@ -53,8 +53,7 @@ export const JOB_CSV_CELL: Record<JobCsvColumn, (job: Job) => string> = {
   salaryMax: (job) => numberText(job.salaryMax),
   salaryCurrency: (job) => text(job.salaryCurrency),
   skills: (job) => job.skills.join("; "),
-  descriptionSummary: (job) => text(job.descriptionSummary),
-  rawContent: (job) => text(job.rawContent),
+  descriptionSummary: (job) => redactExportedDescription(text(job.descriptionSummary)),
   applyType: (job) => job.applyType,
   applyTarget: (job) => job.applyTarget,
   status: (job) => job.status,

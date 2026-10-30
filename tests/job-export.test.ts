@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { InMemoryD1Database } from "../src/db/in-memory-db.js";
 import { JobRepository } from "../src/db/repositories.js";
 import { escapeRfc4180Cell } from "../src/export/csv-rfc4180.js";
+import { redactExportedDescription } from "../src/export/redact-export-text.js";
 import { JOB_EXPORT_JSON_MAX_ROWS } from "../src/export/job-export-limits.js";
 import { resetAdminAuthRateLimit } from "../src/index.js";
 import worker from "../src/index.js";
@@ -111,7 +112,7 @@ describe("CSV escaping and formula injection guard", () => {
         location: "-10+20",
         skills: ["@SUM(A1)"],
         descriptionSummary: "\t=cmd",
-        rawContent: "\r=cmd",
+        remoteScope: "\r=cmd",
         firstSeenAt: 1_700_000_000_100,
         lastSeenAt: 1_700_000_000_100,
       }));
@@ -154,7 +155,8 @@ describe("CSV escaping and formula injection guard", () => {
       expect(formula[at("location")]).toBe("'-10+20");
       expect(formula[at("skills")]).toBe("'@SUM(A1)");
       expect(formula[at("descriptionSummary")]).toBe("'\t=cmd");
-      expect(formula[at("rawContent")]).toBe("'\r=cmd");
+      expect(formula[at("remoteScope")]).toBe("'\r=cmd");
+      expect(header).not.toContain("rawContent");
       expect(quoted[at("title")]).toBe('Senior, "Platform" Engineer');
       expect(quoted[at("descriptionSummary")]).toBe("Builds\r\nAPIs");
       expect(quoted[at("department")]).toBe("Design, Research");
@@ -202,6 +204,7 @@ describe("description search on /api/jobs", () => {
       department: "Operations",
       location: "Chicago, IL",
       descriptionSummary: `Coordinates the ${PHRASE} rollout`,
+      rawContent: "RAW_SECRET_BODY",
     }));
     await repo.upsert(catalogJob("job_raw", {
       title: "Platform Engineer",
@@ -232,14 +235,61 @@ describe("description search on /api/jobs", () => {
     return await res.json() as { items: { id: string }[]; pagination: { total: number } };
   }
 
-  it("matches descriptionSummary and rawContent and keeps the tech_only total aligned", async () => {
+  it("matches descriptionSummary, omits rawContent, and does not search rawContent", async () => {
     const tech = await search(true);
-    expect(tech.pagination.total).toBe(2);
-    expect(tech.items.map((item) => item.id).sort()).toEqual(["job_raw", "job_summary"]);
+    expect(tech.pagination.total).toBe(1);
+    expect(tech.items.map((item) => item.id)).toEqual(["job_summary"]);
+    const published = tech.items[0] as { descriptionSummary?: string; rawContent?: string };
+    expect(published.descriptionSummary).toContain(PHRASE);
+    expect(Object.hasOwn(published, "rawContent")).toBe(false);
+    expect(JSON.stringify(tech)).not.toContain("RAW_SECRET_BODY");
+
+    const unpaged = await worker.fetch(
+      new Request(`http://localhost/api/jobs?search=${PHRASE}&tech_only=false`),
+      { DB: db } as any,
+      ctx
+    );
+    const rows = await unpaged.json() as { id: string; rawContent?: string; descriptionSummary?: string }[];
+    expect(rows.map((row) => row.id).sort()).toEqual(["job_nontech", "job_summary"]);
+    for (const row of rows) {
+      expect(Object.hasOwn(row, "rawContent")).toBe(false);
+      expect(row.descriptionSummary).toContain(PHRASE);
+    }
 
     const all = await search(false);
-    expect(all.pagination.total).toBe(3);
-    expect(all.items.map((item) => item.id).sort()).toEqual(["job_nontech", "job_raw", "job_summary"]);
+    expect(all.pagination.total).toBe(2);
+    expect(all.items.map((item) => item.id).sort()).toEqual(["job_nontech", "job_summary"]);
+  });
+
+  it("rejects a search longer than 100 characters instead of truncating it", async () => {
+    const tooLong = `${PHRASE}${"x".repeat(90)}`;
+    expect(tooLong.trim().length).toBeGreaterThan(100);
+    const params = new URLSearchParams({ q: tooLong, paged: "true" });
+    const res = await worker.fetch(new Request(`http://localhost/api/jobs?${params}`), { DB: db } as any, ctx);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain("100");
+    expect(JSON.stringify(body)).not.toContain("job_summary");
+
+    const accepted = "y".repeat(100);
+    const ok = await worker.fetch(
+      new Request(`http://localhost/api/jobs?q=${accepted}&paged=true`),
+      { DB: db } as any,
+      ctx
+    );
+    expect(ok.status).toBe(200);
+  });
+
+  it("treats % and _ as literal characters", async () => {
+    const repo = new JobRepository(db);
+    await repo.upsert(catalogJob("job_pct", { title: "keep 100%_ready" }));
+    await repo.upsert(catalogJob("job_wild", { title: "keep 100Xready" }));
+    const params = new URLSearchParams({ search: "100%_ready", paged: "true", tech_only: "true" });
+    const res = await worker.fetch(new Request(`http://localhost/api/jobs?${params}`), { DB: db } as any, ctx);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { items: { id: string }[]; pagination: { total: number } };
+    expect(body.pagination.total).toBe(1);
+    expect(body.items.map((item) => item.id)).toEqual(["job_pct"]);
   });
 });
 
@@ -289,6 +339,81 @@ describe("JSON export row cap", () => {
     const seen = new Set(first.items.map((item) => item.id));
     for (const item of second.items) expect(seen.has(item.id)).toBe(false);
     expect(seen.size + second.items.length).toBe(first.pagination.total);
+  });
+});
+
+describe("export omits rawContent and strips contact details from the summary", () => {
+  let db: InMemoryD1Database;
+
+  const summary = "Budget 180000. Email ada@example.com or call (312) 555-0199 or +44 20 7946 0958 about the role.";
+
+  beforeEach(async () => {
+    db = new InMemoryD1Database();
+    resetAdminAuthRateLimit();
+    await new JobRepository(db).upsert(catalogJob("job_pii", {
+      descriptionSummary: summary,
+      rawContent: "RAW_SECRET_BODY ada-raw@example.com",
+      applyTarget: "jobs@micro.example",
+    }));
+  });
+
+  it("redacts emails and separated phone numbers and keeps salaries", () => {
+    const redacted = redactExportedDescription(summary);
+    expect(redacted).toContain("Budget 180000");
+    expect(redacted).toContain("about the role");
+    expect(redacted).not.toContain("ada@example.com");
+    expect(redacted).not.toContain("(312) 555-0199");
+    expect(redacted).not.toContain("+44 20 7946 0958");
+    expect(redacted).toContain("[redacted-email]");
+    expect(redacted).toContain("[redacted-phone]");
+  });
+
+  async function authorized(path: string) {
+    return worker.fetch(
+      new Request(`http://localhost${path}`, { headers: { "x-admin-token": ADMIN } }),
+      { DB: db, ADMIN_TOKEN: ADMIN } as any,
+      ctx
+    );
+  }
+
+  it("leaves rawContent out of JSON and CSV and redacts the summary", async () => {
+    const jsonRes = await authorized("/api/jobs/export?format=json");
+    expect(jsonRes.status).toBe(200);
+    const json = await jsonRes.json() as { items: { id: string; descriptionSummary?: string; rawContent?: string; applyTarget: string }[] };
+    const item = json.items.find((row) => row.id === "job_pii");
+    expect(item).toBeDefined();
+    expect(Object.hasOwn(item!, "rawContent")).toBe(false);
+    expect(item!.descriptionSummary).toContain("Budget 180000");
+    expect(item!.descriptionSummary).not.toContain("ada@example.com");
+    expect(item!.descriptionSummary).not.toContain("(312) 555-0199");
+    expect(item!.descriptionSummary).not.toContain("+44 20 7946 0958");
+    expect(item!.applyTarget).toBe("jobs@micro.example");
+    expect(JSON.stringify(json)).not.toContain("RAW_SECRET_BODY");
+    expect(JSON.stringify(json)).not.toContain("ada-raw@example.com");
+
+    const csvRes = await authorized("/api/jobs/export?format=csv");
+    expect(csvRes.status).toBe(200);
+    const csv = await csvRes.text();
+    const table = parseCsv(csv);
+    const header = table[0]!;
+    expect(header).not.toContain("rawContent");
+    const row = table.slice(1).find((cells) => cells[header.indexOf("id")] === "job_pii");
+    const exportedSummary = row![header.indexOf("descriptionSummary")]!;
+    expect(exportedSummary).toContain("Budget 180000");
+    expect(exportedSummary).not.toContain("ada@example.com");
+    expect(exportedSummary).not.toContain("(312) 555-0199");
+    expect(exportedSummary).not.toContain("+44 20 7946 0958");
+    expect(csv).not.toContain("RAW_SECRET_BODY");
+    expect(csv).toContain("jobs@micro.example");
+  });
+
+  it("returns 400 when the export search is longer than 100 characters", async () => {
+    const params = new URLSearchParams({ format: "json", q: "q".repeat(101) });
+    const res = await authorized(`/api/jobs/export?${params}`);
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain("100");
+    expect(JSON.stringify(body)).not.toContain("job_pii");
   });
 });
 
@@ -366,21 +491,33 @@ function sqliteD1(raw: NonNullable<typeof sqlite> extends never ? never : Instan
   it("counts the same description matches that it returns, and tech_only narrows both", async () => {
     const tech = await repo.listPaged({ search: PHRASE, techOnly: true, page: 1, limit: 10 });
     const listed = await repo.list({ search: PHRASE, techOnly: true, limit: 10 });
-    expect(tech.pagination.total).toBe(2);
-    expect(tech.items.map((job) => job.id).sort()).toEqual(["job_raw", "job_summary"]);
-    expect(listed.map((job) => job.id).sort()).toEqual(tech.items.map((job) => job.id).sort());
-
-    const first = await repo.listPaged({ search: PHRASE, techOnly: true, page: 1, limit: 1 });
-    const second = await repo.listPaged({ search: PHRASE, techOnly: true, page: 2, limit: 1 });
-    expect(first.items).toHaveLength(1);
-    expect(first.pagination.total).toBe(2);
-    expect(second.items).toHaveLength(1);
-    expect(second.items[0]?.id).not.toBe(first.items[0]?.id);
+    expect(tech.pagination.total).toBe(1);
+    expect(tech.items.map((job) => job.id)).toEqual(["job_summary"]);
+    expect(listed.map((job) => job.id)).toEqual(["job_summary"]);
 
     const all = await repo.listPaged({ search: PHRASE, techOnly: false, page: 1, limit: 10 });
-    expect(all.pagination.total).toBe(3);
-    expect(all.items).toHaveLength(3);
+    expect(all.pagination.total).toBe(2);
+    expect(all.items.map((job) => job.id).sort()).toEqual(["job_nontech", "job_summary"]);
     expect(await repo.count({ techOnly: true })).toBe(3);
     expect(await repo.count()).toBe(4);
+
+    await repo.upsert(catalogJob("job_pct", { title: "keep 100%_ready", descriptionSummary: "plain" }));
+    await repo.upsert(catalogJob("job_wild", { title: "keep 100Xready", descriptionSummary: "plain" }));
+    await repo.upsert(catalogJob("job_under", { title: "alpha_beta", descriptionSummary: "plain" }));
+    await repo.upsert(catalogJob("job_plain", { title: "alphabet", descriptionSummary: "plain" }));
+    await repo.upsert(catalogJob("job_slash", { title: "bin\\tool", descriptionSummary: "plain" }));
+
+    const literal = await repo.listPaged({ search: "100%_ready", techOnly: true, limit: 20 });
+    expect(literal.pagination.total).toBe(1);
+    expect(literal.items.map((job) => job.id)).toEqual(["job_pct"]);
+
+    const percent = await repo.listPaged({ search: "%", techOnly: true, limit: 20 });
+    expect(percent.items.map((job) => job.id)).toEqual(["job_pct"]);
+
+    const underscore = await repo.listPaged({ search: "_", techOnly: true, limit: 20 });
+    expect(underscore.items.map((job) => job.id).sort()).toEqual(["job_pct", "job_under"]);
+
+    const slash = await repo.listPaged({ search: "\\", techOnly: true, limit: 20 });
+    expect(slash.items.map((job) => job.id)).toEqual(["job_slash"]);
   });
 });

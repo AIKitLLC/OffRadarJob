@@ -1,3 +1,4 @@
+import { toExportedJob } from "./exported-job.js";
 import { JobCatalogExporter, JobCatalogReader, JobExportCommand } from "./job-catalog-reader.js";
 import { JOB_EXPORT_JSON_MAX_ROWS, JOB_EXPORT_PRIVATE_HEADERS } from "./job-export-limits.js";
 
@@ -14,7 +15,7 @@ export class JsonJobCatalogExporter implements JobCatalogExporter {
       limit,
       maxLimit: JOB_EXPORT_JSON_MAX_ROWS,
     });
-    const items = result.items.slice(0, limit);
+    const items = result.items.slice(0, limit).map((job) => toExportedJob(job));
     return Response.json(
       {
         format: "json",

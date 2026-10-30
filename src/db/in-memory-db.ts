@@ -1,4 +1,5 @@
 import { ID1Database, ID1PreparedStatement, ID1Result, ID1Response } from "./types.js";
+import { literalFromWrappedLikePattern } from "./job-catalog-search.js";
 import { detectUsRegion } from "./repositories.js";
 import { matchesUsState } from "../utils/us-states.js";
 import { isIgnoredSourceDomain } from "../utils/source-policy.js";
@@ -358,7 +359,7 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         const wrapped = this.boundValues.find(
           (value): value is string => typeof value === "string" && value.startsWith("%") && value.endsWith("%")
         );
-        const searchPattern = String(wrapped ?? "").replace(/%/g, "").toLowerCase();
+        const searchPattern = wrapped ? literalFromWrappedLikePattern(wrapped) : "";
         if (searchPattern) {
           const companies = this.db.tables.get("companies");
           rows = rows.filter((r) => {
@@ -369,7 +370,6 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
               String(r["location"] ?? "").toLowerCase().includes(searchPattern) ||
               String(r["department"] ?? "").toLowerCase().includes(searchPattern) ||
               String(r["description_summary"] ?? "").toLowerCase().includes(searchPattern) ||
-              String(r["raw_content"] ?? "").toLowerCase().includes(searchPattern) ||
               String(companyName ?? "").toLowerCase().includes(searchPattern)
             );
           });

@@ -26,7 +26,7 @@ import {
 } from "../types/domain.js";
 import { buildStateSqlCondition, getUsState } from "../utils/us-states.js";
 import { ignoredSourceSql } from "../utils/source-policy.js";
-import { JOB_CATALOG_TEXT_SEARCH_SQL, jobCatalogTextSearchBindings } from "./job-catalog-search.js";
+import { JOB_CATALOG_TEXT_SEARCH_SQL, jobCatalogLikePattern, jobCatalogTextSearchBindings } from "./job-catalog-search.js";
 
 export const MIDWEST_COMPANY_SQL_CONDITION = `(
   COALESCE(location_hint, '') LIKE '%midwest%' 
@@ -808,7 +808,8 @@ export const OPEN_JOB_SQL =
 /**
  * Shared WHERE for `list` and `listPaged` (including the pagination COUNT).
  * `techOnly` defaults to true. Search covers title, company, skills, location,
- * department, description_summary, and raw_content.
+ * department, and description_summary. `raw_content` is not searched.
+ * `%`, `_`, and `\` in the term are literal (LIKE ESCAPE).
  */
 export function buildJobCatalogWhere(options: {
   grade?: string | undefined;
@@ -822,7 +823,7 @@ export function buildJobCatalogWhere(options: {
   const techCategory = options.techCategory && options.techCategory !== "all" ? options.techCategory : null;
   const region = options.region && options.region !== "all" ? options.region : null;
   const techOnly = options.techOnly !== false;
-  const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
+  const search = options.search?.trim() ? jobCatalogLikePattern(options.search) : null;
 
   let whereSql = `WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}`;
   const bindings: unknown[] = [];
@@ -1196,8 +1197,8 @@ export class JobRepository {
   /**
    * Count publicly visible jobs (open, not from ignored sources).
    * With `techOnly: true` this matches the default `/api/jobs` pagination total.
-   * Filtered totals (search, including description text, and tech_only) come from
-   * the COUNT inside `listPaged`, which uses the same WHERE as the page of rows.
+   * Filtered totals (search on description_summary, not raw_content, and tech_only)
+   * come from the COUNT inside `listPaged`, which uses the same WHERE as the page of rows.
    */
   public async count(options: { techOnly?: boolean } = {}): Promise<number> {
     const techSql = options.techOnly ? " AND j.is_tech_role = 1" : "";

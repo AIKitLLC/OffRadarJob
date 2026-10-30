@@ -57,8 +57,10 @@ import { JdRerankerService } from "./services/jd-reranker.js";
 import { DecisionApiService } from "./services/decision-api.js";
 import { CvTagCloudService } from "./services/cv-tag-cloud.js";
 import { handleCandidateMatchRoutes } from "./http/candidate-match-routes.js";
+import { jobCatalogSearchLengthError } from "./db/job-catalog-search.js";
 import { handleJobExportRoute } from "./http/job-export-route.js";
 import { readJobCatalogFilters } from "./jobs/job-catalog-filters.js";
+import { presentPublicJobCatalog } from "./jobs/public-job-view.js";
 import { CandidateMatchService } from "./pipeline/candidate-match-service.js";
 import { LINK_CHECK_CRON, runLinkQualityCron } from "./services/link-quality-cron.js";
 import { runLinkCheckBatch } from "./services/link-checker.js";
@@ -787,30 +789,34 @@ export default {
       const state = filters.state;
       const search = filters.search;
       const techOnly = filters.techOnly;
+      const searchError = jobCatalogSearchLengthError(search);
+      if (searchError) {
+        return Response.json({ error: searchError }, { status: 400, headers: { "Cache-Control": "no-store" } });
+      }
 
-      const cacheKey = `api:jobs:v8:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:st${state || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
+      const cacheKey = `api:jobs:v9:p${page}:l${limit}:g${grade || "all"}:tc${techCategory || "all"}:r${region || "all"}:st${state || "all"}:s${search || ""}:to${techOnly ? 1 : 0}:paged${paged ? 1 : 0}`;
 
       const data = await getOrSetKvCache(env, cacheKey, 120, async () => {
-        if (paged) {
-          return await jobRepo.listPaged({
-            page,
-            limit,
-            grade,
-            techCategory,
-            region,
-            state,
-            techOnly,
-            search,
-          });
-        }
-        return await jobRepo.list({
-          limit,
-          grade,
-          techCategory,
-          region,
-          techOnly,
-          search,
-        });
+        const listed = paged
+          ? await jobRepo.listPaged({
+              page,
+              limit,
+              grade,
+              techCategory,
+              region,
+              state,
+              techOnly,
+              search,
+            })
+          : await jobRepo.list({
+              limit,
+              grade,
+              techCategory,
+              region,
+              techOnly,
+              search,
+            });
+        return presentPublicJobCatalog(listed);
       });
 
       return Response.json(data, {
