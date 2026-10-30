@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       clear_conflicting_records:
-        description: Delete stale A/AAAA records for ai-kit.net and jobs.ai-kit.net before deploy
+        description: Delete stale A/AAAA records for ai-kit.net, jobs.ai-kit.net, and data.ai-kit.net before deploy
         type: boolean
         default: true
 
@@ -48,8 +48,8 @@ jobs:
       - name: Test
         run: npm test
 
-      # Allowlist: A/AAAA whose name is exactly ai-kit.net or jobs.ai-kit.net.
-      # ar, crm, data, pop, crm-dev, MX, TXT, and every other name stay.
+      # Allowlist: A/AAAA whose name is exactly ai-kit.net, jobs.ai-kit.net, or data.ai-kit.net.
+      # ar, crm, pop, crm-dev, MX, TXT, and every other name stay.
       - name: Clear conflicting A/AAAA records
         if: ${{ inputs.clear_conflicting_records == true || inputs.clear_conflicting_records == 'true' }}
         env:
@@ -70,6 +70,7 @@ jobs:
             "https://ai-kit.net/"
             "https://ai-kit.net/cloudflare/audit"
             "https://jobs.ai-kit.net/"
+            "https://data.ai-kit.net/"
           )
           smoke_one() {
             local url="$1"

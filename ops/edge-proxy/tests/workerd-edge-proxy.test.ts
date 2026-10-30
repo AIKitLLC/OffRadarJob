@@ -58,5 +58,11 @@ describe("bundled edge proxy in workerd", () => {
       expect(text).not.toContain("error code: 1101");
       expect(text.toLowerCase()).toContain("<!doctype html");
     }
+    const data = await mf.dispatchFetch("https://data.ai-kit.net/");
+    const dataBody = await data.text();
+    expect(data.status).toBe(200);
+    expect(data.headers.get("cache-control")).toBe("no-store");
+    expect(dataBody).toContain("AI Kit Data");
+    expect(dataBody).not.toContain("Bad Gateway");
   }, 20000);
 });

@@ -7,11 +7,13 @@ const APEX_A = "11111111111111111111111111111111";
 const APEX_AAAA = "22222222222222222222222222222222";
 const JOBS_A = "33333333333333333333333333333333";
 const JOBS_AAAA = "44444444444444444444444444444444";
+const DATA_A = "55555555555555555555555555555555";
+const DATA_AAAA = "66666666666666666666666666666666";
 
 const PROTECTED = [
   { id: "d".repeat(32), type: "A", name: "ar.ai-kit.net", content: "192.0.2.10" },
   { id: "e".repeat(32), type: "A", name: "crm.ai-kit.net", content: "192.0.2.11" },
-  { id: "f".repeat(32), type: "AAAA", name: "data.ai-kit.net", content: "2001:db8::1" },
+  { id: "f".repeat(32), type: "AAAA", name: "blog.ai-kit.net", content: "2001:db8::1" },
   { id: "1".repeat(32), type: "A", name: "pop.ai-kit.net", content: "192.0.2.12" },
   { id: "2".repeat(32), type: "A", name: "crm-dev.ai-kit.net", content: "192.0.2.13" },
   { id: "3".repeat(32), type: "MX", name: "ai-kit.net", content: "mx.example.net" },
@@ -27,6 +29,8 @@ const CONFLICTING = [
   { id: APEX_AAAA, type: "AAAA", name: "ai-kit.net", content: "2001:db8::2", proxied: true },
   { id: JOBS_A, type: "A", name: "jobs.ai-kit.net", content: "192.0.2.3", proxied: true },
   { id: JOBS_AAAA, type: "AAAA", name: "jobs.ai-kit.net", content: "2001:db8::4", proxied: true },
+  { id: DATA_A, type: "A", name: "data.ai-kit.net", content: "192.0.2.5", proxied: true },
+  { id: DATA_AAAA, type: "AAAA", name: "data.ai-kit.net", content: "2001:db8::5", proxied: true },
 ];
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -80,7 +84,7 @@ function installApi(records = [...CONFLICTING, ...PROTECTED]): {
 }
 
 describe("clear conflicting address records", () => {
-  it("deletes only apex and jobs A/AAAA records and logs type, name, and id", async () => {
+  it("deletes only proxied-host A/AAAA records and logs type, name, and id", async () => {
     const api = installApi();
     const lines: string[] = [];
     await clearConflictingAddressRecords({
@@ -90,12 +94,14 @@ describe("clear conflicting address records", () => {
       log: (line) => lines.push(line),
     });
 
-    expect(api.deleted).toEqual([APEX_A, JOBS_A, APEX_AAAA, JOBS_AAAA]);
+    expect(api.deleted).toEqual([APEX_A, JOBS_A, DATA_A, APEX_AAAA, JOBS_AAAA, DATA_AAAA]);
     expect(lines).toEqual([
       `A ai-kit.net ${APEX_A}`,
       `A jobs.ai-kit.net ${JOBS_A}`,
+      `A data.ai-kit.net ${DATA_A}`,
       `AAAA ai-kit.net ${APEX_AAAA}`,
       `AAAA jobs.ai-kit.net ${JOBS_AAAA}`,
+      `AAAA data.ai-kit.net ${DATA_AAAA}`,
     ]);
     expect(lines.join("\n")).not.toContain("192.0.2");
     expect(lines.join("\n")).not.toContain("test-token");
@@ -103,9 +109,9 @@ describe("clear conflicting address records", () => {
     for (const url of api.listUrls) {
       const parsed = new URL(url, "https://api.cloudflare.com");
       expect(["A", "AAAA"]).toContain(parsed.searchParams.get("type"));
-      expect(["ai-kit.net", "jobs.ai-kit.net"]).toContain(parsed.searchParams.get("name"));
+      expect(["ai-kit.net", "jobs.ai-kit.net", "data.ai-kit.net"]).toContain(parsed.searchParams.get("name"));
     }
-    expect(api.listUrls).toHaveLength(4);
+    expect(api.listUrls).toHaveLength(6);
   });
 
   it("does not delete when the zone lookup is ambiguous", async () => {

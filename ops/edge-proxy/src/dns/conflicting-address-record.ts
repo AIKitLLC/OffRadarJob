@@ -1,5 +1,5 @@
-/** Address records that block custom hostnames on the zone apex and jobs host. */
-export const CONFLICTING_ADDRESS_NAMES = ["ai-kit.net", "jobs.ai-kit.net"] as const;
+/** A/AAAA names that block attaching the proxied custom hostnames. */
+export const CONFLICTING_ADDRESS_NAMES = ["ai-kit.net", "jobs.ai-kit.net", "data.ai-kit.net"] as const;
 export const CONFLICTING_ADDRESS_TYPES = ["A", "AAAA"] as const;
 
 const NAMES = new Set<string>(CONFLICTING_ADDRESS_NAMES);
@@ -23,7 +23,7 @@ export function normalizeDnsName(name: string): string {
   return name.trim().toLowerCase().replace(/\.$/, "");
 }
 
-/** True only for A/AAAA records whose name is exactly the apex or jobs host. */
+/** True only for A/AAAA records whose name is an exact proxied public host. */
 export function isConflictingAddressRecord(record: { type: string; name: string }): boolean {
   return TYPES.has(record.type.trim().toUpperCase()) && NAMES.has(normalizeDnsName(record.name));
 }

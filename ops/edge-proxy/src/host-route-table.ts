@@ -11,5 +11,6 @@ export const productionHostRoutes = new HostRouteTable(
   new Map([
     ["ai-kit.net", "ai-kit-net.tuannx87.workers.dev"],
     ["jobs.ai-kit.net", "off-radar-jobs.tuannx87.workers.dev"],
+    ["data.ai-kit.net", "nhtsa-edge-api.tuannx87.workers.dev"],
   ]),
 );
