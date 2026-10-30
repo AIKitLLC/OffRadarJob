@@ -1,3 +1,4 @@
+import { toPublicJob } from "../jobs/public-job-view.js";
 import {
   JobRepository,
   CompanyRepository,
@@ -524,7 +525,7 @@ export class McpServerHandler {
             us_region: j.usRegion || (j.isMidwest ? "midwest" : (j.isRemote ? "remote" : "other")),
             salary: j.salaryMin ? `$${j.salaryMin.toLocaleString()} - $${j.salaryMax?.toLocaleString()} ${j.salaryCurrency || "USD"}` : "Unspecified",
             skills: j.skills,
-            summary: j.descriptionSummary,
+            summary: toPublicJob(j).descriptionSummary,
             is_midwest_priority: j.isMidwest ?? false,
             apply_type: j.applyType,
             apply_target: j.applyTarget,
@@ -538,9 +539,10 @@ export class McpServerHandler {
         if (!job) {
           return { error: `Job with ID '${jobId}' not found.` };
         }
+        const published = toPublicJob(job);
         return {
-          job,
-          apply_instructions: `Direct application via ${job.applyType.toUpperCase()}: ${job.applyTarget}`,
+          job: published,
+          apply_instructions: `Direct application via ${published.applyType.toUpperCase()}: ${published.applyTarget}`,
         };
       }
 
@@ -864,7 +866,7 @@ export class McpServerHandler {
             tech_category: j.techCategory,
             seniority: j.seniorityLevel,
             skills: j.skills,
-            summary: j.descriptionSummary,
+            summary: toPublicJob(j).descriptionSummary,
             apply_type: j.applyType,
             apply_target: j.applyTarget,
             is_midwest_priority: isMidwest,

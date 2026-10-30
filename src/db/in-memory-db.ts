@@ -1,5 +1,22 @@
 import { ID1Database, ID1PreparedStatement, ID1Result, ID1Response } from "./types.js";
+import { literalFromWrappedLikePattern } from "./job-catalog-search.js";
 import { detectUsRegion } from "./repositories.js";
+
+function applyCompanyTextSearch(
+  sql: string,
+  bindings: unknown[],
+  rows: Record<string, unknown>[]
+): Record<string, unknown>[] {
+  if (sql.includes("1 = 0")) return [];
+  if (!sql.includes("LOWER(name) LIKE ?")) return rows;
+  const wrapped = bindings.find(
+    (value): value is string => typeof value === "string" && value.startsWith("%") && value.endsWith("%")
+  );
+  const literal = wrapped ? literalFromWrappedLikePattern(wrapped) : null;
+  if (!literal) return rows;
+  const fields = ["name", "domain", "industry", "tech_stack", "location_hint"];
+  return rows.filter((row) => fields.some((field) => String(row[field] ?? "").toLowerCase().includes(literal)));
+}
 import { matchesUsState } from "../utils/us-states.js";
 import { isIgnoredSourceDomain } from "../utils/source-policy.js";
 
@@ -149,6 +166,7 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
           filtered = filtered.filter((r) => matchesUsState(String(r["location_hint"] ?? ""), stateCode));
         }
       }
+      filtered = applyCompanyTextSearch(q, this.boundValues, filtered);
       return { results: [{ count: filtered.length, total: filtered.length } as T], success: true };
     }
 
@@ -202,6 +220,7 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
           rows = rows.filter((r) => matchesUsState(String(r["location_hint"] ?? ""), stateCode));
         }
       }
+      rows = applyCompanyTextSearch(q, this.boundValues, rows);
 
       if (q.includes("is_midwest_priority")) {
         rows.sort((a, b) => {
@@ -355,12 +374,23 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         rows = rows.filter((r) => r["tech_category"] === catVal);
       }
       if (q.includes("LOWER(j.title) LIKE ?") || q.includes("title LIKE ?")) {
-        const searchPattern = String(this.boundValues[bindingIdx++] || "").replace(/%/g, "").toLowerCase();
+        const wrapped = this.boundValues.find(
+          (value): value is string => typeof value === "string" && value.startsWith("%") && value.endsWith("%")
+        );
+        const searchPattern = wrapped ? literalFromWrappedLikePattern(wrapped) : "";
         if (searchPattern) {
-          rows = rows.filter((r) =>
-            String(r["title"] ?? "").toLowerCase().includes(searchPattern) ||
-            String(r["skills"] ?? "").toLowerCase().includes(searchPattern)
-          );
+          const companies = this.db.tables.get("companies");
+          rows = rows.filter((r) => {
+            const companyName = companies?.get(String(r["company_id"]))?.["name"];
+            return (
+              String(r["title"] ?? "").toLowerCase().includes(searchPattern) ||
+              String(r["skills"] ?? "").toLowerCase().includes(searchPattern) ||
+              String(r["location"] ?? "").toLowerCase().includes(searchPattern) ||
+              String(r["department"] ?? "").toLowerCase().includes(searchPattern) ||
+              String(r["description_summary"] ?? "").toLowerCase().includes(searchPattern) ||
+              String(companyName ?? "").toLowerCase().includes(searchPattern)
+            );
+          });
         }
       }
 
@@ -488,6 +518,17 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         });
       } else {
         rows.sort((a, b) => Number(b["first_seen_at"] ?? 0) - Number(a["first_seen_at"] ?? 0));
+      }
+      if (q.includes("LIMIT ?")) {
+        const hasOffset = q.includes("OFFSET ?");
+        const span = hasOffset ? 2 : 1;
+        if (this.boundValues.length >= span) {
+          const limit = Number(this.boundValues[this.boundValues.length - span]);
+          const offset = hasOffset ? Number(this.boundValues[this.boundValues.length - 1]) : 0;
+          if (Number.isFinite(limit) && limit >= 0 && Number.isFinite(offset) && offset >= 0) {
+            rows = rows.slice(offset, offset + limit);
+          }
+        }
       }
       return { results: rows as T[], success: true };
     }
@@ -712,9 +753,12 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         const ss = String(this.boundValues[bIdx++]);
         filtered = filtered.filter((r) => r["status"] === ss);
       }
-      if (q.includes("LOWER(fb.comment) LIKE ?")) {
-        const searchPattern = String(this.boundValues[bIdx++] || "").replace(/%/g, "").toLowerCase();
-        bIdx += 2; // skips suggested_action and context_summary bindings
+      if (q.includes("1 = 0")) {
+        filtered = [];
+      } else if (q.includes("LOWER(fb.comment) LIKE ?")) {
+        const wrapped = String(this.boundValues[bIdx] ?? "");
+        bIdx += 3;
+        const searchPattern = literalFromWrappedLikePattern(wrapped) ?? "";
         if (searchPattern) {
           filtered = filtered.filter((r) =>
             String(r["comment"] ?? "").toLowerCase().includes(searchPattern) ||
