@@ -1,6 +1,8 @@
+import { gatewayFailureResponse, reportGatewayFailure } from "./gateway-failure-response.js";
 import { HostRouteTable } from "./host-route-table.js";
 import { LocationRewriter } from "./location-rewriter.js";
 import { SetCookieRewriter } from "./set-cookie-rewriter.js";
+import { buildUpstreamFetchInit, dispatchUpstream } from "./upstream-fetch-init.js";
 import { UpstreamHeaderBuilder } from "./upstream-headers.js";
 import { UpstreamResponseRewriter } from "./upstream-response.js";
 
@@ -12,11 +14,6 @@ const NOT_FOUND = () =>
       "content-type": "text/plain; charset=utf-8",
     },
   });
-
-function requestMayHaveBody(method: string): boolean {
-  const normalized = method.toUpperCase();
-  return normalized !== "GET" && normalized !== "HEAD";
-}
 
 export class EdgeProxy {
   private readonly headers = new UpstreamHeaderBuilder();
@@ -32,6 +29,15 @@ export class EdgeProxy {
   }
 
   async handle(request: Request): Promise<Response> {
+    try {
+      return await this.forward(request);
+    } catch (error) {
+      reportGatewayFailure(error);
+      return gatewayFailureResponse();
+    }
+  }
+
+  private async forward(request: Request): Promise<Response> {
     const incoming = new URL(request.url);
     const publicHost = incoming.hostname.toLowerCase();
     const upstreamHost = this.routes.resolve(publicHost);
@@ -41,16 +47,8 @@ export class EdgeProxy {
     upstreamUrl.pathname = incoming.pathname;
     upstreamUrl.search = incoming.search;
 
-    const init: RequestInit & { cf?: { cacheTtl: number } } = {
-      method: request.method,
-      headers: this.headers.build(request.headers, publicHost),
-      redirect: "manual",
-      cache: "no-store",
-      cf: { cacheTtl: 0 },
-    };
-    if (requestMayHaveBody(request.method)) init.body = request.body;
-
-    const upstream = await this.fetchImpl(upstreamUrl.toString(), init);
+    const init = buildUpstreamFetchInit(request, this.headers.build(request.headers, publicHost));
+    const upstream = await dispatchUpstream(this.fetchImpl, upstreamUrl.toString(), init);
     return this.responses.rewrite(upstream, upstreamHost, publicHost);
   }
 }
