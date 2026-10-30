@@ -10,6 +10,11 @@ describe("host mapping", () => {
     expect(productionHostRoutes.resolve("jobs.ai-kit.net")).toBe("off-radar-jobs.tuannx87.workers.dev");
   });
 
+  it("maps the data host to the NHTSA edge API", () => {
+    expect(productionHostRoutes.resolve("data.ai-kit.net")).toBe("nhtsa-edge-api.tuannx87.workers.dev");
+    expect(productionHostRoutes.resolve("Data.AI-KIT.net")).toBe("nhtsa-edge-api.tuannx87.workers.dev");
+  });
+
   it("matches hosts case-insensitively", () => {
     expect(productionHostRoutes.resolve("Jobs.AI-KIT.net")).toBe("off-radar-jobs.tuannx87.workers.dev");
   });

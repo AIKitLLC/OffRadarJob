@@ -96,7 +96,7 @@ function dedupe(records: readonly DnsRecordIdentity[]): DnsRecordIdentity[] {
 }
 
 /**
- * Delete stale A/AAAA records on ai-kit.net and jobs.ai-kit.net so custom hostnames can attach.
+ * Delete stale A/AAAA records on ai-kit.net, jobs.ai-kit.net, and data.ai-kit.net so custom hostnames can attach.
  * Every other name and type is left untouched.
  */
 export async function clearConflictingAddressRecords(options: ClearConflictingAddressRecordsOptions): Promise<void> {

@@ -37,6 +37,16 @@ describe("edge proxy", () => {
     expect(response.status).toBe(404);
   });
 
+  it("forwards data.ai-kit.net to the NHTSA workers.dev origin", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response("ok", { status: 200 }));
+    const response = await proxyWith(fetchImpl).handle(new Request("https://data.ai-kit.net/v1/decode"));
+    expect(response.status).toBe(200);
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe("https://nhtsa-edge-api.tuannx87.workers.dev/v1/decode");
+    expect(init?.cf).toEqual({ cacheTtl: 0 });
+    expect(init).not.toHaveProperty("cache");
+  });
+
   it("forwards method, path, query, and the body stream without the Host header", async () => {
     const chunks: Uint8Array[] = [];
     const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {

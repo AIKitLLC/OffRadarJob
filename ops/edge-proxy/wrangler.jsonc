@@ -8,6 +8,7 @@
   "workers_dev": false,
   "routes": [
     { "pattern": "ai-kit.net", "custom_domain": true },
-    { "pattern": "jobs.ai-kit.net", "custom_domain": true }
+    { "pattern": "jobs.ai-kit.net", "custom_domain": true },
+    { "pattern": "data.ai-kit.net", "custom_domain": true }
   ]
 }
