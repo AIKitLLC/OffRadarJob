@@ -122,7 +122,10 @@ describe("edge proxy", () => {
       expect(text).toBe("Bad Gateway");
       expect(text).not.toContain("CacheTtl");
       expect(text).not.toContain(secret);
-      expect(errorSpy.mock.calls.flat().join(" ")).toContain("TypeError");
+      const logged = errorSpy.mock.calls.flat().join(" ");
+      expect(JSON.parse(logged)).toEqual({ event: "edge_proxy_request_failed", name: "TypeError" });
+      expect(logged).not.toContain(secret);
+      expect(logged).not.toContain("stack");
     } finally {
       errorSpy.mockRestore();
     }

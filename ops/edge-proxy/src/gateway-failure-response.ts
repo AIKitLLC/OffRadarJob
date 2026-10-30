@@ -10,6 +10,5 @@ export function gatewayFailureResponse(): Response {
 
 export function reportGatewayFailure(error: unknown): void {
   const name = error instanceof Error ? error.name : "Error";
-  const message = error instanceof Error ? error.message : "unknown failure";
-  console.error(JSON.stringify({ event: "edge_proxy_request_failed", name, message }));
+  console.error(JSON.stringify({ event: "edge_proxy_request_failed", name }));
 }
