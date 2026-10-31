@@ -117,7 +117,7 @@ describe("edge proxy", () => {
     expect(init?.body).toBeUndefined();
   });
 
-  it("returns a plain 502 when request handling throws", async () => {
+  it("returns the static 503 page with Retry-After when request handling throws", async () => {
     const secret = "CacheTtl: 0, is not compatible with cache: no-store header.";
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const fetchImpl = vi.fn<typeof fetch>(async () => {
@@ -125,11 +125,12 @@ describe("edge proxy", () => {
     });
     try {
       const response = await proxyWith(fetchImpl).handle(new Request("https://jobs.ai-kit.net/admin"));
-      expect(response.status).toBe(502);
-      expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect(response.status).toBe(503);
+      expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
       expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("retry-after")).toBe("30");
       const text = await response.text();
-      expect(text).toBe("Bad Gateway");
+      expect(text).toContain("temporarily unavailable");
       expect(text).not.toContain("CacheTtl");
       expect(text).not.toContain(secret);
       const logged = errorSpy.mock.calls.flat().join(" ");
