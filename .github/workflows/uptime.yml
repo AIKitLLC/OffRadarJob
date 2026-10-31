@@ -1,0 +1,68 @@
+name: Uptime
+
+# Checks public AI Kit endpoints every 10 minutes and opens/comments on an
+# issue labeled `uptime` when a check fails. Lives in this PUBLIC repo so the
+# 10-minute cron (~4,320 runs/month) does not consume private-repo minutes.
+# Scheduled workflows only run from the default branch: live after merge.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe endpoints
+        id: probe
+        run: |
+          set -u
+          # url|accepted codes (space separated)
+          checks=(
+            "https://ai-kit.net/|200"
+            "https://ai-kit.net/cloudflare/audit|200"
+            "https://jobs.ai-kit.net/|200"
+            "https://crm.ai-kit.net/|302"
+            "https://crm-app.ai-kit.net/|200 302"
+          )
+          fail=0
+          : > report.md
+          for c in "${checks[@]}"; do
+            url="${c%%|*}"; ok="${c#*|}"
+            code=$(curl -s -o /dev/null -m 20 --retry 2 --retry-delay 5 -w '%{http_code}' "$url" || true)
+            [ -z "$code" ] && code=000
+            if [[ " $ok " == *" $code "* ]]; then
+              echo "| $url | $code | OK |" >> report.md
+            else
+              echo "| $url | $code (expected $ok) | **FAIL** |" >> report.md
+              fail=1
+            fi
+          done
+          cat report.md
+          echo "fail=$fail" >> "$GITHUB_OUTPUT"
+
+      - name: Open or comment on uptime issue
+        if: steps.probe.outputs.fail == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create uptime --color B60205 --description "Uptime check failure" 2>/dev/null || true
+          body=$(printf 'Uptime check failed at %s UTC\n\n| URL | HTTP | Result |\n|---|---|---|\n%s\n\nRun: %s\n' "$(date -u '+%Y-%m-%d %H:%M')" "$(cat report.md)" "$RUN_URL")
+          num=$(gh issue list --label uptime --state open --limit 1 --json number -q '.[0].number')
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$body"
+          else
+            gh issue create --title "Uptime: endpoint check failing" --label uptime --body "$body"
+          fi
+          exit 1
