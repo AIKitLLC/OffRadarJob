@@ -6,6 +6,9 @@ import { buildUpstreamFetchInit, dispatchUpstream } from "./upstream-fetch-init.
 import { UpstreamHeaderBuilder } from "./upstream-headers.js";
 import { UpstreamResponseRewriter } from "./upstream-response.js";
 
+/** Upstream must send response headers within this time, or the proxy answers 503. */
+export const UPSTREAM_TIMEOUT_MS = 10_000;
+
 const NOT_FOUND = () =>
   new Response("Not Found", {
     status: 404,
@@ -24,6 +27,7 @@ export class EdgeProxy {
     locations = new LocationRewriter(),
     cookies = new SetCookieRewriter(),
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly timeoutMs: number = UPSTREAM_TIMEOUT_MS,
   ) {
     this.responses = new UpstreamResponseRewriter(locations, cookies);
   }
@@ -48,7 +52,15 @@ export class EdgeProxy {
     upstreamUrl.search = incoming.search;
 
     const init = buildUpstreamFetchInit(request, this.headers.build(request.headers, publicHost));
-    const upstream = await dispatchUpstream(this.fetchImpl, upstreamUrl.toString(), init);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new DOMException("upstream timeout", "TimeoutError")), this.timeoutMs);
+    let upstream: Response;
+    try {
+      upstream = await dispatchUpstream(this.fetchImpl, upstreamUrl.toString(), { ...init, signal: controller.signal });
+    } finally {
+      // Headers arrived (or fetch failed): the body may keep streaming without the deadline.
+      clearTimeout(timer);
+    }
     return this.responses.rewrite(upstream, upstreamHost, publicHost);
   }
 }
