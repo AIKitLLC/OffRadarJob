@@ -1,8 +1,8 @@
 name: Uptime
 
 # Checks public AI Kit endpoints every 10 minutes and opens/comments on an
-# issue labeled `uptime` when a check fails. Lives in this PUBLIC repo so the
-# 10-minute cron (~4,320 runs/month) does not consume private-repo minutes.
+# issue labeled `uptime` when the status changes; closes it on recovery. Lives in this PUBLIC repo so the
+# Writes only on status change (open issue = down). 10-minute cron (~4,320 runs/month) does not consume private-repo minutes.
 # Scheduled workflows only run from the default branch: live after merge.
 on:
   schedule:
@@ -50,19 +50,41 @@ jobs:
           cat report.md
           echo "fail=$fail" >> "$GITHUB_OUTPUT"
 
-      - name: Open or comment on uptime issue
-        if: steps.probe.outputs.fail == '1'
+      - name: Update uptime issue on status change
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FAIL: ${{ steps.probe.outputs.fail }}
         run: |
-          gh label create uptime --color B60205 --description "Uptime check failure" 2>/dev/null || true
-          body=$(printf 'Uptime check failed at %s UTC\n\n| URL | HTTP | Result |\n|---|---|---|\n%s\n\nRun: %s\n' "$(date -u '+%Y-%m-%d %H:%M')" "$(cat report.md)" "$RUN_URL")
-          num=$(gh issue list --label uptime --state open --limit 1 --json number -q '.[0].number')
-          if [ -n "$num" ]; then
+          set -euo pipefail
+          # Last known state = the open/closed state of the `uptime` issue:
+          # open issue = DOWN, no open issue = UP. Only transitions write to GitHub,
+          # plus a comment when the set of failing URLs changes while DOWN.
+          sig=$(grep FAIL report.md | sed 's/ |.*//; s/^| //' | sort | tr '\n' ' ' | sed 's/ $//' || true)
+          marker="<!-- uptime-failing: ${sig} -->"
+          now=$(date -u '+%Y-%m-%d %H:%M')
+          num=$(gh issue list --label uptime --state open --limit 1 --json number -q '.[0].number // empty')
+          if [ "$FAIL" = "1" ]; then
+            body=$(printf '%s\nUptime check failed at %s UTC\n\n| URL | HTTP | Result |\n|---|---|---|\n%s\n\nRun: %s\n' "$marker" "$now" "$(cat report.md)" "$RUN_URL")
+            if [ -z "$num" ]; then
+              gh label create uptime --color B60205 --description "Uptime check failure" 2>/dev/null || true
+              gh issue create --title "Uptime: endpoint check failing" --label uptime --body "$body"
+              echo "::error::UP -> DOWN: $sig"
+              exit 1
+            fi
+            last=$(gh issue view "$num" --json body,comments -q '[.body] + [.comments[].body] | map(select(contains("<!-- uptime-failing:"))) | last // ""' | grep -o '<!-- uptime-failing: [^>]*-->' | tail -1 || true)
+            if [ "$last" != "$marker" ]; then
+              gh issue comment "$num" --body "$body"
+              echo "::warning::Still DOWN, failing set changed: $sig"
+            else
+              echo "Still DOWN, unchanged ($sig); issue #$num already open, no comment."
+            fi
+          elif [ -n "$num" ]; then
+            body=$(printf 'All endpoints recovered at %s UTC\n\n| URL | HTTP | Result |\n|---|---|---|\n%s\n\nRun: %s\n' "$now" "$(cat report.md)" "$RUN_URL")
             gh issue comment "$num" --body "$body"
+            gh issue close "$num" --reason completed
+            echo "DOWN -> UP: closed #$num"
           else
-            gh issue create --title "Uptime: endpoint check failing" --label uptime --body "$body"
+            echo "Still UP; nothing to do."
           fi
-          exit 1

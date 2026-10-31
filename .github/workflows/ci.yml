@@ -11,6 +11,9 @@ on:
   push:
     branches:
       - main
+    # A push that only changes the uptime monitor must not re-run checks or deploy.
+    paths-ignore:
+      - .github/workflows/uptime.yml
   workflow_dispatch:
 
 permissions: {}
