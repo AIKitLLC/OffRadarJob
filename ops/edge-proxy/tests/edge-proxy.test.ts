@@ -25,7 +25,7 @@ describe("upstream headers", () => {
 describe("edge proxy", () => {
   it("returns 404 for an unknown host and does not call origin", async () => {
     const fetchImpl = vi.fn<typeof fetch>();
-    const response = await proxyWith(fetchImpl).handle(new Request("https://www.ai-kit.net/secret"));
+    const response = await proxyWith(fetchImpl).handle(new Request("https://unknown.ai-kit.net/secret"));
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("Not Found");
     expect(response.headers.get("cache-control")).toBe("no-store");
