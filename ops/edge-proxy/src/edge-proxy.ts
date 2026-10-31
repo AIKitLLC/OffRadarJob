@@ -1,4 +1,5 @@
 import { gatewayFailureResponse, reportGatewayFailure } from "./gateway-failure-response.js";
+import { HostRedirectTable, noHostRedirects } from "./host-redirect-table.js";
 import { HostRouteTable } from "./host-route-table.js";
 import { LocationRewriter } from "./location-rewriter.js";
 import { SetCookieRewriter } from "./set-cookie-rewriter.js";
@@ -24,6 +25,7 @@ export class EdgeProxy {
     locations = new LocationRewriter(),
     cookies = new SetCookieRewriter(),
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly redirects: HostRedirectTable = noHostRedirects,
   ) {
     this.responses = new UpstreamResponseRewriter(locations, cookies);
   }
@@ -39,6 +41,8 @@ export class EdgeProxy {
 
   private async forward(request: Request): Promise<Response> {
     const incoming = new URL(request.url);
+    const location = this.redirects.locationFor(incoming);
+    if (location) return Response.redirect(location, 301);
     const publicHost = incoming.hostname.toLowerCase();
     const upstreamHost = this.routes.resolve(publicHost);
     if (!upstreamHost) return NOT_FOUND();

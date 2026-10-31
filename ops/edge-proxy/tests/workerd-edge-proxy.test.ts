@@ -43,7 +43,7 @@ describe("bundled edge proxy in workerd", () => {
   });
 
   it("returns 404 for an unknown host", async () => {
-    const response = await mf.dispatchFetch("https://www.ai-kit.net/secret");
+    const response = await mf.dispatchFetch("https://unknown.ai-kit.net/secret");
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("Not Found");
   });
