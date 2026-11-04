@@ -2,6 +2,8 @@
 # A failed check fails the workflow.
 # A push to main, or a manual run from main, repeats those checks, applies
 # remote D1 migrations, then deploys. A failed migration does not deploy.
+# Deploys run only here (#9). On main, missing Cloudflare credentials fail
+# the job instead of skipping it, so a skipped deploy never looks green.
 # Actions are pinned to the commit of a release tag.
 # No default token scopes; each job grants only contents: read.
 name: CI
@@ -77,18 +79,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Verify Cloudflare credentials
-        id: cf_creds
         run: |
           node --input-type=module <<'EOF'
-          import { appendFileSync, readFileSync } from "node:fs";
+          import { readFileSync } from "node:fs";
 
           const token = process.env.CLOUDFLARE_API_TOKEN ?? "";
           const accountFromSecret = process.env.CLOUDFLARE_ACCOUNT_ID ?? "";
-          const ghOutput = process.env.GITHUB_OUTPUT ?? "";
           if (token.length === 0 || accountFromSecret.length === 0) {
-            console.log("::notice::Skipping automated Cloudflare deploy: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are not set in the production environment yet.");
-            if (ghOutput) appendFileSync(ghOutput, "configured=false\n");
-            process.exit(0);
+            console.log("::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set in the production environment. Deploys run only from CI (#9), so this job fails instead of skipping.");
+            process.exit(1);
           }
 
           const config = readFileSync("wrangler.jsonc", "utf8");
@@ -102,11 +101,8 @@ jobs:
             console.error("CLOUDFLARE_ACCOUNT_ID does not match account_id in wrangler.jsonc.");
             process.exit(1);
           }
-          if (ghOutput) appendFileSync(ghOutput, "configured=true\n");
           EOF
       - name: Apply D1 migrations
-        if: steps.cf_creds.outputs.configured == 'true'
-        run: npm exec -- wrangler d1 migrations apply off_radar_db --remote
+        run: npm run db:migrate:remote
       - name: Deploy Worker
-        if: steps.cf_creds.outputs.configured == 'true'
         run: npm run deploy
