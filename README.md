@@ -150,6 +150,10 @@ curl -X POST "$ORIGIN/api/user/job-filters" \
 
 Gathered jobs are also classified on the extract queue and the daily cron. Rules drop spam, duplicates, and stale postings, keep complete postings, and enrich sparse skill lists from the posting text. A Workers AI judge (`@cf/meta/llama-3.1-8b-instruct`, temperature 0) runs only for the review band, and the decision is stored in `job_quality_decisions`. `POST /api/admin/quality/run` runs a bounded pass with the admin token. MCP tools: `rank_jobs_for_profile`, `save_candidate_profile`, `save_job_filter`, `list_new_match_alerts`.
 
+### Apply-click measurement
+
+`GET /go/:jobId?src=<dashboard|list|digest|telegram|mcp|alert>&l=<list-slug>` counts one click and redirects (`302`) to the job's stored apply URL. The target is read from the database only and re-checked with `validateApplyUrl`; anything else returns `404`. Link previews, `HEAD` and prefetch requests are redirected but not counted, and a signed-in user's repeat clicks on the same job within one hour count once. No IP address, user agent or referrer is stored. `GET /api/admin/clicks?days=30` (admin) returns counts by company, source and list. Apply migration `0018_apply_clicks.sql` first.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
