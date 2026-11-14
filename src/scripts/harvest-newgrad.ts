@@ -3,6 +3,7 @@ import { NEW_GRAD_MIDWEST_SEEDS } from "../demo/newgrad-seeds.js";
 import { inferTechCategory } from "../harvesters/public-source-harvester.js";
 import { detectUsRegion } from "../db/repositories.js";
 import { execSync } from "node:child_process";
+import { requireCi } from "../utils/require-ci.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -271,6 +272,7 @@ async function main() {
   fs.writeFileSync(tmpSqlPath, allStatements.join("\n"), "utf-8");
 
   try {
+    requireCi("seed new-grad jobs into remote D1");
     execSync(
       `CLOUDFLARE_ACCOUNT_ID=${ACCOUNT_ID} npx wrangler d1 execute off_radar_db --remote --file="${tmpSqlPath}"`,
       { stdio: "inherit" }

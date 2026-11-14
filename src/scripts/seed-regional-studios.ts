@@ -1,5 +1,6 @@
 import { REGIONAL_SEEDS } from "../demo/regional-seeds.js";
 import { execSync } from "node:child_process";
+import { requireCi } from "../utils/require-ci.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -108,6 +109,7 @@ async function main() {
   console.log(`[Regional Studio Seeder] Written ${sqlStatements.length} statements to ${tmpSqlPath}. Executing on remote Cloudflare D1...`);
 
   try {
+    requireCi("seed regional studios into remote D1");
     execSync(`npx wrangler d1 execute off_radar_db --remote --file="${tmpSqlPath}"`, {
       stdio: "inherit",
     });
