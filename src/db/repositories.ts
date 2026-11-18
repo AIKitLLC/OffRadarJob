@@ -39,6 +39,8 @@ export const MIDWEST_COMPANY_SQL_CONDITION = `(
   OR COALESCE(location_hint, '') LIKE '%iowa%' 
   OR COALESCE(location_hint, '') LIKE '%kansas%' 
   OR COALESCE(location_hint, '') LIKE '%nebraska%' 
+  OR COALESCE(location_hint, '') LIKE '%north dakota%' 
+  OR COALESCE(location_hint, '') LIKE '%south dakota%' 
   OR COALESCE(location_hint, '') LIKE '%chicago%' 
   OR COALESCE(location_hint, '') LIKE '%indianapolis%' 
   OR COALESCE(location_hint, '') LIKE '%minneapolis%' 
@@ -50,6 +52,10 @@ export const MIDWEST_COMPANY_SQL_CONDITION = `(
   OR COALESCE(location_hint, '') LIKE '%ann arbor%' 
   OR COALESCE(location_hint, '') LIKE '%milwaukee%' 
   OR COALESCE(location_hint, '') LIKE '%st. louis%' 
+  OR COALESCE(location_hint, '') LIKE '%des moines%' 
+  OR COALESCE(location_hint, '') LIKE '%omaha%' 
+  OR COALESCE(location_hint, '') LIKE '%fargo%' 
+  OR COALESCE(location_hint, '') LIKE '%sioux falls%' 
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, il %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, in %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, wi %'
@@ -60,6 +66,8 @@ export const MIDWEST_COMPANY_SQL_CONDITION = `(
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ia %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ks %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ne %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, nd %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, sd %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, il,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, in,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, wi,%'
@@ -68,6 +76,10 @@ export const MIDWEST_COMPANY_SQL_CONDITION = `(
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, mi,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, mo,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ia,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ks,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ne,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, nd,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, sd,%'
 )`;
 
 export const WEST_COMPANY_SQL_CONDITION = `(
@@ -83,9 +95,18 @@ export const WEST_COMPANY_SQL_CONDITION = `(
   OR COALESCE(location_hint, '') LIKE '%bellevue%'
   OR COALESCE(location_hint, '') LIKE '%portland%'
   OR COALESCE(location_hint, '') LIKE '%oregon%'
-  OR COALESCE(location_hint, '') LIKE '%washington%'
+  OR (
+    COALESCE(location_hint, '') LIKE '%washington%'
+    AND LOWER(COALESCE(location_hint, '')) NOT LIKE '%washington, dc%'
+    AND LOWER(COALESCE(location_hint, '')) NOT LIKE '%washington, d.c.%'
+    AND LOWER(COALESCE(location_hint, '')) NOT LIKE '%district of columbia%'
+  )
   OR COALESCE(location_hint, '') LIKE '%nevada%'
   OR COALESCE(location_hint, '') LIKE '%las vegas%'
+  OR COALESCE(location_hint, '') LIKE '%hawaii%'
+  OR COALESCE(location_hint, '') LIKE '%honolulu%'
+  OR COALESCE(location_hint, '') LIKE '%alaska%'
+  OR COALESCE(location_hint, '') LIKE '%anchorage%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ca %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ca,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, wa %'
@@ -93,6 +114,11 @@ export const WEST_COMPANY_SQL_CONDITION = `(
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, or %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, or,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, nv %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, nv,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, hi %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, hi,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ak %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ak,%'
 )`;
 
 export const NORTHEAST_COMPANY_SQL_CONDITION = `(
@@ -103,11 +129,18 @@ export const NORTHEAST_COMPANY_SQL_CONDITION = `(
   OR COALESCE(location_hint, '') LIKE '%massachusetts%'
   OR COALESCE(location_hint, '') LIKE '%boston%'
   OR COALESCE(location_hint, '') LIKE '%cambridge%'
+  OR COALESCE(location_hint, '') LIKE '%somerville%'
   OR COALESCE(location_hint, '') LIKE '%pennsylvania%'
   OR COALESCE(location_hint, '') LIKE '%philadelphia%'
   OR COALESCE(location_hint, '') LIKE '%pittsburgh%'
   OR COALESCE(location_hint, '') LIKE '%new jersey%'
   OR COALESCE(location_hint, '') LIKE '%connecticut%'
+  OR COALESCE(location_hint, '') LIKE '%rhode island%'
+  OR COALESCE(location_hint, '') LIKE '%providence%'
+  OR COALESCE(location_hint, '') LIKE '%vermont%'
+  OR COALESCE(location_hint, '') LIKE '%burlington%'
+  OR COALESCE(location_hint, '') LIKE '%new hampshire%'
+  OR COALESCE(location_hint, '') LIKE '%maine%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ny %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ny,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ma %'
@@ -115,7 +148,13 @@ export const NORTHEAST_COMPANY_SQL_CONDITION = `(
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, pa %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, pa,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, nj %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, nj,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ct %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ct,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ri %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, vt %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, nh %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, me %'
 )`;
 
 export const SOUTH_COMPANY_SQL_CONDITION = `(
@@ -134,8 +173,32 @@ export const SOUTH_COMPANY_SQL_CONDITION = `(
   OR COALESCE(location_hint, '') LIKE '%durham%'
   OR COALESCE(location_hint, '') LIKE '%charlotte%'
   OR COALESCE(location_hint, '') LIKE '%virginia%'
+  OR COALESCE(location_hint, '') LIKE '%arlington%'
+  OR COALESCE(location_hint, '') LIKE '%tysons%'
+  OR COALESCE(location_hint, '') LIKE '%reston%'
   OR COALESCE(location_hint, '') LIKE '%tennessee%'
   OR COALESCE(location_hint, '') LIKE '%nashville%'
+  OR COALESCE(location_hint, '') LIKE '%maryland%'
+  OR COALESCE(location_hint, '') LIKE '%baltimore%'
+  OR COALESCE(location_hint, '') LIKE '%bethesda%'
+  OR COALESCE(location_hint, '') LIKE '%rockville%'
+  OR COALESCE(location_hint, '') LIKE '%silver spring%'
+  OR COALESCE(location_hint, '') LIKE '%district of columbia%'
+  OR COALESCE(location_hint, '') LIKE '%washington, dc%'
+  OR COALESCE(location_hint, '') LIKE '%washington, d.c.%'
+  OR COALESCE(location_hint, '') LIKE '%delaware%'
+  OR COALESCE(location_hint, '') LIKE '%wilmington%'
+  OR COALESCE(location_hint, '') LIKE '%west virginia%'
+  OR COALESCE(location_hint, '') LIKE '%morgantown%'
+  OR COALESCE(location_hint, '') LIKE '%huntsville%'
+  OR COALESCE(location_hint, '') LIKE '%bentonville%'
+  OR COALESCE(location_hint, '') LIKE '%south carolina%'
+  OR COALESCE(location_hint, '') LIKE '%alabama%'
+  OR COALESCE(location_hint, '') LIKE '%louisiana%'
+  OR COALESCE(location_hint, '') LIKE '%kentucky%'
+  OR COALESCE(location_hint, '') LIKE '%oklahoma%'
+  OR COALESCE(location_hint, '') LIKE '%arkansas%'
+  OR COALESCE(location_hint, '') LIKE '%mississippi%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, tx %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, tx,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, fl %'
@@ -147,6 +210,20 @@ export const SOUTH_COMPANY_SQL_CONDITION = `(
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, va %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, va,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, tn %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, md %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, md,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, dc %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, dc,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, de %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, de,%'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, wv %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, sc %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, al %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, la %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ok %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ky %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ms %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ar %'
 )`;
 
 export const MOUNTAIN_COMPANY_SQL_CONDITION = `(
@@ -163,12 +240,23 @@ export const MOUNTAIN_COMPANY_SQL_CONDITION = `(
   OR COALESCE(location_hint, '') LIKE '%tempe%'
   OR COALESCE(location_hint, '') LIKE '%idaho%'
   OR COALESCE(location_hint, '') LIKE '%boise%'
+  OR COALESCE(location_hint, '') LIKE '%new mexico%'
+  OR COALESCE(location_hint, '') LIKE '%albuquerque%'
+  OR COALESCE(location_hint, '') LIKE '%santa fe%'
+  OR COALESCE(location_hint, '') LIKE '%montana%'
+  OR COALESCE(location_hint, '') LIKE '%bozeman%'
+  OR COALESCE(location_hint, '') LIKE '%wyoming%'
+  OR COALESCE(location_hint, '') LIKE '%cheyenne%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, co %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, co,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ut %'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, ut,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, az %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, az,%'
   OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, id %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, nm %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, mt %'
+  OR (' ' || COALESCE(location_hint, '') || ' ') LIKE '%, wy %'
 )`;
 
 function detectFromText(text: string, rawText: string): "midwest" | "west" | "northeast" | "south" | "mountain" | null {
@@ -177,46 +265,54 @@ function detectFromText(text: string, rawText: string): "midwest" | "west" | "no
   // 1. Midwest
   if (
     combined.includes("midwest") ||
-    /\b(illinois|indiana|wisconsin|minnesota|ohio|michigan|missouri|iowa|kansas|nebraska|chicago|indianapolis|minneapolis|madison|cincinnati|columbus|cleveland|detroit|ann arbor|milwaukee|st\. louis|des moines|omaha)\b/i.test(combined) ||
+    /\b(illinois|indiana|wisconsin|minnesota|ohio|michigan|missouri|iowa|kansas|nebraska|north dakota|south dakota|chicago|indianapolis|minneapolis|madison|cincinnati|columbus|cleveland|detroit|ann arbor|milwaukee|st\. louis|des moines|omaha|fargo|sioux falls)\b/i.test(combined) ||
     /(?:,\s*|\s+)(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD)(?:\s+|,|$)/.test(rawText)
   ) {
     return "midwest";
   }
 
-  // 2. West
+  // 2. Washington, DC / DMV before bare "washington" (West)
+  if (
+    /\b(district of columbia|washington,\s*d\.?c\.?)\b/i.test(combined) ||
+    /(?:,\s*|\s+)(DC)(?:\s+|,|$)/.test(rawText)
+  ) {
+    return "south";
+  }
+
+  // 3. West
   if (
     combined.includes("west coast") ||
     combined.includes("pacific") ||
-    /\b(california|washington|oregon|nevada|san francisco|silicon valley|san jose|los angeles|san diego|oakland|seattle|bellevue|portland|sacramento|las vegas|reno|irvine|sunnyvale|mountain view|palo alto)\b/i.test(combined) ||
+    /\b(california|washington|oregon|nevada|hawaii|alaska|san francisco|silicon valley|san jose|los angeles|san diego|oakland|seattle|bellevue|portland|sacramento|las vegas|reno|irvine|sunnyvale|mountain view|palo alto|honolulu|anchorage)\b/i.test(combined) ||
     /(?:,\s*|\s+)(CA|WA|OR|NV|HI|AK)(?:\s+|,|$)/.test(rawText)
   ) {
     return "west";
   }
 
-  // 3. Northeast
+  // 4. Northeast
   if (
     combined.includes("northeast") ||
     combined.includes("new england") ||
-    /\b(new york|nyc|brooklyn|manhattan|massachusetts|boston|cambridge|pennsylvania|philadelphia|pittsburgh|new jersey|connecticut|rhode island|vermont|new hampshire|maine|somerville)\b/i.test(combined) ||
+    /\b(new york|nyc|brooklyn|manhattan|massachusetts|boston|cambridge|pennsylvania|philadelphia|pittsburgh|new jersey|connecticut|rhode island|vermont|new hampshire|maine|somerville|providence|burlington)\b/i.test(combined) ||
     /(?:,\s*|\s+)(NY|MA|PA|NJ|CT|RI|NH|VT|ME)(?:\s+|,|$)/.test(rawText)
   ) {
     return "northeast";
   }
 
-  // 4. South
+  // 5. South
   if (
     combined.includes("southeast") ||
     combined.includes("southwest") ||
-    /\b(texas|austin|dallas|houston|florida|miami|tampa|orlando|georgia|atlanta|north carolina|raleigh|durham|charlotte|virginia|tennessee|nashville|south carolina|alabama|louisiana|new orleans)\b/i.test(combined) ||
-    /(?:,\s*|\s+)(TX|FL|GA|NC|VA|TN|SC|AL|LA|OK|KY|MS|AR)(?:\s+|,|$)/.test(rawText)
+    /\b(texas|austin|dallas|houston|florida|miami|tampa|orlando|georgia|atlanta|north carolina|raleigh|durham|charlotte|virginia|arlington|tysons|reston|tennessee|nashville|maryland|baltimore|bethesda|rockville|silver spring|delaware|wilmington|west virginia|morgantown|south carolina|alabama|huntsville|louisiana|new orleans|kentucky|oklahoma|arkansas|bentonville|mississippi)\b/i.test(combined) ||
+    /(?:,\s*|\s+)(TX|FL|GA|NC|VA|TN|SC|AL|LA|OK|KY|MS|AR|MD|DE|WV|DC)(?:\s+|,|$)/.test(rawText)
   ) {
     return "south";
   }
 
-  // 5. Mountain
+  // 6. Mountain
   if (
     combined.includes("mountain") ||
-    /\b(colorado|denver|boulder|utah|salt lake|provo|lehi|arizona|phoenix|scottsdale|tempe|idaho|boise|montana|wyoming)\b/i.test(combined) ||
+    /\b(colorado|denver|boulder|utah|salt lake|provo|lehi|arizona|phoenix|scottsdale|tempe|idaho|boise|montana|bozeman|wyoming|cheyenne|new mexico|albuquerque|santa fe)\b/i.test(combined) ||
     /(?:,\s*|\s+)(CO|UT|AZ|ID|MT|WY|NM)(?:\s+|,|$)/.test(rawText)
   ) {
     return "mountain";
@@ -339,6 +435,28 @@ export class CompanyRepository {
 
     if (!row) return null;
     return this.mapRowToCompany(row);
+  }
+
+  /** Batch-load companies by ID in bounded chunks to avoid N+1 D1 lookups. */
+  public async findByIds(ids: readonly string[]): Promise<Map<string, Company>> {
+    const unique = Array.from(new Set(ids.map((id) => id.trim()).filter((id) => id.length > 0)));
+    const result = new Map<string, Company>();
+    if (unique.length === 0) return result;
+
+    const CHUNK_SIZE = 80;
+    for (let i = 0; i < unique.length; i += CHUNK_SIZE) {
+      const chunk = unique.slice(i, i + CHUNK_SIZE);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const res = await this.db
+        .prepare(`SELECT * FROM companies WHERE id IN (${placeholders}) AND ${ignoredSourceSql("companies")}`)
+        .bind(...chunk)
+        .all<Record<string, unknown>>();
+      for (const row of res.results ?? []) {
+        const mapped = this.mapRowToCompany(row);
+        result.set(mapped.id, mapped);
+      }
+    }
+    return result;
   }
 
   public async list(limit = 50, region?: string): Promise<Company[]> {
@@ -668,6 +786,8 @@ export const MIDWEST_SQL_CONDITION = `(
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%iowa%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%kansas%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%nebraska%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%north dakota%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%south dakota%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%chicago%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%indianapolis%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%minneapolis%'
@@ -679,24 +799,34 @@ export const MIDWEST_SQL_CONDITION = `(
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%ann arbor%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%milwaukee%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%st. louis%'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, il %'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, in %'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, wi %'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mn %'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, oh %'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mi %'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mo %'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, ia %'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, ks %'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, ne %'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, il,%'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, in,%'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, wi,%'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mn,%'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, oh,%'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mi,%'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, mo,%'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%, ia,%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%des moines%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%omaha%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%fargo%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%sioux falls%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, il %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, in %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, wi %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, mn %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, oh %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, mi %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, mo %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ia %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ks %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ne %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, nd %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, sd %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, il,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, in,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, wi,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, mn,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, oh,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, mi,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, mo,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ia,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ks,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ne,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, nd,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, sd,%'
 )`;
 
 export const WEST_SQL_CONDITION = `(
@@ -712,9 +842,18 @@ export const WEST_SQL_CONDITION = `(
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%bellevue%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%portland%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%oregon%'
-  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%washington%'
+  OR (
+    (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%washington%'
+    AND LOWER(COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '')) NOT LIKE '%washington, dc%'
+    AND LOWER(COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '')) NOT LIKE '%washington, d.c.%'
+    AND LOWER(COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '')) NOT LIKE '%district of columbia%'
+  )
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%nevada%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%las vegas%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%hawaii%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%honolulu%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%alaska%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%anchorage%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ca %'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ca,%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, wa %'
@@ -722,6 +861,11 @@ export const WEST_SQL_CONDITION = `(
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, or %'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, or,%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, nv %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, nv,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, hi %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, hi,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ak %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ak,%'
 )`;
 
 export const NORTHEAST_SQL_CONDITION = `(
@@ -732,11 +876,18 @@ export const NORTHEAST_SQL_CONDITION = `(
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%massachusetts%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%boston%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%cambridge%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%somerville%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%pennsylvania%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%philadelphia%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%pittsburgh%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%new jersey%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%connecticut%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%rhode island%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%providence%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%vermont%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%burlington%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%new hampshire%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%maine%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ny %'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ny,%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ma %'
@@ -744,7 +895,13 @@ export const NORTHEAST_SQL_CONDITION = `(
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, pa %'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, pa,%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, nj %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, nj,%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ct %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ct,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ri %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, vt %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, nh %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, me %'
 )`;
 
 export const SOUTH_SQL_CONDITION = `(
@@ -763,8 +920,32 @@ export const SOUTH_SQL_CONDITION = `(
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%durham%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%charlotte%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%virginia%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%arlington%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%tysons%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%reston%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%tennessee%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%nashville%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%maryland%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%baltimore%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%bethesda%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%rockville%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%silver spring%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%district of columbia%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%washington, dc%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%washington, d.c.%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%delaware%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%wilmington%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%west virginia%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%morgantown%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%huntsville%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%bentonville%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%south carolina%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%alabama%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%louisiana%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%kentucky%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%oklahoma%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%arkansas%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%mississippi%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, tx %'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, tx,%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, fl %'
@@ -776,6 +957,20 @@ export const SOUTH_SQL_CONDITION = `(
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, va %'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, va,%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, tn %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, md %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, md,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, dc %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, dc,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, de %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, de,%'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, wv %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, sc %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, al %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, la %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ok %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ky %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ms %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ar %'
 )`;
 
 export const MOUNTAIN_SQL_CONDITION = `(
@@ -792,17 +987,63 @@ export const MOUNTAIN_SQL_CONDITION = `(
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%tempe%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%idaho%'
   OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%boise%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%new mexico%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%albuquerque%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%santa fe%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%montana%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%bozeman%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%wyoming%'
+  OR (COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ' || COALESCE(j.remote_scope, '') || ' ') LIKE '%cheyenne%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, co %'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, co,%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ut %'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, ut,%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, az %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, az,%'
   OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, id %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, nm %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, mt %'
+  OR (' ' || COALESCE(j.location, '') || ' ' || COALESCE(c.location_hint, '') || ' ') LIKE '%, wy %'
 )`;
 
 /** Public listings only show open jobs and exclude un-decoded Cloudflare email-protection URLs. */
 export const OPEN_JOB_SQL =
   "j.status = 'open' AND LOWER(COALESCE(j.apply_target, '')) NOT LIKE '%/cdn-cgi/%'";
+
+/** Exclude j.raw_content from list/paged projections to keep D1 payloads and Worker JSON lean. */
+export const JOB_LIST_COLUMNS = [
+  "j.id",
+  "j.company_id",
+  "j.career_page_id",
+  "j.title",
+  "j.department",
+  "j.seniority_level",
+  "j.tech_category",
+  "j.is_tech_role",
+  "j.employment_type",
+  "j.location",
+  "j.is_remote",
+  "j.remote_scope",
+  "j.salary_min",
+  "j.salary_max",
+  "j.salary_currency",
+  "j.skills",
+  "j.description_summary",
+  "j.apply_type",
+  "j.apply_target",
+  "j.status",
+  "j.content_hash",
+  "j.first_seen_at",
+  "j.last_seen_at",
+  "j.last_verified_at",
+  "j.link_status",
+  "j.link_checked_at",
+  "j.link_fail_count",
+  "j.closed_reason",
+].join(", ");
+
+const US_ELIGIBLE_REMOTE_SQL =
+  "j.is_remote = 1 AND LOWER(COALESCE(j.remote_scope, 'worldwide')) NOT IN ('vietnam_only', 'eu_only', 'apac')";
 
 export class JobRepository {
   constructor(private readonly db: ID1Database) {}
@@ -926,6 +1167,7 @@ export class JobRepository {
     region?: string | undefined;
     techOnly?: boolean | undefined;
     search?: string | undefined;
+    includeRawContent?: boolean | undefined;
   } = {}): Promise<Job[]> {
     const limit = options.limit ?? 50;
     const offset = options.offset ?? 0;
@@ -934,8 +1176,9 @@ export class JobRepository {
     const region = options.region && options.region !== "all" ? options.region : null;
     const techOnly = options.techOnly !== false ? 1 : 0;
     const search = options.search?.trim() ? `%${options.search.trim().toLowerCase()}%` : null;
+    const columns = options.includeRawContent ? "j.*" : JOB_LIST_COLUMNS;
 
-    let query = `SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}`;
+    let query = `SELECT ${columns}, c.name AS company_name, c.website_url AS company_website, c.location_hint FROM jobs j LEFT JOIN companies c ON j.company_id = c.id WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}`;
     const bindings: unknown[] = [];
 
     if (techOnly === 1) {
@@ -960,7 +1203,7 @@ export class JobRepository {
     } else if (region === "mountain") {
       query += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${MOUNTAIN_SQL_CONDITION}`;
     } else if (region === "remote") {
-      query += " AND j.is_remote = 1";
+      query += ` AND ${US_ELIGIBLE_REMOTE_SQL}`;
     }
     if (search) {
       query += " AND (LOWER(j.title) LIKE ? OR LOWER(COALESCE(c.name, '')) LIKE ? OR LOWER(j.skills) LIKE ? OR LOWER(COALESCE(j.location, '')) LIKE ? OR LOWER(COALESCE(j.department, '')) LIKE ?)";
@@ -1034,7 +1277,7 @@ export class JobRepository {
     } else if (region === "mountain") {
       whereClause += ` AND NOT ${MIDWEST_SQL_CONDITION} AND ${MOUNTAIN_SQL_CONDITION}`;
     } else if (region === "remote") {
-      whereClause += " AND j.is_remote = 1";
+      whereClause += ` AND ${US_ELIGIBLE_REMOTE_SQL}`;
     }
     if (options.state && options.state !== "all") {
       const stateCond = buildStateSqlCondition(options.state, "COALESCE(j.location, c.location_hint)");
@@ -1051,7 +1294,7 @@ export class JobRepository {
       ? `ORDER BY is_midwest_match DESC, j.first_seen_at DESC`
       : `ORDER BY j.first_seen_at DESC`;
     const itemsSql = `
-      SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.location_hint,
+      SELECT ${JOB_LIST_COLUMNS}, c.name AS company_name, c.website_url AS company_website, c.location_hint,
         (CASE WHEN ${MIDWEST_SQL_CONDITION} THEN 1 ELSE 0 END) AS is_midwest_match
       FROM jobs j 
       LEFT JOIN companies c ON j.company_id = c.id 
@@ -1096,54 +1339,11 @@ export class JobRepository {
         SELECT 
           COUNT(*) as total,
           SUM(CASE WHEN seniority_level IN ('senior', 'founding', 'lead') THEN 1 ELSE 0 END) as senior_count,
-          SUM(CASE WHEN (
-            (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%midwest%'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, il %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, in %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, wi %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, mn %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, oh %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, mi %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, mo %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, ia %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, ks %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, ne %'
-          ) THEN 1 ELSE 0 END) as midwest_count,
-          SUM(CASE WHEN (
-            (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%california%'
-            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%san francisco%'
-            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%seattle%'
-            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%portland%'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, ca %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, wa %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, or %'
-          ) THEN 1 ELSE 0 END) as west_count,
-          SUM(CASE WHEN (
-            (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%new york%'
-            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%boston%'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, ny %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, ma %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, pa %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, nj %'
-          ) THEN 1 ELSE 0 END) as northeast_count,
-          SUM(CASE WHEN (
-            (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%texas%'
-            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%austin%'
-            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%atlanta%'
-            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%raleigh%'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, tx %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, fl %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, ga %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, nc %'
-          ) THEN 1 ELSE 0 END) as south_count,
-          SUM(CASE WHEN (
-            (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%colorado%'
-            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%denver%'
-            OR (COALESCE(location, '') || ' ' || COALESCE(remote_scope, '') || ' ') LIKE '%salt lake%'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, co %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, ut %'
-            OR (' ' || COALESCE(location, '') || ' ') LIKE '%, az %'
-          ) THEN 1 ELSE 0 END) as mountain_count
+          SUM(CASE WHEN ${MIDWEST_SQL_CONDITION} THEN 1 ELSE 0 END) as midwest_count,
+          SUM(CASE WHEN NOT ${MIDWEST_SQL_CONDITION} AND ${WEST_SQL_CONDITION} THEN 1 ELSE 0 END) as west_count,
+          SUM(CASE WHEN NOT ${MIDWEST_SQL_CONDITION} AND ${NORTHEAST_SQL_CONDITION} THEN 1 ELSE 0 END) as northeast_count,
+          SUM(CASE WHEN NOT ${MIDWEST_SQL_CONDITION} AND ${SOUTH_SQL_CONDITION} THEN 1 ELSE 0 END) as south_count,
+          SUM(CASE WHEN NOT ${MIDWEST_SQL_CONDITION} AND ${MOUNTAIN_SQL_CONDITION} THEN 1 ELSE 0 END) as mountain_count
         FROM jobs j
         LEFT JOIN companies c ON j.company_id = c.id
         WHERE ${ignoredSourceSql("c")} AND ${OPEN_JOB_SQL}

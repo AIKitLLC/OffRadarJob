@@ -34,7 +34,7 @@ export interface SmbTarget {
 
 export const SMB_CATALOGUE: SmbTarget[] = [
   // ===========================================================================
-  // 1. HEALTHCARE, BIOTECH & LIFE SCIENCES (Y tế, Dược phẩm & Công nghệ sinh học)
+  // 1. HEALTHCARE, BIOTECH & LIFE SCIENCES (Healthcare, Pharmaceuticals & Biotechnology)
   // ===========================================================================
   {
     id: "comp_headway_co",
@@ -136,7 +136,7 @@ export const SMB_CATALOGUE: SmbTarget[] = [
   },
 
   // ===========================================================================
-  // 2. CLEANTECH, CLIMATE & SUSTAINABILITY (Năng lượng sạch, Khí hậu & Lưu trữ)
+  // 2. CLEANTECH, CLIMATE & SUSTAINABILITY (Clean Energy, Climate & Storage)
   // ===========================================================================
   {
     id: "comp_crusoe_ai",
@@ -224,7 +224,7 @@ export const SMB_CATALOGUE: SmbTarget[] = [
   },
 
   // ===========================================================================
-  // 3. MANUFACTURING, HARDWARE & ROBOTICS (Sản xuất, Phần cứng & Robotics)
+  // 3. MANUFACTURING, HARDWARE & ROBOTICS (Manufacturing, Hardware & Robotics)
   // ===========================================================================
   {
     id: "comp_formlabs_com",
@@ -284,7 +284,7 @@ export const SMB_CATALOGUE: SmbTarget[] = [
   },
 
   // ===========================================================================
-  // 4. FINTECH & INSURTECH (Công nghệ Tài chính & Bảo hiểm)
+  // 4. FINTECH & INSURTECH (Financial & Insurance Technology)
   // ===========================================================================
   {
     id: "comp_ramp_com",
@@ -358,7 +358,7 @@ export const SMB_CATALOGUE: SmbTarget[] = [
   },
 
   // ===========================================================================
-  // 5. SUPPLY CHAIN, LOGISTICS & PROPTECH (Chuỗi cung ứng, Logistics & Bất động sản)
+  // 5. SUPPLY CHAIN, LOGISTICS & PROPTECH (Supply Chain, Logistics & Real Estate Tech)
   // ===========================================================================
   {
     id: "comp_samsara_com",
@@ -446,7 +446,7 @@ export const SMB_CATALOGUE: SmbTarget[] = [
   },
 
   // ===========================================================================
-  // 6. RETAIL, E-COMMERCE & CONSUMER BRANDS (Bán lẻ & Thương mại điện tử)
+  // 6. RETAIL, E-COMMERCE & CONSUMER BRANDS (Retail & E-Commerce)
   // ===========================================================================
   {
     id: "comp_pattern_com",
@@ -492,7 +492,7 @@ export const SMB_CATALOGUE: SmbTarget[] = [
   },
 
   // ===========================================================================
-  // 7. FOODTECH, RESTAURANT SYSTEMS & AGRICULTURE (Công nghệ Thực phẩm & Nhà hàng)
+  // 7. FOODTECH, RESTAURANT SYSTEMS & AGRICULTURE (FoodTech & Restaurant Systems)
   // ===========================================================================
   {
     id: "comp_toasttab_com",
@@ -538,7 +538,7 @@ export const SMB_CATALOGUE: SmbTarget[] = [
   },
 
   // ===========================================================================
-  // 8. EDTECH & LEGALTECH (Công nghệ Giáo dục & Công nghệ Pháp lý)
+  // 8. EDTECH & LEGALTECH (Education & Legal Technology)
   // ===========================================================================
   {
     id: "comp_duolingo_com",
@@ -598,7 +598,7 @@ export const SMB_CATALOGUE: SmbTarget[] = [
   },
 
   // ===========================================================================
-  // 9. HRTECH & SMALL BUSINESS OPERATIONS (Nhân sự & Vận hành Doanh nghiệp)
+  // 9. HRTECH & SMALL BUSINESS OPERATIONS (HR & Small Business Operations)
   // ===========================================================================
   {
     id: "comp_gusto_com",

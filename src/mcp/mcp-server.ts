@@ -659,7 +659,7 @@ export class McpServerHandler {
         const isNewGradJob = job.seniorityLevel === "new_grad";
         const tailoringSuggestions = isNewGradJob
           ? [
-              `Target New Grad role: Emphasize '${job.title}' with graduation timeline (Class of 2025/2026).`,
+              `Target New Grad role: Emphasize '${job.title}' with graduation timeline (Class of 2026/2027).`,
               `Feature academic & capstone projects related to ${job.techCategory} at the top.`,
               `Highlight core coursework, data structures & algorithms foundation, and GitHub repositories.`,
               missingSkills.length > 0
@@ -1130,7 +1130,7 @@ export class McpServerHandler {
         arguments: [
           {
             name: "target_role",
-            description: "Target job title, stack or level (e.g. 'Founding Backend Engineer', 'New Grad 2026')",
+            description: "Target job title, stack or level (e.g. 'Founding Backend Engineer', 'New Grad 2026/2027')",
             required: false,
           },
           {

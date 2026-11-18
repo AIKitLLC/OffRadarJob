@@ -497,7 +497,7 @@ describe("Proactive LLM Feedback & MCP Prompts Suite", () => {
         mockCtx
       );
       expect(res.status).toBe(200);
-      expect(sentTelegramText).toContain("PHẢN HỒI TỪ LLM & NGƯỜI DÙNG");
+      expect(sentTelegramText).toContain("OFFRADARJOB - LLM & USER FEEDBACK");
       expect(sentTelegramText).toContain("Apply link 404");
     });
   });

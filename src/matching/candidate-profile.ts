@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CvTagCloudService } from "../services/cv-tag-cloud.js";
 import { SeniorityLevel, SeniorityLevelEnum } from "../types/domain.js";
+import { getUsState } from "../utils/us-states.js";
 
 export const RemotePreferenceSchema = z.enum(["required", "preferred", "any"]);
 export type RemotePreference = z.infer<typeof RemotePreferenceSchema>;
@@ -76,10 +77,18 @@ export function detectRemotePreference(text: string): RemotePreference {
 }
 
 export function detectSponsorshipPreference(text: string): SponsorshipPreference {
-  if (/no sponsorship|do not require sponsorship|doesn't require sponsorship|without sponsorship|authorized to work/i.test(text)) {
+  if (
+    /no sponsorship|do not require sponsorship|doesn't require sponsorship|don't require sponsorship|without sponsorship|authorized to work|\bu\.?s\.?\s*citizen\b|green card|permanent resident/i.test(
+      text
+    )
+  ) {
     return "not_needed";
   }
-  if (/sponsorship required|requires? (?:visa )?sponsorship|need(?:s)? sponsorship|visa sponsorship/i.test(text)) {
+  if (
+    /sponsorship required|requires? (?:visa )?sponsorship|need(?:s)? sponsorship|visa sponsorship|\bf-?1\s*opt\b|\bstem\s*opt\b|\bh-?1b\b/i.test(
+      text
+    )
+  ) {
     return "required";
   }
   return "any";
@@ -91,6 +100,20 @@ function detectLocations(text: string): string[] {
   if (labeled?.[1]) found.push(labeled[1].replace(/[.\s]+$/g, "").trim());
   const based = text.match(/based in ([A-Za-z][A-Za-z .,-]{1,60})/i);
   if (based?.[1]) found.push(based[1].replace(/[.\s]+$/g, "").trim());
+
+  if (found.length === 0) {
+    const headerLines = text.split(/\r?\n/).slice(0, 6).join("\n");
+    const cityStateMatches = headerLines.matchAll(/\b([A-Z][a-zA-Z.'-]+(?:[ \t]+[A-Z][a-zA-Z.'-]+){0,2}),[ \t]*([A-Z]{2})\b/g);
+    for (const match of cityStateMatches) {
+      const city = match[1]?.trim();
+      const stateCode = match[2]?.trim();
+      if (!city || !stateCode) continue;
+      if (getUsState(stateCode)) {
+        found.push(`${city}, ${stateCode}`);
+      }
+    }
+  }
+
   return unique(found).slice(0, 4);
 }
 

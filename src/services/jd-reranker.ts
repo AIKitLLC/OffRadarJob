@@ -310,6 +310,10 @@ export class JdRerankerService {
     // Salary disclosed
     if (job.salaryMin && job.salaryMax) {
       score += 35;
+      const currency = (job.salaryCurrency || "USD").toUpperCase();
+      if (currency === "USD" && job.salaryMax >= job.salaryMin && job.salaryMax <= job.salaryMin * 1.6) {
+        score += 5;
+      }
     } else if (job.salaryMin || job.salaryMax) {
       score += 20;
     }

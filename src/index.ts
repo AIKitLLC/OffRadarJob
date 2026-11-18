@@ -62,6 +62,35 @@ import { LINK_CHECK_CRON, runLinkQualityCron } from "./services/link-quality-cro
 import { runLinkCheckBatch } from "./services/link-checker.js";
 import { recoverBrokenLinksData } from "./services/broken-link-recovery.js";
 import { DENYLISTED_ADMIN_TOKEN_HASHES } from "./admin-token-denylist.js";
+import { isBlockedApplyHost } from "./services/apply-url-guard.js";
+
+const CANONICAL_SITE_URL = "https://jobs.ai-kit.net";
+
+function parseBoundedInt(raw: string | null, fallback: number, min: number, max: number): number {
+  if (raw === null || raw.trim() === "") return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+async function readJsonBody<T = Record<string, any>>(
+  request: Request
+): Promise<{ ok: true; data: T } | { ok: false; response: Response }> {
+  try {
+    return { ok: true, data: (await request.json()) as T };
+  } catch {
+    return {
+      ok: false,
+      response: Response.json({ error: "Invalid JSON request body" }, { status: 400 }),
+    };
+  }
+}
+
+function buildUserTokenCookie(token: string, requestUrl: URL, maxAgeSeconds: number): string {
+  const secureAttr = requestUrl.protocol === "https:" ? "; Secure" : "";
+  const expiresAttr = maxAgeSeconds === 0 ? "; Expires=Thu, 01 Jan 1970 00:00:00 GMT" : "";
+  return `user_token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${expiresAttr}${secureAttr}`;
+}
 
 export interface KvNamespace {
   get(key: string, type?: "text" | "json"): Promise<any>;
@@ -279,7 +308,9 @@ export interface EffectiveConfig {
 }
 
 export async function getEffectiveConfig(env: Env, settingsRepo?: SystemSettingsRepository): Promise<EffectiveConfig> {
-  const dynamicMap = settingsRepo ? await settingsRepo.getAll() : {};
+  const dynamicMap = settingsRepo
+    ? await getOrSetKvCache(env, "sys:settings:v1", 60, () => settingsRepo.getAll())
+    : {};
   return {
     telegramBotToken: dynamicMap["telegram_bot_token"] || env.TELEGRAM_BOT_TOKEN || "",
     telegramBotUsername: dynamicMap["telegram_bot_username"] || env.TELEGRAM_BOT_USERNAME || "OffRadarJobBot",
@@ -599,7 +630,13 @@ export default {
     const settingsRepo = new SystemSettingsRepository(env.DB);
     const feedbackRepo = new LlmFeedbackRepository(env.DB);
     const subscriptionRepo = new UserSubscriptionRepository(env.DB);
-    const effectiveConfig = await getEffectiveConfig(env, settingsRepo);
+    let cachedEffectiveConfigPromise: Promise<EffectiveConfig> | null = null;
+    const loadEffectiveConfig = (): Promise<EffectiveConfig> => {
+      if (!cachedEffectiveConfigPromise) {
+        cachedEffectiveConfigPromise = getEffectiveConfig(env, settingsRepo);
+      }
+      return cachedEffectiveConfigPromise;
+    };
     const decisionApi = new DecisionApiService({ ai: env.AI });
     const rerankerService = new JdRerankerService();
     const cvTagCloudService = new CvTagCloudService();
@@ -609,16 +646,17 @@ export default {
       cvRepo,
       feedbackRepo,
       async (feedback, u) => {
+        const effectiveConfig = await loadEffectiveConfig();
         const isCriticalOrBroken = feedback.sentiment === "critical" || feedback.feedbackType === "broken_link";
         const icon = isCriticalOrBroken ? "🚨" : "💡";
         const alertLines = [
-          `${icon} *OFFRADARJOB - PHẢN HỒI MỚI TỪ LLM (MCP)*`,
+          `${icon} *OFFRADARJOB - NEW LLM FEEDBACK (MCP)*`,
           `👤 *User:* ${u.firstName} (@${u.username || u.telegramId})`,
-          `🏷️ *Loại:* \`${feedback.feedbackType}\` | *Mức độ:* \`${feedback.sentiment}\``,
+          `🏷️ *Type:* \`${feedback.feedbackType}\` | *Severity:* \`${feedback.sentiment}\``,
           feedback.jobId ? `💼 *Job ID:* \`${feedback.jobId}\`` : "",
           feedback.companyId ? `🏢 *Company ID:* \`${feedback.companyId}\`` : "",
-          `📝 *Nội dung:* ${feedback.comment}`,
-          feedback.suggestedAction ? `🎯 *Hành động đề xuất:* ${feedback.suggestedAction}` : "",
+          `📝 *Details:* ${feedback.comment}`,
+          feedback.suggestedAction ? `🎯 *Suggested Action:* ${feedback.suggestedAction}` : "",
         ].filter(Boolean);
 
         await notifyTelegramAdmin(env, alertLines.join("\n"), effectiveConfig);
@@ -635,6 +673,58 @@ export default {
         return Response.json({ error: "Cross-site request rejected" }, { status: 403 });
       }
       if (await isAdminAuthRateLimited(request, env)) return rateLimitedResponse();
+    }
+
+    // 0. Healthcheck & US Search Engine Discovery Endpoints
+    if (path === "/healthz" && request.method === "GET") {
+      return Response.json(
+        { status: "ok", service: "offradarjob-us", timestamp: Date.now() },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    if (path === "/robots.txt" && request.method === "GET") {
+      const body = [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /admin",
+        "Disallow: /api/admin/",
+        `Sitemap: ${CANONICAL_SITE_URL}/sitemap.xml`,
+      ].join("\n");
+      return new Response(body, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "public, max-age=3600, s-maxage=86400",
+        },
+      });
+    }
+
+    if (path === "/sitemap.xml" && request.method === "GET") {
+      const xml = await getOrSetKvCache(env, "seo:sitemap:v1", 600, async () => {
+        const urls = [
+          `${CANONICAL_SITE_URL}/`,
+          `${CANONICAL_SITE_URL}/?region=midwest`,
+          `${CANONICAL_SITE_URL}/?region=west`,
+          `${CANONICAL_SITE_URL}/?region=northeast`,
+          `${CANONICAL_SITE_URL}/?region=south`,
+          `${CANONICAL_SITE_URL}/?region=mountain`,
+          `${CANONICAL_SITE_URL}/?region=remote`,
+          `${CANONICAL_SITE_URL}/?seniority=entry`,
+        ];
+        const entries = urls
+          .map(
+            (loc) =>
+              `  <url><loc>${loc}</loc><changefreq>daily</changefreq><priority>${loc === `${CANONICAL_SITE_URL}/` ? "1.0" : "0.8"}</priority></url>`
+          )
+          .join("\n");
+        return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</urlset>`;
+      });
+      return new Response(xml, {
+        headers: {
+          "Content-Type": "application/xml; charset=utf-8",
+          "Cache-Control": "public, max-age=600, s-maxage=3600",
+        },
+      });
     }
 
     // Shared stats loader (KV-cached) used by /api/stats and the server-rendered dashboard.
@@ -685,6 +775,9 @@ export default {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "private, no-store",
           Vary: "Cookie",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "strict-origin-when-cross-origin",
+          "X-Frame-Options": "DENY",
         },
       });
     }
@@ -696,11 +789,23 @@ export default {
       if (!(await isAuthorized(request, url, env))) {
         return new Response(renderAdminLoginHtml(), {
           status: 401,
-          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "X-Frame-Options": "DENY",
+          },
         });
       }
       return new Response(renderAdminDashboardHtml(), {
-        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "strict-origin-when-cross-origin",
+          "X-Frame-Options": "DENY",
+        },
       });
     }
 
@@ -761,8 +866,8 @@ export default {
     if (path === "/api/jobs" && request.method === "GET") {
       const pageParam = url.searchParams.get("page");
       const paged = pageParam !== null || url.searchParams.get("paged") === "true";
-      const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
-      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? (paged ? "30" : "50"), 10), 100);
+      const page = parseBoundedInt(pageParam, 1, 1, 10_000);
+      const limit = parseBoundedInt(url.searchParams.get("limit"), paged ? 30 : 50, 1, 100);
       const grade = url.searchParams.get("grade") ?? url.searchParams.get("seniority") ?? undefined;
       const techCategory = url.searchParams.get("tech_category") ?? undefined;
       const region = url.searchParams.get("region") ?? undefined;
@@ -807,8 +912,8 @@ export default {
     if (path === "/api/companies" && request.method === "GET") {
       const pageParam = url.searchParams.get("page");
       const paged = pageParam !== null || url.searchParams.get("paged") === "true";
-      const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
-      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? (paged ? "30" : "50"), 10), 100);
+      const page = parseBoundedInt(pageParam, 1, 1, 10_000);
+      const limit = parseBoundedInt(url.searchParams.get("limit"), paged ? 30 : 50, 1, 100);
       const search = url.searchParams.get("search") ?? url.searchParams.get("q") ?? undefined;
       const region = url.searchParams.get("region") ?? undefined;
       const state = url.searchParams.get("state") ?? undefined;
@@ -845,14 +950,12 @@ export default {
     // 5b. API: Real-time Continuous JD Reranking Report
     if (path === "/api/reports/realtime-jd-ranking" && request.method === "GET") {
       const targetGroup = url.searchParams.get("target_group") || "all";
-      const limit = Math.min(Math.max(1, parseInt(url.searchParams.get("limit") || "20")), 100);
+      const limit = parseBoundedInt(url.searchParams.get("limit"), 20, 1, 100);
 
       const cacheKey = `report:rerank:live:${targetGroup}:${limit}`;
       const data = await getOrSetKvCache(env, cacheKey, 180, async () => {
         const jobsRes = await jobRepo.listPaged({ page: 1, limit: 200, techOnly: true });
-        const compRes = await companyRepo.listPaged({ page: 1, limit: 150 });
-        const companiesMap = new Map<string, any>();
-        for (const c of compRes.items) companiesMap.set(c.id, c);
+        const companiesMap = await companyRepo.findByIds(jobsRes.items.map((j) => j.companyId));
 
         const report = rerankerService.generateRealtimeReport(jobsRes.items, companiesMap);
         let topJobs = report.topRankedJobs;
@@ -881,28 +984,33 @@ export default {
 
     // 5c. API: Market-wide Tag Cloud Analysis (All Live JDs)
     if (path === "/api/reports/tag-cloud-market" && request.method === "GET") {
-      const jobsRes = await jobRepo.listPaged({ page: 1, limit: 150, techOnly: true });
-      const allText = jobsRes.items
-        .map((j) => `${j.title} ${(j.skills || []).join(" ")} ${j.descriptionSummary || ""}`)
-        .join(" ");
-      const marketTags = cvTagCloudService.extractTagCloudFromText(allText);
-      const topSkills = marketTags.slice(0, 15).map((t) => t.name);
-      const categories: Record<string, number> = {};
-      for (const t of marketTags) {
-        categories[t.category] = (categories[t.category] || 0) + 1;
-      }
+      const limit = parseBoundedInt(url.searchParams.get("limit"), 25, 5, 100);
+      const data = await getOrSetKvCache(env, `report:tag-cloud:v1:${limit}`, 180, async () => {
+        const jobsRes = await jobRepo.listPaged({ page: 1, limit: 150, techOnly: true });
+        const allText = jobsRes.items
+          .map((j) => `${j.title} ${(j.skills || []).join(" ")} ${j.descriptionSummary || ""}`)
+          .join(" ");
+        const marketTags = cvTagCloudService.extractTagCloudFromText(allText).slice(0, limit);
+        const topSkills = marketTags.slice(0, 15).map((t) => t.name);
+        const categories: Record<string, number> = {};
+        for (const t of marketTags) {
+          categories[t.category] = (categories[t.category] || 0) + 1;
+        }
 
-      return Response.json({
-        success: true,
-        totalJdsAnalyzed: jobsRes.items.length,
-        marketTags,
-        marketTagCloud: {
-          totalJobsSampled: jobsRes.items.length,
-          topSkills,
-          categories,
-          tags: marketTags,
-        },
-      }, {
+        return {
+          success: true,
+          totalJdsAnalyzed: jobsRes.items.length,
+          marketTags,
+          marketTagCloud: {
+            totalJobsSampled: jobsRes.items.length,
+            topSkills,
+            categories,
+            tags: marketTags,
+          },
+        };
+      });
+
+      return Response.json(data, {
         headers: {
           "Cache-Control": "public, max-age=120, s-maxage=300",
         },
@@ -919,6 +1027,7 @@ export default {
 
     // 6a. Telegram Bot Auth: Create or Poll Auth Session
     if (path === "/api/auth/telegram/session" && request.method === "GET") {
+      const effectiveConfig = await loadEffectiveConfig();
       const token = url.searchParams.get("token");
       const botUsername = effectiveConfig.telegramBotUsername || env.TELEGRAM_BOT_USERNAME || "OffRadarJobBot";
 
@@ -964,7 +1073,7 @@ export default {
             { status: "authenticated", user: sessionData.user, token: apiToken },
             {
               headers: {
-                "Set-Cookie": `user_token=${apiToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+                "Set-Cookie": buildUserTokenCookie(apiToken, url, 2592000),
               },
             }
           );
@@ -1018,6 +1127,7 @@ export default {
           return Response.json({ ok: true });
         }
 
+        const effectiveConfig = await loadEffectiveConfig();
         const from = msg.from;
         const text = String(msg.text || "").trim();
         const chatId = msg.chat?.id;
@@ -1075,28 +1185,28 @@ export default {
           // Reply back to user via Telegram Bot API if configured
           if (botToken && chatId) {
             const welcomeLines = [
-              `🎉 *Xin chào ${from.first_name || "bạn"}!*`,
-              `Tài khoản Telegram của bạn đã được kết nối với *OffRadarJob* 🚀`,
+              `🎉 *Welcome, ${from.first_name || "there"}!*`,
+              `Your Telegram account is now connected to *OffRadarJob* 🚀`,
               ``,
-              `🔑 *Personal MCP API Token của bạn:*`,
+              `🔑 *Your Personal MCP API Token:*`,
               `\`${apiToken}\``,
               ``,
-              `🌐 *Trình duyệt web của bạn sẽ tự động đăng nhập ngay lập tức!*`,
-              `Bạn có thể đóng cửa sổ này hoặc dùng token trên để kết nối Cursor, Claude Desktop, Antigravity qua MCP.`,
+              `🌐 *Your web browser will sign in automatically!*`,
+              `You can close this window or use the token above to connect Cursor, Claude Desktop, or Antigravity via MCP.`,
             ];
 
             if (isAdmin) {
               welcomeLines.push(
                 ``,
-                `👑 *Bạn đã được xác thực với quyền Quản trị viên (Admin)!*`,
-                `Gõ \`/admin\` để mở menu điều khiển crawl, quản lý jobs và hệ thống.`
+                `👑 *You are authenticated with Admin privileges!*`,
+                `Type \`/admin\` to open the crawl and job management menu.`
               );
             }
 
             welcomeLines.push(
               ``,
-              `🔔 *Nhận thông báo việc làm mới mỗi sáng:*`,
-              `Gõ \`/subscribe\` để đăng ký nhận bản tin việc làm tech boutique tự động qua Telegram!`
+              `🔔 *Get new off-radar US tech jobs every morning:*`,
+              `Type \`/subscribe\` to receive the daily curated job digest via Telegram!`
             );
 
             await sendTelegramMessage(botToken, chatId, welcomeLines.join("\n"));
@@ -1123,25 +1233,25 @@ export default {
           if (!isAdmin) {
             if (text === "/help") {
               const helpText = [
-                `ℹ️ *Hướng dẫn sử dụng OffRadarJob Bot*`,
+                `ℹ️ *OffRadarJob Bot Guide*`,
                 ``,
-                `• Để đăng nhập web: Bấm nút "Đăng nhập Telegram" trên website hoặc quét mã QR.`,
-                `• \`/newgrad\` - Tra cứu việc làm New Grad 2025/2026 mới nhất (gõ \`/newgrad midwest\` để lọc vùng Midwest)`,
-                `• \`/subscribe [midwest|remote|all]\` - Đăng ký nhận bản tin việc làm mới mỗi sáng qua Telegram`,
-                `• \`/unsubscribe\` - Tạm dừng nhận bản tin hàng ngày`,
-                `• \`/digest\` - Xem ngay bản tin việc làm tuyển chọn hôm nay`,
-                `• \`/mcp\` - Lấy MCP Endpoint & Personal API Token`,
-                `• \`/stats\` - Xem thống kê nhanh số lượng jobs & companies`,
+                `• Web Sign-In: Click "Telegram Login" on the website or scan the QR code.`,
+                `• \`/newgrad\` - Browse New Grad 2026/2027 roles (type \`/newgrad midwest\` to filter the US Midwest)`,
+                `• \`/subscribe [midwest|remote|all]\` - Subscribe to daily morning job alerts on Telegram`,
+                `• \`/unsubscribe\` - Pause daily job alerts`,
+                `• \`/digest\` - View today's curated US tech job digest`,
+                `• \`/mcp\` - Get your MCP endpoint and Personal API Token`,
+                `• \`/stats\` - View live job & company counts across US regions`,
                 `• Admins are configured by numeric Telegram user ID (TELEGRAM_ADMIN_IDS).`,
               ].join("\n");
               if (botToken) await sendTelegramMessage(botToken, chatId, helpText);
               return Response.json({ ok: true });
             } else {
               const deniedText = [
-                `⛔ *Quyền truy cập bị từ chối*`,
-                `Tài khoản Telegram của bạn (@${from.username || tgId}) chưa được cấp quyền Admin.`,
+                `⛔ *Access Denied*`,
+                `Your Telegram account (@${from.username || tgId}) does not have Admin privileges.`,
                 ``,
-                `🔑 *Nếu bạn là chủ sở hữu hệ thống:*`,
+                `🔑 *If you are the system owner:*`,
                 `Add your numeric Telegram user ID (${tgId}) to TELEGRAM_ADMIN_IDS.`,
               ].join("\n");
               if (botToken) await sendTelegramMessage(botToken, chatId, deniedText);
@@ -1150,24 +1260,24 @@ export default {
           }
 
           const menuText = [
-            `🛡️ *OFFRADAR JOB - BẢNG ĐIỀU KHIỂN QUẢN TRỊ VIÊN*`,
-            `Xin chào Admin *${from.first_name || "Admin"}* (@${from.username || tgId})!`,
+            `🛡️ *OFFRADARJOB - ADMIN CONTROL PANEL*`,
+            `Welcome back, Admin *${from.first_name || "Admin"}* (@${from.username || tgId})!`,
             ``,
-            `📋 *Các lệnh quản trị trực tiếp trên Telegram:*`,
-            `🎓 \`/newgrad [midwest|remote]\` - Tra cứu các vị trí New Grad / Entry-level`,
-            `🌅 \`/digest\` - Xem nhanh bản tin việc làm hôm nay`,
-            `🔔 \`/subscribe [midwest|remote|all]\` - Đăng ký nhận Daily Job Digest tự động`,
-            `🔕 \`/unsubscribe\` - Tạm dừng nhận Daily Digest`,
-            `📊 \`/stats\` - Báo cáo realtime (Jobs, Companies, Tỷ lệ Midwest & các vùng US)`,
-            `🕷️ \`/crawl <url>\` - Kích hoạt crawl ngay 1 career page URL`,
-            `⚡ \`/sweep\` - Quét đồng loạt danh sách seed companies`,
-            `🌾 \`/harvest [hn|github|newgrad|all]\` - Thu thập jobs từ HackerNews, GitHub, hoặc New Grad 2025/2026`,
-            `👥 \`/users\` - Thống kê users & danh sách tài khoản MCP`,
-            `💡 \`/feedbacks\` - Xem danh sách phản hồi từ LLM & Người dùng qua MCP`,
-            `🛠️ \`/fixlinks\` - Chạy async fix data & dọn dẹp các link lỗi (\`cdn-cgi\`, generic URLs)`,
-            `🔗 \`/adminlink\` - Lấy link 1-click vào thẳng Web Admin Control Center`,
-            `🔔 \`/testalert\` - Kiểm tra hệ thống gửi thông báo khẩn cấp`,
-            `❓ \`/admin help\` - Xem lại menu này`,
+            `📋 *Available Telegram Admin Commands:*`,
+            `🎓 \`/newgrad [midwest|remote]\` - Search New Grad & entry-level roles`,
+            `🌅 \`/digest\` - Preview today's daily job digest`,
+            `🔔 \`/subscribe [midwest|remote|all]\` - Subscribe to automatic daily alerts`,
+            `🔕 \`/unsubscribe\` - Pause daily job alerts`,
+            `📊 \`/stats\` - Live report (Jobs, Companies, Midwest & US regional breakdown)`,
+            `🕷️ \`/crawl <url>\` - Enqueue an immediate career page crawl`,
+            `⚡ \`/sweep\` - Enqueue a bulk sweep across curated seed companies`,
+            `🌾 \`/harvest [hn|github|newgrad|all]\` - Harvest jobs from Hacker News, GitHub, or New Grad 2026/2027`,
+            `👥 \`/users\` - View user stats & MCP accounts`,
+            `💡 \`/feedbacks\` - View recent LLM & user feedback submitted via MCP`,
+            `🛠️ \`/fixlinks\` - Run link recovery for broken URLs (\`cdn-cgi\`, generic pages)`,
+            `🔗 \`/adminlink\` - Get the link to the Web Admin Control Center`,
+            `🔔 \`/testalert\` - Send a test notification alert`,
+            `❓ \`/admin help\` - Show this menu again`,
           ].join("\n");
 
           if (botToken) await sendTelegramMessage(botToken, chatId, menuText);
@@ -1189,13 +1299,13 @@ export default {
 
           if (newGradJobs.length === 0) {
             const noJobsMsg = [
-              `🎓 *OFFRADARJOB - VIỆC LÀM NEW GRAD / ENTRY-LEVEL*`,
+              `🎓 *OFFRADARJOB - NEW GRAD & ENTRY-LEVEL ROLES*`,
               ``,
-              `Hiện chưa tìm thấy việc làm New Grad nào phù hợp với bộ lọc: \`${arg || "tất cả"}\`.`,
+              `No matching New Grad roles found for filter: \`${arg || "all"}\`.`,
               ``,
-              `💡 *Gợi ý:* Admin có thể gõ lệnh \`/harvest newgrad\` để nạp ngay hơn 400+ vị trí New Grad 2025/2026 từ SimplifyJobs và các trung tâm công nghệ Midwest!`,
+              `💡 *Tip:* Admins can run \`/harvest newgrad\` to import 400+ New Grad 2026/2027 roles from SimplifyJobs and US Midwest tech hubs.`,
               ``,
-              `🔔 Gõ \`/subscribe\` để nhận thông báo việc làm mới mỗi sáng!`,
+              `🔔 Type \`/subscribe\` to receive new roles every morning!`,
             ].join("\n");
             if (botToken) await sendTelegramMessage(botToken, chatId, noJobsMsg);
             return Response.json({ ok: true, count: 0 });
@@ -1208,20 +1318,20 @@ export default {
             return [
               `*${idx + 1}. ${j.title}*`,
               `🏢 *${comp}* | ${locText}${salary}`,
-              `🔗 [Ứng tuyển trực tiếp trên ATS](${j.applyTarget})`,
+              `🔗 [Apply Directly on ATS](${j.applyTarget})`,
             ].join("\n");
           }).join("\n\n");
 
           const responseText = [
-            `🎓 *OFFRADARJOB - VIỆC LÀM NEW GRAD 2025/2026 MỚI NHẤT*`,
-            region ? `*(Khu vực: ${region.toUpperCase()})*` : `*(Ưu tiên Midwest & US National)*`,
+            `🎓 *OFFRADARJOB - LATEST NEW GRAD 2026/2027 ROLES*`,
+            region ? `*(Region: ${region.toUpperCase()})*` : `*(US Midwest Focus & Nationwide)*`,
             ``,
             jobItems,
             ``,
-            `🌐 *Xem đầy đủ danh sách & lọc chi tiết tại:*`,
-            `https://off-radar-jobs.tuannx87.workers.dev/?grade=new_grad`,
+            `🌐 *Browse full list & filters:*`,
+            `${CANONICAL_SITE_URL}/?grade=new_grad`,
             ``,
-            `🔔 *Nhận thông báo việc làm mới mỗi sáng:* Gõ \`/subscribe\`!`,
+            `🔔 *Get daily job alerts:* Type \`/subscribe\`!`,
           ].join("\n");
 
           if (botToken) await sendTelegramMessage(botToken, chatId, responseText);
@@ -1249,18 +1359,18 @@ export default {
           });
 
           const subConfirmLines = [
-            `🔔 *ĐĂNG KÝ BẢN TIN VIỆC LÀM HÀNG NGÀY THÀNH CÔNG!*`,
+            `🔔 *DAILY JOB DIGEST SUBSCRIPTION ACTIVATED!*`,
             ``,
-            `Xin chào *${from.first_name || "bạn"}*! Bạn sẽ tự động nhận danh sách các việc làm tech boutique mới nhất mỗi sáng qua Telegram.`,
+            `Hi *${from.first_name || "there"}*! You will automatically receive newly discovered boutique US tech roles every morning via Telegram.`,
             ``,
-            `📋 *Thiết lập của bạn:*`,
-            `• Trạng thái: 🟢 *Đang kích hoạt*`,
-            `• Tần suất: *Hàng ngày (Mỗi sáng)*`,
-            `• Khu vực ưu tiên: *${sub.regions.map((r) => r.toUpperCase()).join(", ")}*`,
-            targetRoles.length > 0 ? `• Vị trí mong muốn: *${targetRoles.join(", ")}*` : `• Lĩnh vực: *Tất cả vị trí Tech (Đã lọc bỏ tin rác)*`,
+            `📋 *Your Preferences:*`,
+            `• Status: 🟢 *Active*`,
+            `• Frequency: *Daily (Morning Briefing)*`,
+            `• Preferred Regions: *${sub.regions.map((r) => r.toUpperCase()).join(", ")}*`,
+            targetRoles.length > 0 ? `• Target Role Filter: *${targetRoles.join(", ")}*` : `• Scope: *All Verified US Tech Roles*`,
             ``,
-            `👉 Gõ \`/digest\` để nhận ngay bản tin việc làm hôm nay.`,
-            `👉 Gõ \`/unsubscribe\` bất kỳ lúc nào để tạm dừng nhận thông báo.`,
+            `👉 Type \`/digest\` to view today's briefing right away.`,
+            `👉 Type \`/unsubscribe\` anytime to pause notifications.`,
           ];
 
           if (botToken) await sendTelegramMessage(botToken, chatId, subConfirmLines.join("\n"));
@@ -1273,12 +1383,12 @@ export default {
           await subscriptionRepo.toggleActive(userId, false);
 
           const unsubLines = [
-            `🔕 *ĐÃ TẠM DỪNG THÔNG BÁO HÀNG NGÀY*`,
+            `🔕 *DAILY JOB ALERTS PAUSED*`,
             ``,
-            `Tài khoản của bạn đã được chuyển sang chế độ tạm dừng nhận Daily Digest.`,
-            `Bạn vẫn có thể truy cập dashboard hoặc dùng MCP bất cứ lúc nào.`,
+            `Your account has been unsubscribed from automated Daily Digest messages.`,
+            `You can continue browsing the dashboard or using MCP tools at any time.`,
             ``,
-            `💡 Để kích hoạt lại, bạn chỉ cần gõ: \`/subscribe\`.`,
+            `💡 To re-enable alerts later, type: \`/subscribe\`.`,
           ];
 
           if (botToken) await sendTelegramMessage(botToken, chatId, unsubLines.join("\n"));
@@ -1301,7 +1411,7 @@ export default {
           });
 
           if (digestJobs.items.length === 0) {
-            const emptyMsg = `🌅 *OFFRADARJOB - BẢN TIN HÔM NAY*\n\nHiện chưa có vị trí mới nào khớp với tiêu chí của bạn. Hãy thử xem toàn bộ danh sách tại: https://off-radar-jobs.tuannx87.workers.dev`;
+            const emptyMsg = `🌅 *OFFRADARJOB - TODAY'S BRIEFING*\n\nNo new open positions matched your current filters today. Browse all US roles at: ${CANONICAL_SITE_URL}`;
             if (botToken) await sendTelegramMessage(botToken, chatId, emptyMsg);
             return Response.json({ ok: true, count: 0 });
           }
@@ -1313,20 +1423,20 @@ export default {
             return [
               `*${idx + 1}. ${j.title}*`,
               `🏢 *${comp}* | ${locText}${salary}`,
-              `🔗 [Ứng tuyển trực tiếp trên ATS](${j.applyTarget})`,
+              `🔗 [Apply Directly on ATS](${j.applyTarget})`,
             ].join("\n");
           }).join("\n\n");
 
           const digestText = [
-            `🌅 *OFFRADARJOB - BẢN TIN VIỆC LÀM HÔM NAY*`,
-            `Dành cho *${from.first_name || "bạn"}* (Ưu tiên: ${(region || "midwest").toUpperCase()}):`,
+            `🌅 *OFFRADARJOB - TODAY'S JOB DIGEST*`,
+            `Prepared for *${from.first_name || "you"}* (Focus: ${(region || "midwest").toUpperCase()}):`,
             ``,
             jobItems,
             ``,
-            `🌐 *Xem đầy đủ cơ hội & Tối ưu CV:*`,
-            `https://off-radar-jobs.tuannx87.workers.dev`,
+            `🌐 *Explore all roles & optimize your US resume:*`,
+            `${CANONICAL_SITE_URL}`,
             ``,
-            `💡 Để nhận tự động mỗi sáng, gõ: \`/subscribe\``,
+            `💡 Subscribe for automatic morning alerts: \`/subscribe\``,
           ].join("\n");
 
           if (botToken) await sendTelegramMessage(botToken, chatId, digestText);
@@ -1350,40 +1460,40 @@ export default {
 
           const taskSnippets = recentTasks.length > 0
             ? recentTasks.map((t) => `• \`${t.id.slice(-8)}\`: *${t.status.toUpperCase()}* (${t.jobsFound} jobs)`).join("\n")
-            : "Chưa có task nào gần đây";
+            : "No recent tasks";
 
-          let freshnessSnippet = "• Trạng thái: Đang theo dõi";
+          let freshnessSnippet = "• Status: Active monitoring";
           if (freshness.latestLastSeen) {
             const minsAgo = Math.max(0, Math.round((Date.now() - freshness.latestLastSeen) / 60000));
-            const timeAgoStr = minsAgo < 60 ? `${minsAgo} phút trước` : `${Math.round(minsAgo / 60)} giờ trước`;
+            const timeAgoStr = minsAgo < 60 ? `${minsAgo}m ago` : `${Math.round(minsAgo / 60)}h ago`;
             const dateStr = new Date(freshness.latestLastSeen).toISOString().replace("T", " ").substring(0, 16) + " UTC";
             freshnessSnippet = [
-              `⏱️ *Lần quét gần nhất:* ${timeAgoStr} (${dateStr})`,
-              `🔄 *Jobs cập nhật 24h:* \`${freshness.updatedLast24h}\` jobs (mới: \`${freshness.createdLast24h}\`)`,
-              `⏰ *Cron tự động:* Daily 02:00 UTC | Weekly Mon 03:00 UTC`,
+              `⏱️ *Last crawl:* ${timeAgoStr} (${dateStr})`,
+              `🔄 *24h activity:* \`${freshness.updatedLast24h}\` updated (new: \`${freshness.createdLast24h}\`)`,
+              `⏰ *Schedule:* Daily 02:00 UTC | Weekly Mon 03:00 UTC`,
             ].join("\n");
           }
 
           const statsText = [
-            `📊 *HỆ THỐNG OFFRADARJOB - BÁO CÁO REALTIME*`,
+            `📊 *OFFRADARJOB - REALTIME TELEMETRY*`,
             ``,
-            `💼 *Tổng số Jobs:* \`${jobsCount.toLocaleString()}\``,
-            `🏢 *Tổng số Công ty:* \`${companiesCount.toLocaleString()}\``,
+            `💼 *Open Tech Jobs:* \`${jobsCount.toLocaleString()}\``,
+            `🏢 *Tracked Companies:* \`${companiesCount.toLocaleString()}\``,
             `🌽 *Midwest Focus:* \`${jobSummary.midwestCount}\` jobs (*${midwestPct}%*)`,
             `🌲 *West Coast:* \`${jobSummary.westCount}\` jobs`,
             `🗽 *Northeast:* \`${jobSummary.northeastCount}\` jobs`,
-            `☀️ *South:* \`${jobSummary.southCount}\` jobs`,
-            `🏔️ *Mountain:* \`${jobSummary.mountainCount}\` jobs`,
-            `👥 *Users đã kết nối:* \`${usersCount}\` (Admins: \`${adminsCount}\`)`,
-            `🔔 *Subscribers nhận tin:* \`${subscriberStats.active}\` active (\`${subscriberStats.total}\` tổng)`,
+            `☀️ *South & DC:* \`${jobSummary.southCount}\` jobs`,
+            `🏔️ *Mountain West:* \`${jobSummary.mountainCount}\` jobs`,
+            `👥 *Connected Users:* \`${usersCount}\` (Admins: \`${adminsCount}\`)`,
+            `🔔 *Subscribers:* \`${subscriberStats.active}\` active (\`${subscriberStats.total}\` total)`,
             ``,
-            `🕒 *Độ tươi mới dữ liệu & Tần suất:*`,
+            `🕒 *Data Freshness & Cadence:*`,
             freshnessSnippet,
             ``,
-            `⚙️ *Crawl Tasks gần nhất:*`,
+            `⚙️ *Recent Crawl Tasks:*`,
             taskSnippets,
             ``,
-            `🌐 *Dashboard:* https://off-radar-jobs.tuannx87.workers.dev`,
+            `🌐 *Dashboard:* ${CANONICAL_SITE_URL}`,
           ].join("\n");
 
           if (botToken) await sendTelegramMessage(botToken, chatId, statsText);
@@ -1394,7 +1504,7 @@ export default {
         if (text.startsWith("/crawl") && chatId) {
           if (!isAdmin) {
             if (botToken) {
-              await sendTelegramMessage(botToken, chatId, "⛔ Bạn cần có quyền Admin để kích hoạt lệnh /crawl.");
+              await sendTelegramMessage(botToken, chatId, "⛔ Admin privileges are required to run /crawl.");
             }
             return Response.json({ ok: false, error: "Unauthorized" });
           }
@@ -1402,12 +1512,28 @@ export default {
           let rawUrl = text.replace(/^\/crawl\s*/i, "").trim();
           if (!rawUrl) {
             if (botToken) {
-              await sendTelegramMessage(botToken, chatId, "⚠️ Vui lòng nhập URL cần crawl:\nVí dụ: `/crawl https://careers.example.com`");
+              await sendTelegramMessage(botToken, chatId, "⚠️ Please specify a URL to crawl:\nExample: `/crawl https://careers.example.com`");
             }
             return Response.json({ ok: false });
           }
           if (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://")) {
             rawUrl = "https://" + rawUrl;
+          }
+
+          let parsedCrawlUrl: URL;
+          try {
+            parsedCrawlUrl = new URL(rawUrl);
+          } catch {
+            if (botToken) {
+              await sendTelegramMessage(botToken, chatId, "⚠️ Invalid URL format. Example: `/crawl https://careers.example.com`");
+            }
+            return Response.json({ ok: false, error: "invalid_url" });
+          }
+          if ((parsedCrawlUrl.protocol !== "http:" && parsedCrawlUrl.protocol !== "https:") || isBlockedApplyHost(parsedCrawlUrl.hostname)) {
+            if (botToken) {
+              await sendTelegramMessage(botToken, chatId, "⛔ Blocked or unsupported crawl URL host.");
+            }
+            return Response.json({ ok: false, error: "blocked_url" });
           }
 
           const taskId = `tsk_tg_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
@@ -1423,7 +1549,16 @@ export default {
 
           if (env.DISCOVERY_QUEUE) {
             try {
-              await env.DISCOVERY_QUEUE.send({ taskId, url: rawUrl, depth: 0, source: "telegram_admin" });
+              const discoveryMsg: DiscoveryMessage = {
+                type: "DISCOVER_SEED",
+                traceId: taskId,
+                source: "manual",
+                sourceUrl: rawUrl,
+                domainHint: parsedCrawlUrl.hostname.replace(/^www\./, ""),
+                timestamp: Date.now(),
+                retryCount: 0,
+              };
+              await env.DISCOVERY_QUEUE.send(discoveryMsg);
             } catch (err) {
               console.warn("[Telegram Crawl Queue] Failed:", err);
             }
@@ -1431,14 +1566,14 @@ export default {
 
           if (botToken) {
             const replyMsg = [
-              `🚀 *Đã kích hoạt Crawl Task thành công!*`,
+              `🚀 *Crawl Task Queued Successfully!*`,
               ``,
               `📋 *Task ID:* \`${taskId}\``,
               `🔗 *Target URL:* \`${rawUrl}\``,
               `👤 *Admin:* @${from.username || tgId}`,
               ``,
-              `Theo dõi trạng thái tại:`,
-              `https://off-radar-jobs.tuannx87.workers.dev/admin`,
+              `Monitor progress in the Admin Center:`,
+              `${CANONICAL_SITE_URL}/admin`,
             ].join("\n");
             await sendTelegramMessage(botToken, chatId, replyMsg);
           }
@@ -1449,7 +1584,7 @@ export default {
         // F. /sweep - Admin trigger bulk sweep across seeds
         if (text === "/sweep" && chatId) {
           if (!isAdmin) {
-            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Bạn cần quyền Admin để dùng /sweep.");
+            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Admin privileges are required to run /sweep.");
             return Response.json({ ok: false, error: "Unauthorized" });
           }
 
@@ -1468,7 +1603,15 @@ export default {
             });
             if (env.DISCOVERY_QUEUE) {
               try {
-                await env.DISCOVERY_QUEUE.send({ taskId, url: s.url, depth: 0, source: "telegram_admin_sweep" });
+                const seedMsg: DiscoveryMessage = {
+                  type: "DISCOVER_SEED",
+                  traceId: taskId,
+                  source: "seed_list",
+                  sourceUrl: s.url,
+                  timestamp: Date.now(),
+                  retryCount: 0,
+                };
+                await env.DISCOVERY_QUEUE.send(seedMsg);
               } catch {}
             }
             count++;
@@ -1478,7 +1621,7 @@ export default {
             await sendTelegramMessage(
               botToken,
               chatId,
-              `⚡ *Đã kích hoạt Sweep ${count} công ty seed đồng loạt!*\nCác tasks đang chạy trong background queue. Kiểm tra tiến độ tại Web Admin.`
+              `⚡ *Queued bulk sweep across ${count} curated seed companies!*\nTasks are running in the background queue. Check progress in the Web Admin dashboard.`
             );
           }
           return Response.json({ ok: true, tasksCount: count });
@@ -1487,7 +1630,7 @@ export default {
         // G. /harvest [hn|github|all] - Admin trigger public harvest
         if (text.startsWith("/harvest") && chatId) {
           if (!isAdmin) {
-            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Bạn cần quyền Admin để dùng /harvest.");
+            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Admin privileges are required to run /harvest.");
             return Response.json({ ok: false, error: "Unauthorized" });
           }
 
@@ -1498,7 +1641,7 @@ export default {
               await sendTelegramMessage(
                 botToken,
                 chatId,
-                `🎓 *Đang thu thập và nạp hơn 400+ vị trí New Grad từ SimplifyJobs & Midwest Tech Hubs...*`
+                `🎓 *Harvesting 400+ New Grad 2026/2027 positions from SimplifyJobs & US Midwest Tech Hubs...*`
               );
             }
             try {
@@ -1506,20 +1649,20 @@ export default {
               const result = await newGradHarvester.importNewGradRoles(env.DB);
               if (botToken) {
                 const harvestMsg = [
-                  `🎓 *Thu thập việc làm New Grad hoàn tất!*`,
+                  `🎓 *New Grad Harvest Complete!*`,
                   ``,
-                  `• *Tổng số jobs đã parse:* \`${result.totalParsed}\``,
-                  `• *Jobs đã nạp vào D1:* \`${result.importedJobs}\``,
-                  `• *Jobs thuộc vùng Midwest:* \`${result.midwestJobs}\``,
+                  `• *Total roles parsed:* \`${result.totalParsed}\``,
+                  `• *Jobs imported into D1:* \`${result.importedJobs}\``,
+                  `• *US Midwest roles:* \`${result.midwestJobs}\``,
                   ``,
-                  `👉 Gõ \`/newgrad\` để xem ngay các vị trí mới nhất!`,
+                  `👉 Type \`/newgrad\` to inspect the latest openings!`,
                 ].join("\n");
                 await sendTelegramMessage(botToken, chatId, harvestMsg);
               }
               return Response.json({ ok: true, result });
             } catch (err: any) {
               if (botToken) {
-                await sendTelegramMessage(botToken, chatId, `❌ Lỗi khi harvest newgrad: ${err?.message}`);
+                await sendTelegramMessage(botToken, chatId, `❌ Error harvesting newgrad: ${err?.message}`);
               }
               return Response.json({ ok: false, error: err?.message });
             }
@@ -1528,7 +1671,7 @@ export default {
           const source = (sub === "hn" || sub === "github") ? sub : "all";
 
           if (botToken) {
-            await sendTelegramMessage(botToken, chatId, `⏳ *Đang kích hoạt thu thập từ nguồn [${source.toUpperCase()}]...*`);
+            await sendTelegramMessage(botToken, chatId, `⏳ *Triggering harvest from [${source.toUpperCase()}]...*`);
           }
 
           try {
@@ -1539,19 +1682,19 @@ export default {
             if (botToken) {
               const totalJobs = res.directJobsCount + res.crawledJobsCount;
               const harvestMsg = [
-                `🌾 *Thu thập dữ liệu nguồn mở hoàn tất!*`,
+                `🌾 *Public Source Harvest Complete!*`,
                 ``,
-                `• *Nguồn:* ${source.toUpperCase()}`,
-                `• *Công ty thu thập:* \`${res.companiesHarvested}\``,
-                `• *Jobs tìm thấy:* \`${totalJobs}\``,
-                `• *Crawl Tasks tạo:* \`${res.taskIds.length}\``,
+                `• *Source:* ${source.toUpperCase()}`,
+                `• *Companies harvested:* \`${res.companiesHarvested}\``,
+                `• *Jobs discovered:* \`${totalJobs}\``,
+                `• *Crawl tasks created:* \`${res.taskIds.length}\``,
               ].join("\n");
               await sendTelegramMessage(botToken, chatId, harvestMsg);
             }
             return Response.json({ ok: true, result: res });
           } catch (err: any) {
             if (botToken) {
-              await sendTelegramMessage(botToken, chatId, `❌ Lỗi khi harvest: ${err?.message}`);
+              await sendTelegramMessage(botToken, chatId, `❌ Harvest error: ${err?.message}`);
             }
             return Response.json({ ok: false, error: err?.message });
           }
@@ -1560,7 +1703,7 @@ export default {
         // H. /users - Admin list users & MCP connections
         if (text === "/users" && chatId) {
           if (!isAdmin) {
-            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Bạn cần quyền Admin để dùng /users.");
+            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Admin privileges are required to view /users.");
             return Response.json({ ok: false, error: "Unauthorized" });
           }
 
@@ -1573,15 +1716,15 @@ export default {
           const userRows = users.map((u) => `• ${u.role === "admin" ? "👑" : "👤"} *${u.firstName}* (@${u.username || u.telegramId})`).join("\n");
 
           const reply = [
-            `👥 *QUẢN LÝ NGƯỜI DÙNG & TOKENS*`,
+            `👥 *USERS & MCP TOKENS*`,
             ``,
-            `• *Tổng số người dùng:* \`${total}\``,
-            `• *Quản trị viên (Admins):* \`${admins}\``,
+            `• *Total users:* \`${total}\``,
+            `• *Admins:* \`${admins}\``,
             ``,
-            `*5 người dùng mới nhất:*`,
-            userRows || "Chưa có người dùng nào",
+            `*5 most recent users:*`,
+            userRows || "No users connected yet",
             ``,
-            `Quản lý chi tiết tại Web Admin: https://off-radar-jobs.tuannx87.workers.dev/admin`,
+            `Manage users in the Web Admin panel: ${CANONICAL_SITE_URL}/admin`,
           ].join("\n");
 
           if (botToken) await sendTelegramMessage(botToken, chatId, reply);
@@ -1591,7 +1734,7 @@ export default {
         // I. /adminlink - Admin magic login link generator
         if (text === "/adminlink" && chatId) {
           if (!isAdmin) {
-            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Bạn cần quyền Admin để lấy magic link.");
+            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Admin privileges are required to access /adminlink.");
             return Response.json({ ok: false, error: "Unauthorized" });
           }
 
@@ -1599,7 +1742,7 @@ export default {
           const msg = [
             `🔑 *Web Admin Control Center*`,
             ``,
-            `Open https://jobs.ai-kit.net/admin and sign in with the admin token (the ADMIN_TOKEN Cloudflare secret).`,
+            `Open ${CANONICAL_SITE_URL}/admin and sign in with the admin token (the ADMIN_TOKEN Cloudflare secret).`,
           ].join("\n");
 
           if (botToken) await sendTelegramMessage(botToken, chatId, msg);
@@ -1609,7 +1752,7 @@ export default {
         // J. /testalert - Admin test alert notification
         if (text === "/testalert" && chatId) {
           if (!isAdmin) {
-            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Bạn cần quyền Admin.");
+            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Admin privileges are required.");
             return Response.json({ ok: false, error: "Unauthorized" });
           }
 
@@ -1618,7 +1761,7 @@ export default {
               botToken,
               chatId,
               `🔔 *[TEST ALERT] OffRadarJob System Notification*\n` +
-              `Hệ thống thông báo Telegram Bot hoạt động hoàn hảo! Đã kết nối với Admin @${from.username || tgId}.`
+              `Telegram Bot notification delivery is operational! Connected for Admin @${from.username || tgId}.`
             );
           }
           return Response.json({ ok: true });
@@ -1628,8 +1771,8 @@ export default {
         if (text.startsWith("/mcp") && chatId && botToken) {
           const user = await userRepo.findByTelegramId(tgId);
           const reply = user
-            ? `🔌 *MCP Endpoint:* \`https://off-radar-jobs.tuannx87.workers.dev/mcp\`\n🔑 *Token:* \`${user.apiToken}\``
-            : "Vui lòng mở web OffRadarJob và đăng nhập để kích hoạt token.";
+            ? `🔌 *MCP Endpoint:* \`${CANONICAL_SITE_URL}/mcp\`\n🔑 *Token:* \`${user.apiToken}\``
+            : `Please open ${CANONICAL_SITE_URL} and sign in with Telegram to activate your MCP token.`;
           await sendTelegramMessage(botToken, chatId, reply);
           return Response.json({ ok: true });
         }
@@ -1637,7 +1780,7 @@ export default {
         // L. /feedbacks - Admin list recent LLM feedbacks
         if (text === "/feedbacks" && chatId) {
           if (!isAdmin) {
-            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Bạn cần quyền Admin để xem /feedbacks.");
+            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Admin privileges are required to view /feedbacks.");
             return Response.json({ ok: false, error: "Unauthorized" });
           }
           const stats = await feedbackRepo.getStats();
@@ -1650,23 +1793,23 @@ export default {
                 const sentimentIcon = f.sentiment === "critical" ? "🚨" : (f.sentiment === "positive" ? "⭐" : "💬");
                 const userStr = f.username ? `@${f.username}` : f.userId.slice(-6);
                 const shortComment = f.comment.length > 90 ? f.comment.slice(0, 90) + "..." : f.comment;
-                return `${i + 1}. ${statusIcon} ${sentimentIcon} *[${f.feedbackType.toUpperCase()}]* (${userStr})\n   📝 "${shortComment}"${f.suggestedAction ? `\n   🎯 *Đề xuất:* ${f.suggestedAction}` : ""}`;
+                return `${i + 1}. ${statusIcon} ${sentimentIcon} *[${f.feedbackType.toUpperCase()}]* (${userStr})\n   📝 "${shortComment}"${f.suggestedAction ? `\n   🎯 *Suggested Action:* ${f.suggestedAction}` : ""}`;
               }).join("\n\n")
-            : "Chưa có phản hồi nào.";
+            : "No feedback submitted yet.";
 
           const reply = [
-            `💡 *OFFRADARJOB - PHẢN HỒI TỪ LLM & NGƯỜI DÙNG*`,
+            `💡 *OFFRADARJOB - LLM & USER FEEDBACK*`,
             ``,
-            `📊 *Thống kê:*`,
-            `• Tổng số: \`${stats.total}\` | Mới: \`${stats.newCount}\``,
-            `• Sự cố khẩn cấp (Critical): \`${stats.criticalCount}\``,
-            `• Link hỏng (Broken links): \`${stats.brokenLinkCount}\``,
-            `• Tín hiệu nhu cầu (Preferences): \`${stats.userPrefCount}\``,
+            `📊 *Summary:*`,
+            `• Total: \`${stats.total}\` | New: \`${stats.newCount}\``,
+            `• Critical alerts: \`${stats.criticalCount}\``,
+            `• Broken links: \`${stats.brokenLinkCount}\``,
+            `• Preference signals: \`${stats.userPrefCount}\``,
             ``,
-            `*5 phản hồi gần nhất:*`,
+            `*5 most recent items:*`,
             snippet,
             ``,
-            `🌐 Xem & xử lý chi tiết tại Web Admin Dashboard.`,
+            `🌐 Review & triage details in the Web Admin Dashboard.`,
           ].join("\n");
 
           if (botToken) await sendTelegramMessage(botToken, chatId, reply);
@@ -1676,19 +1819,19 @@ export default {
         // M. /fixlinks - Admin trigger async broken-links data repair
         if (text === "/fixlinks" && chatId) {
           if (!isAdmin) {
-            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Bạn cần quyền Admin để dùng /fixlinks.");
+            if (botToken) await sendTelegramMessage(botToken, chatId, "⛔ Admin privileges are required to run /fixlinks.");
             return Response.json({ ok: false, error: "Unauthorized" });
           }
           const repair = await recoverBrokenLinksData(env.DB, (input, init) => fetch(input, init));
           const reply = [
-            `🛠️ *OFFRADARJOB - KHÔI PHỤC LINK LỖI HOÀN TẤT*`,
+            `🛠️ *OFFRADARJOB - BROKEN LINK RECOVERY COMPLETE*`,
             ``,
-            `• *Jobs lỗi đã tìm thấy:* \`${repair.scannedJobs}\``,
-            `• *Emails giải mã từ Cloudflare cdn-cgi:* \`${repair.decodedEmails}\``,
-            `• *Jobs tìm lại được từ trang nguồn:* \`${repair.recoveredJobsFromSource}\` (mở lại: \`${repair.reopenedJobs}\`)`,
-            `• *Jobs không cứu được (cách ly, giữ bản ghi):* \`${repair.closedInvalidJobs}\``,
-            `• *Công ty khôi phục contact_email:* \`${repair.fixedCompanies}\` (từ trang chủ: \`${repair.recoveredCompaniesFromSource}\`)`,
-            `• *Career pages tìm lại được:* \`${repair.recoveredCareerPages}\` / vô hiệu hóa tạm (giữ bản ghi): \`${repair.deactivatedCareerPages}\``,
+            `• *Invalid jobs scanned:* \`${repair.scannedJobs}\``,
+            `• *Cloudflare cdn-cgi emails decoded:* \`${repair.decodedEmails}\``,
+            `• *Jobs recovered from source:* \`${repair.recoveredJobsFromSource}\` (reopened: \`${repair.reopenedJobs}\`)`,
+            `• *Unrecoverable jobs quarantined (non-destructive):* \`${repair.closedInvalidJobs}\``,
+            `• *Company contact emails fixed:* \`${repair.fixedCompanies}\` (from homepage: \`${repair.recoveredCompaniesFromSource}\`)`,
+            `• *Career pages recovered:* \`${repair.recoveredCareerPages}\` / deactivated (preserved): \`${repair.deactivatedCareerPages}\``,
           ].join("\n");
           if (botToken) await sendTelegramMessage(botToken, chatId, reply);
           return Response.json({ ok: true, repair });
@@ -1753,7 +1896,7 @@ export default {
           { success: true, user: userRecord, token: apiToken },
           {
             headers: {
-              "Set-Cookie": `user_token=${apiToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+              "Set-Cookie": buildUserTokenCookie(apiToken, url, 2592000),
             },
           }
         );
@@ -1770,6 +1913,7 @@ export default {
       if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
+      const effectiveConfig = await loadEffectiveConfig();
       const botToken = effectiveConfig.telegramBotToken;
       if (!botToken) {
         return Response.json({ error: "TELEGRAM_BOT_TOKEN not configured yet." }, { status: 400 });
@@ -1791,7 +1935,10 @@ export default {
     // 6e. Legacy Telegram Auth: Login via Telegram WebApp / Widget
     if (path === "/api/auth/telegram" && request.method === "POST") {
       try {
-        const body = (await request.json()) as Record<string, any>;
+        const parsedBody = await readJsonBody(request);
+        if (!parsedBody.ok) return parsedBody.response;
+        const body = parsedBody.data;
+        const effectiveConfig = await loadEffectiveConfig();
         const botToken = effectiveConfig.telegramBotToken;
         if (!botToken) {
           return Response.json({ error: "Telegram login is not configured" }, { status: 503 });
@@ -1828,7 +1975,7 @@ export default {
           { success: true, user: userRecord },
           {
             headers: {
-              "Set-Cookie": `user_token=${apiToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+              "Set-Cookie": buildUserTokenCookie(apiToken, url, 2592000),
             },
           }
         );
@@ -1850,7 +1997,7 @@ export default {
         { success: true },
         {
           headers: {
-            "Set-Cookie": `user_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`,
+            "Set-Cookie": buildUserTokenCookie("", url, 0),
           },
         }
       );
@@ -2206,12 +2353,13 @@ export default {
 
       // Notify Telegram admin if critical or broken link
       if (feedbackRecord.sentiment === "critical" || feedbackRecord.feedbackType === "broken_link") {
+        const effectiveConfig = await loadEffectiveConfig();
         const alertMsg = [
-          `🚨 *OFFRADARJOB - PHẢN HỒI KHẨN CẤP TỪ WEB USER*`,
+          `🚨 *OFFRADARJOB - CRITICAL FEEDBACK FROM WEB USER*`,
           `👤 *User:* ${user.firstName} (@${user.username || user.telegramId})`,
-          `🏷️ *Loại:* \`${feedbackRecord.feedbackType}\` | *Mức độ:* \`${feedbackRecord.sentiment}\``,
-          `📝 *Nội dung:* ${feedbackRecord.comment}`,
-          feedbackRecord.suggestedAction ? `🎯 *Đề xuất:* ${feedbackRecord.suggestedAction}` : "",
+          `🏷️ *Type:* \`${feedbackRecord.feedbackType}\` | *Severity:* \`${feedbackRecord.sentiment}\``,
+          `📝 *Details:* ${feedbackRecord.comment}`,
+          feedbackRecord.suggestedAction ? `🎯 *Suggested Action:* ${feedbackRecord.suggestedAction}` : "",
         ].filter(Boolean).join("\n");
         await notifyTelegramAdmin(env, alertMsg, effectiveConfig);
       }
@@ -2332,7 +2480,7 @@ export default {
       }
       const statusParam = url.searchParams.get("status");
       const status = statusParam && statusParam !== "all" ? (statusParam as CrawlTaskStatus) : undefined;
-      const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10), 100);
+      const limit = parseBoundedInt(url.searchParams.get("limit"), 50, 1, 100);
 
       const tasks = await taskRepo.list({ status, limit });
       return Response.json(tasks);
@@ -2793,9 +2941,7 @@ export default {
       }
 
       const jobsRes = await jobRepo.listPaged({ page: 1, limit: 250, techOnly: true });
-      const compRes = await companyRepo.listPaged({ page: 1, limit: 150 });
-      const companiesMap = new Map<string, any>();
-      for (const c of compRes.items) companiesMap.set(c.id, c);
+      const companiesMap = await companyRepo.findByIds(jobsRes.items.map((j) => j.companyId));
 
       const report = rerankerService.generateRealtimeReport(jobsRes.items, companiesMap);
 
@@ -2977,6 +3123,7 @@ export default {
       if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
+      const effectiveConfig = await loadEffectiveConfig();
       const [totalUsers, totalAdmins] = await Promise.all([
         userRepo.count(),
         userRepo.count("admin"),
@@ -3000,6 +3147,7 @@ export default {
       if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
+      const effectiveConfig = await loadEffectiveConfig();
       const token = effectiveConfig.telegramBotToken;
       const maskedToken = token
         ? (token.length > 10 ? `${token.slice(0, 6)}...${token.slice(-4)}` : "******")
@@ -3052,6 +3200,9 @@ export default {
 
       if (Object.keys(toSave).length > 0) {
         await settingsRepo.setMany(toSave);
+        if (env.CACHE && typeof env.CACHE.delete === "function") {
+          await env.CACHE.delete("sys:settings:v1").catch(() => {});
+        }
       }
 
       return Response.json({
@@ -3066,6 +3217,7 @@ export default {
       if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
+      const effectiveConfig = await loadEffectiveConfig();
       const botToken = effectiveConfig.telegramBotToken;
       if (!botToken) {
         return Response.json({ ok: false, error: "Bot token not configured yet" }, { status: 400 });
@@ -3086,7 +3238,7 @@ export default {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       const role = url.searchParams.get("role") || undefined;
-      const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 100);
+      const limit = parseBoundedInt(url.searchParams.get("limit"), 50, 1, 100);
       const users = await userRepo.list(limit, role);
       // Never return raw api_token values: expose only a short, non-usable hint.
       return Response.json({ users: users.map(maskUserApiToken) });
@@ -3110,6 +3262,7 @@ export default {
       if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
+      const effectiveConfig = await loadEffectiveConfig();
       const botToken = effectiveConfig.telegramBotToken;
       if (!botToken) {
         return Response.json({ error: "TELEGRAM_BOT_TOKEN not configured yet. Please configure it in the Telegram Bot tab." }, { status: 400 });
@@ -3132,8 +3285,8 @@ export default {
       if (!(await isAuthorized(request, url, env))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
-      const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
-      const limit = Math.min(parseInt(url.searchParams.get("limit") || "20", 10), 100);
+      const page = parseBoundedInt(url.searchParams.get("page"), 1, 1, 10_000);
+      const limit = parseBoundedInt(url.searchParams.get("limit"), 20, 1, 100);
       const type = url.searchParams.get("type") || undefined;
       const sentiment = url.searchParams.get("sentiment") || undefined;
       const status = url.searchParams.get("status") || undefined;
@@ -3305,7 +3458,7 @@ export default {
       getUser: () => getAuthenticatedUser(request, userRepo),
       authorizeAdmin: () => isAuthorized(request, url, env),
       logRepo,
-      listJobs: () => jobRepo.list({ limit: 80, techOnly: true }),
+      listJobs: () => jobRepo.list({ limit: 80, techOnly: true, includeRawContent: true }),
       consumeMatchScan: (userId) => consumeUserMatchScan(env, userId),
     });
     if (matchResponse) return matchResponse;
@@ -3606,21 +3759,21 @@ export default {
                 return [
                   `*${idx + 1}. ${j.title}*`,
                   `🏢 *${comp}* | ${locText}${salary}`,
-                  `🔗 [Ứng tuyển trực tiếp trên ATS](${j.applyTarget})`,
+                  `🔗 [Apply Directly on ATS](${j.applyTarget})`,
                 ].join("\n");
               }).join("\n\n");
 
               const targetDisplay = [targetRole || "All Roles", (region || "All Regions").toUpperCase()].join(" / ");
               const digestMsg = [
-                `🌅 *OFFRADARJOB - BẢN TIN VIỆC LÀM HÀNG NGÀY*`,
-                `Kính gửi bạn, đây là top ${digestJobs.items.length} việc làm mới khớp nguyện vọng (${targetDisplay}):`,
+                `🌅 *OFFRADARJOB - DAILY US TECH JOB DIGEST*`,
+                `Here are the top ${digestJobs.items.length} new openings matching your preferences (${targetDisplay}):`,
                 ``,
                 jobItems,
                 ``,
-                `🌐 *Xem đầy đủ cơ hội & Tối ưu CV:*`,
-                `https://off-radar-jobs.tuannx87.workers.dev`,
+                `🌐 *Explore all roles & optimize your US resume:*`,
+                `${CANONICAL_SITE_URL}`,
                 ``,
-                `⚙️ Đổi tuỳ chọn: \`/subscribe <role>\` | Dừng nhận tin: \`/unsubscribe\``,
+                `⚙️ Update preferences: \`/subscribe <role>\` | Pause alerts: \`/unsubscribe\``,
               ].join("\n");
 
               await sendTelegramMessage(botToken, sub.telegramId, digestMsg);
@@ -3640,7 +3793,7 @@ export default {
 
         try {
           const matchService = CandidateMatchService.fromDatabase(env.DB, env.AI);
-          const recentJobs = await jobRepo.list({ limit: 40, techOnly: true });
+          const recentJobs = await jobRepo.list({ limit: 40, techOnly: true, includeRawContent: true });
           const matchReport = await matchService.runPass(recentJobs, { maxAiCalls: 5, jobLimit: 40 });
           await logRepo.log({
             id: `log_match_cron_${Date.now()}`,

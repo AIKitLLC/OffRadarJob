@@ -14,6 +14,7 @@ import { ExtractMessage } from "../types/queues.js";
 import { JobRepository, LogRepository, CompanyRepository } from "../db/repositories.js";
 import { isIgnoredSourceDomain } from "../utils/source-policy.js";
 import { decodeCloudflareEmailProtection, isCloudflareEmailProtectionUrl } from "../services/link-checker.js";
+import { getUsState } from "../utils/us-states.js";
 
 const TECH_SKILLS = [
   "TypeScript", "JavaScript", "Python", "Rust", "Go", "Golang", "C++",
@@ -211,9 +212,10 @@ export class JobExtractorAgent extends BaseAgent {
     for (const $heading of candidateHeadings) {
       const title = $heading.text().trim();
 
-      // Find surrounding container (section, card, or next siblings)
-      const container = $heading.closest("article, section, li, .job-card, .job-item");
-      const contextText = container.length > 0 ? container.text() : $heading.parent().text();
+      // Find surrounding container (section, card, or fallback to parent block)
+      const matchedContainer = $heading.closest("article, section, li, .job-card, .job-item, .job-listing, .opening, .position");
+      const container = matchedContainer.length > 0 ? matchedContainer : $heading.parent();
+      const contextText = container.text();
 
       // Parse properties from contextText
       const isRemote = this.detectIsRemote(contextText);
@@ -269,7 +271,7 @@ export class JobExtractorAgent extends BaseAgent {
         techCategory,
         isTechRole,
         employmentType,
-        location: isRemote ? "Remote" : "On-site / Hybrid",
+        location: this.extractUsLocation(contextText, isRemote, remoteScope),
         isRemote,
         remoteScope,
         ...salaryInfo,
@@ -549,10 +551,44 @@ export class JobExtractorAgent extends BaseAgent {
       return "us_midwest";
     }
     if (lower.includes("vietnam")) return "vietnam_only";
-    if (lower.includes("us only") || lower.includes("united states only") || lower.includes("north america")) return "us_only";
+    if (
+      lower.includes("us only") ||
+      lower.includes("us-only") ||
+      lower.includes("u.s. only") ||
+      lower.includes("united states only") ||
+      lower.includes("us remote") ||
+      lower.includes("remote - us") ||
+      lower.includes("remote (us)") ||
+      lower.includes("remote in the us") ||
+      lower.includes("based in the us") ||
+      lower.includes("within the united states") ||
+      lower.includes("work from home in the us") ||
+      lower.includes("united states") ||
+      lower.includes("north america")
+    ) {
+      return "us_only";
+    }
     if (lower.includes("apac") || lower.includes("asia")) return "apac";
     if (lower.includes("eu only") || lower.includes("europe")) return "eu_only";
     return "worldwide";
+  }
+
+  private extractUsLocation(text: string, isRemote: boolean, remoteScope: string): string {
+    const cityStateMatches = text.matchAll(/\b([A-Z][a-zA-Z.'-]+(?:[ \t]+[A-Z][a-zA-Z.'-]+){0,2}),[ \t]*([A-Z]{2})\b/g);
+    for (const match of cityStateMatches) {
+      const city = match[1]?.trim();
+      const stateCode = match[2]?.trim();
+      if (!city || !stateCode) continue;
+      if (getUsState(stateCode)) {
+        return isRemote ? `Remote (${city}, ${stateCode})` : `${city}, ${stateCode}`;
+      }
+    }
+    if (isRemote) {
+      if (remoteScope === "us_only") return "Remote (US)";
+      if (remoteScope === "us_midwest") return "Remote (US Midwest)";
+      return "Remote";
+    }
+    return "On-site / Hybrid";
   }
 
   private detectEmploymentType(text: string): EmploymentType {
@@ -563,25 +599,64 @@ export class JobExtractorAgent extends BaseAgent {
     return "full-time";
   }
 
+  private parseAnnualUsdAmount(raw: string, suffixK: boolean): number | null {
+    const parsed = parseInt(raw.replace(/,/g, ""), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    if (suffixK) return parsed * 1000;
+    return parsed < 1000 ? parsed * 1000 : parsed;
+  }
+
   private extractSalary(text: string): {
     salaryMin?: number;
     salaryMax?: number;
     salaryCurrency?: string;
   } {
-    // Look for $XXk - $YYk or $XX,000 - $YY,000
-    const dollarMatch = text.match(
-      /\$([0-9]{2,3})(?:,([0-9]{3}))?\s*(?:k|K)?\s*[-–—to]+\s*\$([0-9]{2,3})(?:,([0-9]{3}))?\s*(?:k|K)?/
+    // 1. Hourly USD range (e.g. "$80 - $100/hr", "$75-$95 per hour")
+    const hourlyRangeMatch = text.match(
+      /\$([0-9]{2,3}(?:\.[0-9]{1,2})?)\s*(?:\/\s*h(?:ou)?r|per\s+hour)?\s*[-–—to]+\s*\$([0-9]{2,3}(?:\.[0-9]{1,2})?)\s*(?:\/\s*h(?:ou)?r|per\s+hour)/i
     );
+    if (hourlyRangeMatch?.[1] && hourlyRangeMatch[2]) {
+      const minRate = parseFloat(hourlyRangeMatch[1]);
+      const maxRate = parseFloat(hourlyRangeMatch[2]);
+      if (minRate >= 15 && maxRate >= minRate && maxRate <= 500) {
+        return {
+          salaryMin: Math.round(minRate * 2080),
+          salaryMax: Math.round(maxRate * 2080),
+          salaryCurrency: "USD",
+        };
+      }
+    }
 
-    if (dollarMatch) {
-      const minRaw = dollarMatch[1];
-      const maxRaw = dollarMatch[3];
-      if (minRaw && maxRaw) {
-        let min = parseInt(minRaw, 10);
-        let max = parseInt(maxRaw, 10);
-        if (min < 1000) min *= 1000;
-        if (max < 1000) max *= 1000;
+    // 2. Single hourly USD rate (e.g. "$90/hr")
+    const hourlySingleMatch = text.match(
+      /\$([0-9]{2,3}(?:\.[0-9]{1,2})?)\s*(?:\/\s*h(?:ou)?r|per\s+hour)\b/i
+    );
+    if (hourlySingleMatch?.[1]) {
+      const rate = parseFloat(hourlySingleMatch[1]);
+      if (rate >= 15 && rate <= 500) {
+        const annual = Math.round(rate * 2080);
+        return { salaryMin: annual, salaryMax: annual, salaryCurrency: "USD" };
+      }
+    }
+
+    // 3. Annual USD range (e.g. "$145,500 - $185,000", "$120k - $160k")
+    const dollarMatch = text.match(
+      /\$([0-9]{2,3}(?:,[0-9]{3})+|[0-9]{2,3})\s*([kK])?\s*[-–—to]+\s*\$([0-9]{2,3}(?:,[0-9]{3})+|[0-9]{2,3})\s*([kK])?/
+    );
+    if (dollarMatch?.[1] && dollarMatch[3]) {
+      const min = this.parseAnnualUsdAmount(dollarMatch[1], Boolean(dollarMatch[2]));
+      const max = this.parseAnnualUsdAmount(dollarMatch[3], Boolean(dollarMatch[4]));
+      if (min !== null && max !== null && min >= 20_000 && max >= min && max <= 2_000_000) {
         return { salaryMin: min, salaryMax: max, salaryCurrency: "USD" };
+      }
+    }
+
+    // 4. Single annual USD floor (e.g. "$150k+", "$140,000+")
+    const singleAnnualMatch = text.match(/\$([0-9]{2,3}(?:,[0-9]{3})+|[0-9]{2,3})\s*([kK])?\+?/);
+    if (singleAnnualMatch?.[1] && (singleAnnualMatch[2] || singleAnnualMatch[1].includes(","))) {
+      const min = this.parseAnnualUsdAmount(singleAnnualMatch[1], Boolean(singleAnnualMatch[2]));
+      if (min !== null && min >= 25_000 && min <= 2_000_000) {
+        return { salaryMin: min, salaryCurrency: "USD" };
       }
     }
 

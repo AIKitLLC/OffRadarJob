@@ -23,7 +23,7 @@ function parseArgs(): HarvesterCliOptions {
   const args = process.argv.slice(2);
   let source: "hn" | "github" | "all" = "all";
   let limit = 20;
-  let endpoint = "https://off-radar-jobs.tuannx87.workers.dev";
+  let endpoint = "https://jobs.ai-kit.net";
   let token = process.env.OFFRADAR_ADMIN_TOKEN ?? "";
   let previewOnly = false;
 

@@ -125,6 +125,16 @@ export class SavedJobFilterRepository {
   }
 }
 
+const BATCH_QUERY_CHUNK_SIZE = 80;
+
+function chunkValues<T>(items: readonly T[], size = BATCH_QUERY_CHUNK_SIZE): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 export class JobQualityDecisionRepository {
   constructor(private readonly db: ID1Database) {}
 
@@ -139,6 +149,37 @@ export class JobQualityDecisionRepository {
     } catch {
       return null;
     }
+  }
+
+  public async findForJobs(
+    jobIds: readonly string[],
+    rulesetVersion: string
+  ): Promise<Map<string, JobQualityDecision>> {
+    const uniqueIds = [...new Set(jobIds.filter(Boolean))];
+    const decisions = new Map<string, JobQualityDecision>();
+    if (uniqueIds.length === 0) return decisions;
+
+    for (const chunk of chunkValues(uniqueIds)) {
+      const placeholders = chunk.map(() => "?").join(", ");
+      const result = await this.db
+        .prepare(`SELECT job_id, content_hash, record_json FROM job_quality_decisions WHERE ruleset_version = ? AND job_id IN (${placeholders})`)
+        .bind(rulesetVersion, ...chunk)
+        .all<Record<string, unknown>>();
+      for (const row of result.results ?? []) {
+        if (typeof row["record_json"] !== "string") continue;
+        try {
+          const parsed = JSON.parse(row["record_json"]) as JobQualityDecision;
+          const jobId = String(row["job_id"] ?? parsed.jobId ?? "");
+          const contentHash = String(row["content_hash"] ?? parsed.contentHash ?? "");
+          if (jobId && contentHash) {
+            decisions.set(`${jobId}:${contentHash}`, parsed);
+          }
+        } catch {
+          // Ignore malformed persisted decision JSON
+        }
+      }
+    }
+    return decisions;
   }
 
   public async deleteVersion(jobId: string, contentHash: string, rulesetVersion: string): Promise<void> {
@@ -185,6 +226,24 @@ export class MatchAlertRepository {
   public async listKeysForJob(jobId: string): Promise<string[]> {
     const result = await this.db.prepare(`SELECT alert_key FROM match_alerts WHERE job_id = ?`).bind(jobId).all<Record<string, unknown>>();
     return (result.results ?? []).map((row) => String(row["alert_key"]));
+  }
+
+  public async listKeysForJobs(jobIds: readonly string[]): Promise<Set<string>> {
+    const uniqueIds = [...new Set(jobIds.filter(Boolean))];
+    const keys = new Set<string>();
+    if (uniqueIds.length === 0) return keys;
+
+    for (const chunk of chunkValues(uniqueIds)) {
+      const placeholders = chunk.map(() => "?").join(", ");
+      const result = await this.db
+        .prepare(`SELECT alert_key FROM match_alerts WHERE job_id IN (${placeholders})`)
+        .bind(...chunk)
+        .all<Record<string, unknown>>();
+      for (const row of result.results ?? []) {
+        if (row["alert_key"] != null) keys.add(String(row["alert_key"]));
+      }
+    }
+    return keys;
   }
 
   public async insertIfAbsent(alert: StoredMatchAlert): Promise<"created" | "duplicate"> {

@@ -163,6 +163,13 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: rows as T[], success: true };
     }
 
+    if (q.includes("FROM companies") && q.includes("WHERE id IN (")) {
+      const idSet = new Set(this.boundValues.map((id) => String(id)));
+      let rows = Array.from(this.db.tables.get("companies")!.values()).filter((r) => idSet.has(String(r["id"])));
+      if (sourcePolicyApplied(q)) rows = rows.filter(visibleCompany);
+      return { results: rows as T[], success: true };
+    }
+
     if (q.includes("FROM companies")) {
       let rows = Array.from(this.db.tables.get("companies")!.values());
       if (sourcePolicyApplied(q)) rows = rows.filter(visibleCompany);
@@ -397,7 +404,14 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         rows = rows.filter((r) => isMidwestRow(r));
       }
       if (wherePart.includes("j.is_remote = 1")) {
-        rows = rows.filter((r) => Number(r["is_remote"] ?? 0) === 1);
+        rows = rows.filter((r) => {
+          if (Number(r["is_remote"] ?? 0) !== 1) return false;
+          if (wherePart.includes("NOT IN ('vietnam_only', 'eu_only', 'apac')")) {
+            const scope = String(r["remote_scope"] ?? "worldwide").toLowerCase();
+            if (scope === "vietnam_only" || scope === "eu_only" || scope === "apac") return false;
+          }
+          return true;
+        });
       }
       if (q.includes("COALESCE(j.location, c.location_hint)")) {
         const stateVals = this.boundValues.filter((v) => typeof v === "string" && !String(v).includes("%"));
@@ -488,6 +502,10 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
         });
       } else {
         rows.sort((a, b) => Number(b["first_seen_at"] ?? 0) - Number(a["first_seen_at"] ?? 0));
+      }
+      const selectClause = (q.split(/\bFROM\b/i)[0] ?? "").toLowerCase();
+      if (!selectClause.includes("*") && !selectClause.includes("raw_content")) {
+        rows = rows.map(({ raw_content: _omitted, ...rest }) => rest);
       }
       return { results: rows as T[], success: true };
     }
@@ -825,6 +843,15 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
       return { results: rows as T[], success: true };
     }
 
+    if (q.includes("FROM job_quality_decisions") && q.includes("ruleset_version = ?") && q.includes("job_id IN (")) {
+      const [rulesetVersion, ...jobIds] = this.boundValues;
+      const idSet = new Set(jobIds.map((id) => String(id)));
+      const rows = Array.from(this.db.tables.get("job_quality_decisions")!.values()).filter(
+        (row) => row["ruleset_version"] === String(rulesetVersion) && idSet.has(String(row["job_id"]))
+      );
+      return { results: rows as T[], success: true };
+    }
+
     if (q.includes("FROM job_quality_decisions") && q.includes("COUNT(*)")) {
       const count = this.db.tables.get("job_quality_decisions")!.size;
       return { results: [{ count } as T], success: true };
@@ -833,6 +860,12 @@ class InMemoryPreparedStatement implements ID1PreparedStatement {
     if (q.includes("FROM match_alerts") && q.includes("alert_key = ?")) {
       const alertKey = String(this.boundValues[0]);
       const rows = Array.from(this.db.tables.get("match_alerts")!.values()).filter((row) => row["alert_key"] === alertKey);
+      return { results: rows as T[], success: true };
+    }
+
+    if (q.includes("FROM match_alerts") && q.includes("job_id IN (")) {
+      const idSet = new Set(this.boundValues.map((id) => String(id)));
+      const rows = Array.from(this.db.tables.get("match_alerts")!.values()).filter((row) => idSet.has(String(row["job_id"])));
       return { results: rows as T[], success: true };
     }
 

@@ -54,7 +54,7 @@ async function main() {
   // 3. Trigger Remote Weekly Scan via Worker API
   console.log("\n[3/3] Triggering Weekly Scan via Live Worker API...");
   try {
-    const apiRes = await fetch("https://off-radar-jobs.tuannx87.workers.dev/api/admin/tasks/weekly-sweep", {
+    const apiRes = await fetch("https://jobs.ai-kit.net/api/admin/tasks/weekly-sweep", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

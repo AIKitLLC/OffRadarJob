@@ -54,11 +54,35 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
     </div>`
     : "";
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en-US">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OffRadarJob — Micro-Company Job Gathering Platform (US-Midwest Focus)</title>
+  <title>OffRadarJob — US Micro-Company &amp; Startup Tech Jobs (All 50 States + Midwest Priority)</title>
+  <meta name="description" content="Discover direct-hire US software engineering, AI, and startup roles across all 50 US states, DC, and remote-US teams — with USD salary transparency, work authorization signals, and ATS resume tailoring.">
+  <link rel="canonical" href="https://jobs.ai-kit.net/">
+  <meta property="og:title" content="OffRadarJob — US Boutique Startup &amp; Tech Jobs">
+  <meta property="og:description" content="Direct-hire US tech roles across all 50 states, DC, and remote-US startups with USD compensation and US ATS resume optimization.">
+  <meta property="og:url" content="https://jobs.ai-kit.net/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="en_US">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="OffRadarJob — US Micro-Company Tech Jobs">
+  <meta name="twitter:description" content="Off-radar US startup &amp; Midwest engineering roles across all 50 states + DC.">
+  <script type="application/ld+json">${JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "OffRadarJob",
+    url: "https://jobs.ai-kit.net/",
+    inLanguage: "en-US",
+    description: "Direct-hire US tech job board covering all 50 US states, Washington DC, and remote-US micro-companies.",
+    potentialAction: {
+      "@type": "SearchAction",
+      target: "https://jobs.ai-kit.net/?search={search_term_string}",
+      "query-input": "required name=search_term_string",
+    },
+  })}</script>
+  <script id="jobs-jsonld" type="application/ld+json">{}</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -317,7 +341,7 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
       align-items: center;
       gap: 8px;
       background: rgba(15, 23, 42, 0.7);
-      border: 1px solid var(--border);
+      border: 1px solid var(--card-border);
       padding: 6px 14px;
       border-radius: 20px;
       font-size: 12px;
@@ -954,7 +978,7 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
       </div>
       <div class="filter-controls">
         <input type="text" id="search-input" placeholder="🔍 Search roles, tech, or companies..." class="region-select" style="min-width: 250px;" oninput="onSearchInput()" />
-        <button type="button" id="quick-newgrad-btn" class="region-select" onclick="toggleNewGradFilter()" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">🎓 New Grad 2025/2026</button>
+        <button type="button" id="quick-newgrad-btn" class="region-select" onclick="toggleNewGradFilter()" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">🎓 New Grad 2026/2027</button>
         <select id="grade-filter" class="region-select" onchange="applyFilters()">
           <option value="all">🎓 All Grades / Seniority</option>
           <option value="founding">🚀 Founding / Principal</option>
@@ -1003,44 +1027,66 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
         </select>
         <select id="state-filter" class="region-select" onchange="applyFilters()">
           <option value="all">🇺🇸 All States (50 States & DC)</option>
-          <optgroup label="📍 US-Midwest">
+          <optgroup label="📍 US-Midwest (12)">
             <option value="IL">Illinois (IL - Chicago)</option>
             <option value="IN">Indiana (IN - Indianapolis, Carmel)</option>
             <option value="WI">Wisconsin (WI - Madison, Milwaukee)</option>
-            <option value="MN">Minnesota (MN - Minneapolis)</option>
+            <option value="MN">Minnesota (MN - Minneapolis, St. Paul)</option>
             <option value="OH">Ohio (OH - Columbus, Cincinnati)</option>
             <option value="MI">Michigan (MI - Detroit, Ann Arbor)</option>
             <option value="MO">Missouri (MO - St. Louis, Kansas City)</option>
             <option value="IA">Iowa (IA - Des Moines)</option>
-            <option value="KS">Kansas (KS)</option>
-            <option value="NE">Nebraska (NE - Omaha)</option>
+            <option value="KS">Kansas (KS - Wichita, Overland Park)</option>
+            <option value="NE">Nebraska (NE - Omaha, Lincoln)</option>
+            <option value="ND">North Dakota (ND - Fargo)</option>
+            <option value="SD">South Dakota (SD - Sioux Falls)</option>
           </optgroup>
-          <optgroup label="🌲 US-West">
+          <optgroup label="🌲 US-West (6)">
             <option value="CA">California (CA - SF Bay, Silicon Valley, LA)</option>
             <option value="WA">Washington (WA - Seattle, Bellevue)</option>
             <option value="OR">Oregon (OR - Portland)</option>
-            <option value="NV">Nevada (NV - Las Vegas)</option>
-            <option value="CO">Colorado (CO - Denver, Boulder)</option>
+            <option value="NV">Nevada (NV - Las Vegas, Reno)</option>
+            <option value="HI">Hawaii (HI - Honolulu)</option>
+            <option value="AK">Alaska (AK - Anchorage)</option>
           </optgroup>
-          <optgroup label="🗽 US-Northeast">
+          <optgroup label="🗽 US-Northeast (9)">
             <option value="NY">New York (NY - NYC, Brooklyn)</option>
             <option value="MA">Massachusetts (MA - Boston, Cambridge)</option>
             <option value="PA">Pennsylvania (PA - Philadelphia, Pittsburgh)</option>
-            <option value="NJ">New Jersey (NJ)</option>
-            <option value="CT">Connecticut (CT)</option>
+            <option value="NJ">New Jersey (NJ - Hoboken, Jersey City)</option>
+            <option value="CT">Connecticut (CT - Stamford, New Haven)</option>
+            <option value="RI">Rhode Island (RI - Providence)</option>
+            <option value="VT">Vermont (VT - Burlington)</option>
+            <option value="NH">New Hampshire (NH - Manchester)</option>
+            <option value="ME">Maine (ME - Portland)</option>
           </optgroup>
-          <optgroup label="☀️ US-South">
+          <optgroup label="☀️ US-South (16 + DC)">
             <option value="TX">Texas (TX - Austin, Dallas, Houston)</option>
             <option value="FL">Florida (FL - Miami, Tampa, Orlando)</option>
             <option value="GA">Georgia (GA - Atlanta)</option>
             <option value="NC">North Carolina (NC - Raleigh, Charlotte)</option>
             <option value="VA">Virginia (VA - Arlington, Richmond)</option>
+            <option value="DC">Washington, D.C. (DC)</option>
+            <option value="MD">Maryland (MD - Baltimore, Bethesda)</option>
             <option value="TN">Tennessee (TN - Nashville)</option>
+            <option value="SC">South Carolina (SC - Charleston)</option>
+            <option value="AL">Alabama (AL - Birmingham, Huntsville)</option>
+            <option value="LA">Louisiana (LA - New Orleans)</option>
+            <option value="KY">Kentucky (KY - Louisville)</option>
+            <option value="OK">Oklahoma (OK - Tulsa, OKC)</option>
+            <option value="AR">Arkansas (AR - Bentonville)</option>
+            <option value="MS">Mississippi (MS - Jackson)</option>
+            <option value="WV">West Virginia (WV - Morgantown)</option>
+            <option value="DE">Delaware (DE - Wilmington)</option>
           </optgroup>
-          <optgroup label="🏔️ US-Mountain">
+          <optgroup label="🏔️ US-Mountain (7)">
+            <option value="CO">Colorado (CO - Denver, Boulder)</option>
             <option value="UT">Utah (UT - Salt Lake City, Lehi)</option>
             <option value="AZ">Arizona (AZ - Phoenix, Scottsdale)</option>
             <option value="ID">Idaho (ID - Boise)</option>
+            <option value="NM">New Mexico (NM - Albuquerque)</option>
+            <option value="MT">Montana (MT - Bozeman)</option>
+            <option value="WY">Wyoming (WY - Cheyenne)</option>
           </optgroup>
         </select>
       </div>
@@ -1335,7 +1381,7 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
         <label style="font-size: 12px; font-weight: 600; color: #cbd5e1;">Your MCP Endpoint (HTTP POST / SSE):</label>
         <div class="code-snippet" id="mcp-endpoint-box">
           <button class="copy-chip-btn" onclick="copySnippet('mcp-endpoint-val')">Copy</button>
-          <span id="mcp-endpoint-val">https://off-radar-jobs.tuannx87.workers.dev/mcp</span>
+          <span id="mcp-endpoint-val">https://jobs.ai-kit.net/mcp</span>
         </div>
       </div>
 
@@ -1743,21 +1789,91 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
         .replace(/'/g, '&#039;');
     }
 
+    function safeHref(rawUrl) {
+      if (!rawUrl || typeof rawUrl !== 'string') return '#';
+      const trimmed = rawUrl.trim();
+      if (/^(?:https?:|mailto:)/i.test(trimmed)) return trimmed;
+      return '#';
+    }
+
+    function formatSalaryBadge(j) {
+      const currency = escapeHtml(j.salaryCurrency || 'USD');
+      const hasMin = typeof j.salaryMin === 'number' && Number.isFinite(j.salaryMin) && j.salaryMin > 0;
+      const hasMax = typeof j.salaryMax === 'number' && Number.isFinite(j.salaryMax) && j.salaryMax > 0;
+      if (hasMin && hasMax && j.salaryMax >= j.salaryMin) {
+        return '<span class="tag tag-salary">$' + j.salaryMin.toLocaleString('en-US') + ' - $' + j.salaryMax.toLocaleString('en-US') + ' ' + currency + '</span>';
+      }
+      if (hasMin) {
+        return '<span class="tag tag-salary">$' + j.salaryMin.toLocaleString('en-US') + '+ ' + currency + '</span>';
+      }
+      if (hasMax) {
+        return '<span class="tag tag-salary">Up to $' + j.salaryMax.toLocaleString('en-US') + ' ' + currency + '</span>';
+      }
+      return '';
+    }
+
+    function updateJobsJsonLd(jobs) {
+      const script = document.getElementById('jobs-jsonld');
+      if (!script) return;
+      if (!Array.isArray(jobs) || jobs.length === 0) {
+        script.textContent = '{}';
+        return;
+      }
+      const itemList = jobs.slice(0, 10).map((j, idx) => {
+        const companyName = j.companyName || (j.companyId ? j.companyId.replace('comp_', '').replace(/_/g, '.') : 'OffRadar Employer');
+        const postedDate = j.firstSeenAt ? new Date(j.firstSeenAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+        const posting = {
+          '@type': 'JobPosting',
+          title: j.title,
+          description: j.descriptionSummary || j.title,
+          datePosted: postedDate,
+          employmentType: (j.employmentType || 'FULL_TIME').toUpperCase().replace('-', '_'),
+          hiringOrganization: {
+            '@type': 'Organization',
+            name: companyName,
+          },
+          jobLocationType: j.isRemote ? 'TELECOMMUTE' : undefined,
+          jobLocation: {
+            '@type': 'Place',
+            address: {
+              '@type': 'PostalAddress',
+              addressLocality: j.location || (j.isRemote ? 'Remote US' : 'United States'),
+              addressCountry: 'US',
+            },
+          },
+          url: safeHref(j.applyType === 'email' ? ('mailto:' + j.applyTarget) : j.applyTarget),
+        };
+        if (typeof j.salaryMin === 'number' && j.salaryMin > 0) {
+          posting.baseSalary = {
+            '@type': 'MonetaryAmount',
+            currency: j.salaryCurrency || 'USD',
+            value: {
+              '@type': 'QuantitativeValue',
+              minValue: j.salaryMin,
+              maxValue: (typeof j.salaryMax === 'number' && j.salaryMax >= j.salaryMin) ? j.salaryMax : j.salaryMin,
+              unitText: 'YEAR',
+            },
+          };
+        }
+        return {
+          '@type': 'ListItem',
+          position: idx + 1,
+          item: posting,
+        };
+      });
+      script.textContent = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        itemListElement: itemList,
+      });
+    }
+
     let currentJobsPage = 1;
     let currentCompsPage = 1;
     let jobsPagination = { page: 1, limit: 30, total: 0, totalPages: 1 };
     let compsPagination = { page: 1, limit: 30, total: 0, totalPages: 1 };
     let searchDebounceTimer = null;
     let companiesLoaded = false;
-
-    async function loadData() {
-      try {
-        fetchStats();
-        await fetchJobs(1);
-      } catch (err) {
-        console.error('Error in loadData:', err);
-      }
-    }
 
     async function fetchStats() {
       try {
@@ -1879,9 +1995,10 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
         };
 
         renderJobsList(jobs);
+        updateJobsJsonLd(jobs);
         renderPagination('jobs-pagination', jobsPagination, 'changeJobsPage');
       } catch (err) {
-        container.innerHTML = '<p style="color: var(--danger); padding: 32px; text-align: center;">Error loading jobs: ' + err.message + '</p>';
+        container.innerHTML = '<p style="color: var(--danger); padding: 32px; text-align: center;">Error loading jobs: ' + escapeHtml(err.message) + '</p>';
       }
     }
 
@@ -1912,31 +2029,36 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
 
       container.innerHTML = jobs.map(j => {
         const isMidwest = j.isMidwest || j.usRegion === 'midwest' || (j.remoteScope && j.remoteScope.toLowerCase().includes('midwest')) || (j.location && /\b(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Midwest)\b/i.test(j.location));
+        const companyHref = safeHref(j.companyWebsite || ('https://' + (j.companyId || '').replace('comp_', '').replace(/_/g, '.')));
+        const applyHref = safeHref(j.applyType === 'email' ? 'mailto:' + j.applyTarget : j.applyTarget);
+        const companyDisplay = escapeHtml(j.companyName || (j.companyId || '').replace('comp_', '').replace(/_/g, '.'));
+        const verifiedTimestamp = j.lastVerifiedAt || j.lastSeenAt || Date.now();
+        const verifiedDate = new Date(verifiedTimestamp).toISOString().slice(0, 10);
         return \`
           <div class="job-card \${isMidwest ? 'job-card-midwest' : ''}">
             <div class="job-main">
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                <h3>\${j.title}</h3>
+                <h3>\${escapeHtml(j.title)}</h3>
                 \${getGradeBadge(j.seniorityLevel)}
                 \${getTechBadge(j.techCategory)}
                 \${getRegionBadge(j)}
               </div>
-              <a class="job-company" href="\${j.companyWebsite || ('https://' + j.companyId.replace('comp_', '').replace(/_/g, '.'))}" target="_blank">🏢 \${j.companyName || j.companyId.replace('comp_', '').replace(/_/g, '.')} ↗</a>
-              <p class="job-desc">\${j.descriptionSummary || 'Direct tech opening from micro-company career portal.'}</p>
+              <a class="job-company" href="\${escapeHtml(companyHref)}" target="_blank" rel="noopener noreferrer">🏢 \${companyDisplay} ↗</a>
+              <p class="job-desc">\${escapeHtml(j.descriptionSummary || 'Direct tech opening from micro-company career portal.')}</p>
               <div class="job-tags">
-                <span class="tag tag-remote">🌐 \${j.isRemote ? 'Remote (' + j.remoteScope + ')' : j.location}</span>
-                <span class="tag">\${j.employmentType}</span>
-                \${j.salaryMin ? \`<span class="tag tag-salary">\\$\${j.salaryMin.toLocaleString()} - \\$\${j.salaryMax.toLocaleString()} \${j.salaryCurrency || 'USD'}</span>\` : ''}
-                \${(j.skills || []).map(s => \`<span class="tag">\${s}</span>\`).join('')}
-                <span class="tag tag-verified" title="Apply link last verified / last seen by the crawler">✓ Last verified \${new Date(j.lastVerifiedAt || j.lastSeenAt).toISOString().slice(0, 10)}</span>
+                <span class="tag tag-remote">🌐 \${j.isRemote ? ('Remote (' + escapeHtml(j.remoteScope || 'US') + ')') : escapeHtml(j.location || 'United States')}</span>
+                <span class="tag">\${escapeHtml(j.employmentType || 'full-time')}</span>
+                \${formatSalaryBadge(j)}
+                \${(j.skills || []).map(s => \`<span class="tag">\${escapeHtml(s)}</span>\`).join('')}
+                <span class="tag tag-verified" title="Apply link last verified / last seen by the crawler">✓ Last verified \${verifiedDate}</span>
               </div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
-              <a class="apply-btn" href="\${j.applyType === 'email' ? 'mailto:' + j.applyTarget : j.applyTarget}" target="_blank">
-                Apply via \${j.applyType.toUpperCase()} ↗
+              <a class="apply-btn" href="\${escapeHtml(applyHref)}" target="_blank" rel="noopener noreferrer">
+                Apply via \${escapeHtml((j.applyType || 'url').toUpperCase())} ↗
               </a>
-              <button class="tailor-btn" onclick="openCvTailorModal('\${j.id}', '\${encodeURIComponent(j.title || '')}', '\${encodeURIComponent(j.companyName || j.companyId || '')}', '\${encodeURIComponent((j.skills || []).join(','))}')">
-                ✨ Tailor CV
+              <button class="tailor-btn" onclick="openCvTailorModal('\${escapeHtml(j.id)}', '\${encodeURIComponent(j.title || '')}', '\${encodeURIComponent(j.companyName || j.companyId || '')}', '\${encodeURIComponent((j.skills || []).join(','))}')">
+                ✨ Tailor CV / Resume
               </button>
             </div>
           </div>
@@ -1978,7 +2100,7 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
         renderCompaniesList(comps);
         renderPagination('companies-pagination', compsPagination, 'changeCompsPage');
       } catch (err) {
-        container.innerHTML = '<p style="color: var(--danger); padding: 32px; text-align: center; grid-column: 1/-1;">Error loading companies: ' + err.message + '</p>';
+        container.innerHTML = '<p style="color: var(--danger); padding: 32px; text-align: center; grid-column: 1/-1;">Error loading companies: ' + escapeHtml(err.message) + '</p>';
       }
     }
 
@@ -1989,8 +2111,8 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
 
     function getCompanyFundingBadge(c) {
       const stage = c.fundingStage;
-      const funding = c.totalFunding;
-      const val = c.valuationEstimate;
+      const funding = c.totalFunding ? escapeHtml(c.totalFunding) : '';
+      const val = c.valuationEstimate ? escapeHtml(c.valuationEstimate) : '';
       if (!stage && !funding && !val) return '';
 
       let label = '';
@@ -2030,7 +2152,7 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
       }
       if (!depts || Object.keys(depts).length === 0) {
         if (c.primaryDepartment) {
-          return '<div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">🏢 Dominant Hiring: <strong style="color: #38bdf8;">' + c.primaryDepartment + '</strong></div>';
+          return '<div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">🏢 Dominant Hiring: <strong style="color: #38bdf8;">' + escapeHtml(c.primaryDepartment) + '</strong></div>';
         }
         return '';
       }
@@ -2049,21 +2171,21 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
       const entries = Object.entries(depts).sort((a, b) => b[1].percentage - a[1].percentage);
       const segments = entries.map(([dept, m]) => {
         const color = deptColors[dept] || '#38bdf8';
-        return '<div style="width: ' + m.percentage + '%; background-color: ' + color + '; height: 6px;" title="' + dept + ': ' + m.percentage + '% (' + m.count + ' roles)"></div>';
+        return '<div style="width: ' + m.percentage + '%; background-color: ' + color + '; height: 6px;" title="' + escapeHtml(dept) + ': ' + m.percentage + '% (' + m.count + ' roles)"></div>';
       }).join('');
 
       const badges = entries.slice(0, 3).map(([dept, m]) => {
         const color = deptColors[dept] || '#38bdf8';
         return '<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #cbd5e1;">' +
           '<span style="width: 6px; height: 6px; border-radius: 50%; background-color: ' + color + ';"></span>' +
-          dept + ': <strong style="color: #fff;">' + m.percentage + '%</strong> (' + m.count + ')' +
+          escapeHtml(dept) + ': <strong style="color: #fff;">' + m.percentage + '%</strong> (' + m.count + ')' +
         '</span>';
       }).join('');
 
       return '<div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06);">' +
         '<div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px; display: flex; justify-content: space-between;">' +
         '<span>Hiring Distribution</span>' +
-        (c.primaryDepartment ? '<span style="color: #38bdf8; font-weight: 600;">Main: ' + c.primaryDepartment + '</span>' : '') +
+        (c.primaryDepartment ? '<span style="color: #38bdf8; font-weight: 600;">Main: ' + escapeHtml(c.primaryDepartment) + '</span>' : '') +
         '</div>' +
         '<div style="display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: #1e293b; margin-bottom: 6px;">' +
         segments +
@@ -2078,17 +2200,17 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
       const reg = c.usRegion || (c.isMidwest ? 'midwest' : 'other');
       switch(reg) {
         case 'midwest':
-          return '<span class="tag tag-midwest">📍 US-Midwest (' + (c.locationHint || 'Midwest') + ')</span>';
+          return '<span class="tag tag-midwest">📍 US-Midwest (' + escapeHtml(c.locationHint || 'Midwest') + ')</span>';
         case 'west':
-          return '<span class="tag tag-west">🌲 US-West (' + (c.locationHint || 'West') + ')</span>';
+          return '<span class="tag tag-west">🌲 US-West (' + escapeHtml(c.locationHint || 'West') + ')</span>';
         case 'northeast':
-          return '<span class="tag tag-northeast">🗽 US-Northeast (' + (c.locationHint || 'Northeast') + ')</span>';
+          return '<span class="tag tag-northeast">🗽 US-Northeast (' + escapeHtml(c.locationHint || 'Northeast') + ')</span>';
         case 'south':
-          return '<span class="tag tag-south">☀️ US-South (' + (c.locationHint || 'South') + ')</span>';
+          return '<span class="tag tag-south">☀️ US-South (' + escapeHtml(c.locationHint || 'South') + ')</span>';
         case 'mountain':
-          return '<span class="tag tag-mountain">🏔️ US-Mountain (' + (c.locationHint || 'Mountain') + ')</span>';
+          return '<span class="tag tag-mountain">🏔️ US-Mountain (' + escapeHtml(c.locationHint || 'Mountain') + ')</span>';
         default:
-          return c.locationHint ? '<span class="tag">🌐 ' + c.locationHint + '</span>' : '';
+          return c.locationHint ? '<span class="tag">🌐 ' + escapeHtml(c.locationHint) + '</span>' : '';
       }
     }
 
@@ -2103,25 +2225,26 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
         const isMidwestComp = c.isMidwest || c.usRegion === 'midwest' || (c.locationHint && /\b(IL|IN|WI|MN|OH|MI|MO|IA|KS|NE|ND|SD|Chicago|Indianapolis|Minneapolis|Madison|Cincinnati|Columbus|Cleveland|Detroit|Ann Arbor|Midwest)\b/i.test(c.locationHint));
         const fundingBadge = getCompanyFundingBadge(c);
         const deptWeightsHtml = renderDepartmentWeightsBar(c);
+        const siteHref = safeHref(c.websiteUrl);
 
         return \`
         <div class="company-card \${isMidwestComp ? 'company-card-midwest' : ''}">
           <div class="company-header">
-            <a class="company-name" href="\${c.websiteUrl}" target="_blank">\${c.name} ↗</a>
+            <a class="company-name" href="\${escapeHtml(siteHref)}" target="_blank" rel="noopener noreferrer">\${escapeHtml(c.name)} ↗</a>
             <div style="display: flex; gap: 6px; align-items: center;">
               \${c.companyTier === 'tier_1' ? '<span class="company-badge" style="background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.3);">⭐ Tier 1</span>' : ''}
-              <span class="company-badge">\${c.headcountEstimate || '1-20'} team</span>
+              <span class="company-badge">\${escapeHtml(c.headcountEstimate || '1-20')} team</span>
             </div>
           </div>
-          <p class="company-desc">\${c.description || c.tagline || 'Independent tech company.'}</p>
+          <p class="company-desc">\${escapeHtml(c.description || c.tagline || 'Independent tech company.')}</p>
           <div class="job-tags">
             \${fundingBadge}
             \${getCompanyRegionBadge(c)}
-            \${(c.techStack || []).slice(0, 4).map(s => \`<span class="tag">\${s}</span>\`).join('')}
+            \${(c.techStack || []).slice(0, 4).map(s => \`<span class="tag">\${escapeHtml(s)}</span>\`).join('')}
           </div>
           \${deptWeightsHtml}
           <div style="font-size: 11px; color: var(--text-muted); margin-top: auto; padding-top: 6px;">
-            \${c.contactEmail ? '📧 ' + c.contactEmail : ''} \${c.locationHint ? '• 🌐 ' + c.locationHint : ''}
+            \${c.contactEmail ? '📧 ' + escapeHtml(c.contactEmail) : ''} \${c.locationHint ? '• 🌐 ' + escapeHtml(c.locationHint) : ''}
           </div>
         </div>
       \`;
@@ -2188,13 +2311,13 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
         return;
       }
       container.innerHTML = logs.map(l => {
-        const time = new Date(l.createdAt).toLocaleTimeString();
+        const time = new Date(l.createdAt).toLocaleTimeString('en-US');
         return \`
           <div class="log-row">
-            <span class="log-time">[\${time}]</span>
-            <span class="log-agent">\${l.agentName}</span>
-            <span class="log-status-\${l.status}">[\${l.status.toUpperCase()}]</span>
-            <span class="log-msg">\${l.message} (\${l.durationMs}ms)</span>
+            <span class="log-time">[\${escapeHtml(time)}]</span>
+            <span class="log-agent">\${escapeHtml(l.agentName)}</span>
+            <span class="log-status-\${escapeHtml(l.status)}">[\${escapeHtml((l.status || '').toUpperCase())}]</span>
+            <span class="log-msg">\${escapeHtml(l.message)} (\${Number(l.durationMs) || 0}ms)</span>
           </div>
         \`;
       }).join('');
@@ -3719,7 +3842,10 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
     async function loadData() {
       try {
         checkAuth();
-        fetchStats();
+        const statJobsEl = document.getElementById('stat-jobs');
+        if (!statJobsEl || !statJobsEl.innerText.trim() || statJobsEl.innerText.trim() === '—') {
+          fetchStats();
+        }
 
         // Handle URL parameters (e.g. ?grade=new_grad or ?region=midwest)
         const urlParams = new URLSearchParams(window.location.search);
@@ -3748,8 +3874,10 @@ export function renderDashboardHtml(stats?: PublicDashboardStats | null, options
     }
 
     loadData();
-    // Poll stats every 30s instead of slamming D1 with 2500 jobs every 5s
-    setInterval(fetchStats, 30000);
+    // Poll stats every 30s only when tab is visible instead of slamming D1
+    setInterval(() => {
+      if (!document.hidden) fetchStats();
+    }, 30000);
   </script>
 </body>
 </html>`;

@@ -21,7 +21,7 @@ function parseArgs(): FeederOptions {
   let durationHours = 2;
   let intervalSeconds = 15;
   let batchSize = 3;
-  let endpoint = "https://off-radar-jobs.tuannx87.workers.dev";
+  let endpoint = "https://jobs.ai-kit.net";
   let token = process.env.OFFRADAR_ADMIN_TOKEN ?? "";
 
   for (const arg of args) {
@@ -172,7 +172,7 @@ async function main() {
   console.log(`⏱️ Total Run Time:       ${formatDuration(finalElapsed)}`);
   console.log(`🌊 Total Waves:          ${waveCount}`);
   console.log(`🚀 Total Seeds Sent:     ${totalDispatched}`);
-  console.log("Check live status at: https://off-radar-jobs.tuannx87.workers.dev/admin");
+  console.log("Check live status at: https://jobs.ai-kit.net/admin");
   console.log("===================================================================\n");
 }
 
