@@ -139,9 +139,12 @@ export class CandidateMatchService {
   public async rank(userId: string, input: unknown): Promise<{ profile: CandidateProfile; matches: RankedJobMatch[] }> {
     const body = asRecord(input);
     const limit = clampLimit(body["limit"], 10);
-    const profile = await this.resolveProfile(userId, body);
-    const jobs = (await this.jobs.list({ limit: 80, techOnly: true })).filter((job) => job.status === "open");
-    return { profile, matches: rankJobMatches(profile, jobs, limit) };
+    const [profile, jobs] = await Promise.all([
+      this.resolveProfile(userId, body),
+      this.jobs.list({ limit: 200, techOnly: true, includeRawContent: true }),
+    ]);
+    const openJobs = jobs.filter((job) => job.status === "open");
+    return { profile, matches: rankJobMatches(profile, openJobs, limit) };
   }
 
   public async runPass(jobs: readonly Job[], options: MatchPassOptions = {}): Promise<MatchPassReport> {
@@ -159,9 +162,14 @@ export class CandidateMatchService {
       modelCalls: 0,
     };
 
+    const existingDecisions = await this.quality.findForJobs(
+      batch.map((job) => job.id),
+      QUALITY_RULESET_VERSION
+    );
+
     let modelCalls = 0;
     for (const job of batch) {
-      const existing = await this.quality.find(job.id, job.contentHash, QUALITY_RULESET_VERSION);
+      const existing = existingDecisions.get(`${job.id}:${job.contentHash}`) ?? null;
       const refreshStale = existing?.authenticity === "stale" && !isStale(job, nowMs);
       const becameStale = existing != null && existing.action !== "drop" && isStale(job, nowMs);
       if (existing && !refreshStale && !becameStale) {
@@ -195,15 +203,13 @@ export class CandidateMatchService {
     report.modelCalls = modelCalls;
 
     const openJobs = batch.filter((job) => job.status === "open");
-    const storedProfiles = options.userId ? await this.profiles.listByUser(options.userId) : await this.profiles.listAll();
-    const storedFilters = options.userId
-      ? (await this.filters.listByUser(options.userId)).filter((filter) => filter.isActive)
-      : await this.filters.listActive();
+    const [storedProfiles, rawStoredFilters, existingKeys] = await Promise.all([
+      options.userId ? this.profiles.listByUser(options.userId) : this.profiles.listAll(),
+      options.userId ? this.filters.listByUser(options.userId) : this.filters.listActive(),
+      this.alerts.listKeysForJobs(openJobs.map((job) => job.id)),
+    ]);
+    const storedFilters = options.userId ? rawStoredFilters.filter((filter) => filter.isActive) : rawStoredFilters;
     const profileMap = new Map(storedProfiles.map((record) => [record.id, record.profile]));
-    const existingKeys = new Set<string>();
-    for (const job of openJobs) {
-      for (const key of await this.alerts.listKeysForJob(job.id)) existingKeys.add(key);
-    }
     const scan = selectNewMatches({ jobs: openJobs, profiles: profileMap, filters: storedFilters, existingKeys });
     report.alertsSkipped = scan.skippedDuplicates;
     for (const candidate of scan.created) {

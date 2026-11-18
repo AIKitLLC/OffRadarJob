@@ -16,9 +16,9 @@ export interface DecisionEngineOptions {
 }
 
 /**
- * Cloudflare Decision API & CV Optimizer Service
- * Evaluates candidate CVs against real-time reranked employer JDs and computes
- * concrete additions (thêm) and removals (bớt) tailored to distinct target groups.
+ * Cloudflare Decision API & US Resume Optimizer Service
+ * Evaluates candidate resumes against real-time reranked US employer JDs and computes
+ * concrete additions and removals tailored to distinct US target groups.
  */
 export class DecisionApiService {
   constructor(private readonly options: DecisionEngineOptions = {}) {}
@@ -90,14 +90,15 @@ export class DecisionApiService {
     profile: typeof TARGET_GROUPS[TargetGroup],
     demandedSkills: string[]
   ): Promise<DecisionCvSuggestion | null> {
-    const prompt = `You are the Cloudflare Decision API Resume Optimizer for off-radar tech jobs.
+    const prompt = `You are the Cloudflare Decision API US Resume Optimizer for off-radar US tech jobs.
 Target Group: "${profile.name}"
 Description: ${profile.description}
 Key Attributes Looked For: ${profile.keyAttributes.join(", ")}
 Demanded Skills & Keywords: ${demandedSkills.join(", ")}
 Keywords to Avoid: ${profile.avoidKeywords.join(", ")}
+US ATS & EEOC Standards: Remove photos/headshots, date of birth, marital status, full street addresses, or "References available upon request". Emphasize quantified impact metrics and US City, ST formatting.
 
-Candidate CV:
+Candidate Resume:
 ${cvContent.slice(0, 3000)}
 
 Analyze the CV and provide structured JSON recommendations:
@@ -237,7 +238,7 @@ Return ONLY valid JSON.`;
         rationale: "Remote-first engineering organizations value candidates with exceptional autonomy and clear written communication.",
         priority: "high",
       });
-      if (!cvLower.includes("performance") && !cvLower.includes("tối ưu")) {
+      if (!cvLower.includes("performance") && !cvLower.includes("latency") && !cvLower.includes("optimization")) {
         additions.push({
           category: "metric",
           item: "Add reliability & performance metrics (e.g., 99.9% uptime, zero unhandled production exceptions)",
@@ -247,7 +248,7 @@ Return ONLY valid JSON.`;
       }
     }
 
-    // 3. Removals / Deprecations (Bớt)
+    // 3. Removals / Deprecations
     const OBSOLETE_TECH = [
       { pattern: "jquery", name: "jQuery", reason: "Legacy technology; replace with modern TypeScript/React or modern Web APIs." },
       { pattern: "svn", name: "Subversion (SVN)", reason: "Outdated version control system compared to modern Git workflows." },
@@ -289,6 +290,40 @@ Return ONLY valid JSON.`;
       }
     }
 
+    const US_ATS_ANTIPATTERNS: ReadonlyArray<{ pattern: RegExp; name: string; reason: string }> = [
+      {
+        pattern: /\bdate of birth\b|\bdob\s*:/i,
+        name: "Date of birth (DOB)",
+        reason: "US resumes omit age and date of birth under EEOC compliance and modern ATS standards.",
+      },
+      {
+        pattern: /\bmarital status\b/i,
+        name: "Marital status",
+        reason: "US hiring standards exclude personal marital or family status information.",
+      },
+      {
+        pattern: /\bphoto\s*:|\bheadshot\b/i,
+        name: "Photo / headshot",
+        reason: "Standard US tech resumes exclude photos to avoid EEO bias and ATS parsing issues.",
+      },
+      {
+        pattern: /references available upon request/i,
+        name: "'References available upon request'",
+        reason: "Outdated US resume filler; employers request references separately during final stages.",
+      },
+    ];
+
+    for (const anti of US_ATS_ANTIPATTERNS) {
+      if (anti.pattern.test(cvContent)) {
+        removals.push({
+          category: "irrelevant_detail",
+          item: `Remove non-US resume element: ${anti.name}`,
+          rationale: anti.reason,
+          priority: "high",
+        });
+      }
+    }
+
     // Calculate Scores
     const matchedCount = demandedSkills.length - missingSkills.length;
     const currentMatchScore = Math.min(
@@ -325,10 +360,16 @@ Return ONLY valid JSON.`;
   ): string {
     let output = originalContent;
 
-    // Prune generic fillers & obsolete tech
+    // Prune generic fillers, obsolete tech, and non-US EEO/ATS personal fields
     for (const rem of removals) {
+      if (rem.category === "irrelevant_detail") {
+        output = output
+          .replace(/^[^\n]*(?:date of birth|dob\s*:|marital status|headshot|photo\s*:)[^\n]*\r?\n?/gim, "")
+          .replace(/references available upon request\.?/gi, "");
+        continue;
+      }
       if (rem.category === "generic_filler" || rem.category === "outdated_tech") {
-        const raw = rem.item.replace(/(?:Remove|Lược bỏ)(?::|\s+cliché phrase:|\s+cụm từ sáo rỗng:)/i, "").replace(/['"]/g, "").trim();
+        const raw = rem.item.replace(/^Remove(?::|\s+cliché phrase:)\s*/i, "").replace(/['"]/g, "").trim();
         // Extract plain keywords or tokens (e.g. "Subversion (SVN)" -> ["Subversion", "SVN"])
         const tokens = raw.match(/[a-zA-Z0-9#+.]+/g) || [];
         for (const token of tokens) {
@@ -351,7 +392,7 @@ Return ONLY valid JSON.`;
     // Prepend or enrich Skills section with additions
     const skillsToAdd = additions
       .filter((a) => a.category === "skill")
-      .map((a) => a.item.replace(/(?:Add skill|Thêm kĩ năng):\s*/i, "").trim())
+      .map((a) => a.item.replace(/^Add skill:\s*/i, "").trim())
       .filter(Boolean);
 
     if (skillsToAdd.length > 0) {

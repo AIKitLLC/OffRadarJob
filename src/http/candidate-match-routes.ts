@@ -6,6 +6,14 @@ import { WorkersAiBinding } from "../quality/quality-judge.js";
 import { Job } from "../types/domain.js";
 import type { MatchScanDecision } from "../durable/match-scan-limiter.js";
 
+async function parseJsonOrThrow(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    throw new MatchRequestError("Invalid JSON request body", 400);
+  }
+}
+
 export async function handleCandidateMatchRoutes(input: {
   request: Request;
   path: string;
@@ -56,7 +64,7 @@ export async function handleCandidateMatchRoutes(input: {
       return Response.json({ items: await service.listProfiles(user.id) });
     }
     if (path === "/api/user/candidate-profiles" && request.method === "POST") {
-      const saved = await service.saveProfile(user.id, await request.json());
+      const saved = await service.saveProfile(user.id, await parseJsonOrThrow(request));
       return Response.json({ success: true, profile: saved }, { status: 201 });
     }
     if (path === "/api/user/candidate-profiles" && request.method === "DELETE") {
@@ -69,7 +77,7 @@ export async function handleCandidateMatchRoutes(input: {
       return Response.json({ items: await service.listFilters(user.id) });
     }
     if (path === "/api/user/job-filters" && request.method === "POST") {
-      const saved = await service.saveFilter(user.id, await request.json());
+      const saved = await service.saveFilter(user.id, await parseJsonOrThrow(request));
       return Response.json({ success: true, filter: saved }, { status: 201 });
     }
     if (path === "/api/user/job-filters" && request.method === "DELETE") {
@@ -97,7 +105,7 @@ export async function handleCandidateMatchRoutes(input: {
     }
 
     if (path === "/api/match" && request.method === "POST") {
-      const ranked = await service.rank(user.id, await request.json());
+      const ranked = await service.rank(user.id, await parseJsonOrThrow(request));
       return Response.json({
         profile: ranked.profile,
         matches: ranked.matches.map((entry) => ({

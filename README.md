@@ -16,7 +16,7 @@
 
 The platform is deployed live on Cloudflare's global edge network:
 - **🚀 Main Production Portal**: [https://jobs.ai-kit.net](https://jobs.ai-kit.net)
-- **⚡ Edge Worker Fallback**: [https://off-radar-jobs.tuannx87.workers.dev](https://off-radar-jobs.tuannx87.workers.dev)
+- **🔌 MCP Endpoint**: [https://jobs.ai-kit.net/mcp](https://jobs.ai-kit.net/mcp)
 - **🤖 Telegram Bot**: [@OffRadarJobBot](https://t.me/OffRadarJobBot)
 
 ---
@@ -39,10 +39,10 @@ Instead of static listings, job descriptions (JDs) are continuously evaluated an
 - **Employer Credibility (20%)**: Valuation estimates, verified funding stages (Seed, Bootstrapped, Series A/B), and tech stack maturity.
 - **Real-Time Pulse Report**: Dynamic telemetry aggregating trending skills, market breakdowns, and category momentum.
 
-### 2. 🧠 Cloudflare Decision API for Multi-Version CV Optimization
-Tailors candidate CVs to match specific job archetypes and target employer groups using Cloudflare Workers AI (`@cf/meta/llama-3.3-70b-instruct` / `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`) with deterministic edge fallback:
-- **Actionable Additions (Thêm)**: Highlights relevant technical achievements, quantifiable metrics, and edge/distributed systems terminology aligned with the target group.
-- **Strategic Removals (Bớt)**: Eliminates outdated legacy technologies (jQuery, SVN, PHP 5), fluffy corporate buzzwords ("team player", "synergy"), and misaligned project noise.
+### 2. 🧠 Cloudflare Decision API for Multi-Version US Resume & CV Optimization
+Tailors candidate US resumes and CVs to match specific US job archetypes and target employer groups using Cloudflare Workers AI (`@cf/meta/llama-3.3-70b-instruct` / `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`) with deterministic edge fallback:
+- **Actionable Additions**: Highlights relevant technical achievements, quantifiable metrics, and edge/distributed systems terminology aligned with the target group.
+- **Strategic Removals**: Eliminates outdated legacy technologies (jQuery, SVN, PHP 5), fluffy corporate buzzwords ("team player", "synergy"), and non-US EEO/ATS anti-patterns (DOB, marital status, headshot/photo, "References available upon request").
 - **Multiple Target Group Profiles**: Generates specialized CV versions for:
   - 🤖 **AI-First Innovators** (`ai_first_innovators`): LLMs, autonomous agents, MCP tools, vector search.
   - 📈 **High-Growth Scale-Ups** (`scaleups_growth`): High concurrency, microservices, Kubernetes, Kafka, reliability.
@@ -177,15 +177,14 @@ for file in migrations/*.sql; do
 done
 ```
 
-### Running Locally & Deployment
+### Running Locally & CI-Only Deployment
 ```bash
 # Start local development server
 npm run dev
 # Open http://localhost:8787
-
-# Deploy to Cloudflare Production (https://jobs.ai-kit.net)
-npm run deploy
 ```
+
+> **P0 Deployment Policy:** Never run `wrangler deploy` or `wrangler d1 migrations apply --remote` from a local workstation. Production deployments and remote D1 migrations run exclusively through GitHub Actions CI/CD after merging to `main`.
 
 ### Testing & Type Checking
 ```bash
